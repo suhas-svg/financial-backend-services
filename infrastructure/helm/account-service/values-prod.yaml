@@ -1,0 +1,251 @@
+# Production environment values for account-service
+
+# High availability replica count for production
+replicaCount: 3
+
+# Production image configuration
+image:
+  registry: ghcr.io
+  repository: your-org/account-service
+  tag: "1.0.0"  # Use specific version tags in production
+  pullPolicy: IfNotPresent
+
+# Production resources
+resources:
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+  requests:
+    cpu: 1000m
+    memory: 2Gi
+
+# Production autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Production pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Production database configuration
+database:
+  host: account-service-postgres
+  port: 5432
+  name: myfirstdb
+  username: postgres
+  existingSecret: account-service-db-credentials
+
+# Production health checks
+healthChecks:
+  liveness:
+    enabled: true
+    initialDelaySeconds: 90
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    initialDelaySeconds: 45
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  startup:
+    enabled: true
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+
+# Production environment variables
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: "prod,kubernetes"
+  - name: LOGGING_LEVEL_COM_SUHASAN_FINANCE_ACCOUNT_SERVICE
+    value: "WARN"
+  - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+    value: "health,info,metrics,prometheus"
+  - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS
+    value: "never"
+
+# Production network policy
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring-prod
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - podSelector:
+            matchLabels:
+              app: account-service
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: account-service-postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to: {}
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+    - to: {}
+      ports:
+        - protocol: TCP
+          port: 443
+
+# Production monitoring configuration
+monitoring:
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring-prod
+    interval: 15s
+    scrapeTimeout: 10s
+
+# Production ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: api.company.com
+      paths:
+        - path: /account-service
+          pathType: Prefix
+  tls:
+    - secretName: account-service-prod-tls
+      hosts:
+        - api.company.com
+
+# Production-specific ConfigMap
+configMap:
+  enabled: true
+  data:
+    application.properties: |
+      # Production Spring Boot Configuration
+      server.port=8080
+      server.servlet.context-path=/
+      
+      # Database Configuration
+      spring.datasource.url=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+      spring.datasource.username=${DB_USERNAME}
+      spring.datasource.password=${DB_PASSWORD}
+      spring.datasource.driver-class-name=org.postgresql.Driver
+      spring.datasource.hikari.maximum-pool-size=20
+      spring.datasource.hikari.minimum-idle=5
+      spring.datasource.hikari.connection-timeout=30000
+      spring.datasource.hikari.idle-timeout=600000
+      spring.datasource.hikari.max-lifetime=1800000
+      
+      # JPA Configuration
+      spring.jpa.hibernate.ddl-auto=validate
+      spring.jpa.show-sql=false
+      spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+      spring.jpa.properties.hibernate.format_sql=false
+      spring.jpa.properties.hibernate.jdbc.batch_size=20
+      spring.jpa.properties.hibernate.order_inserts=true
+      spring.jpa.properties.hibernate.order_updates=true
+      
+      # Actuator Configuration
+      management.endpoints.web.base-path=/actuator
+      management.endpoints.web.exposure.include=health,info,metrics,prometheus
+      management.endpoint.health.show-details=never
+      management.endpoint.health.show-components=never
+      management.health.probes.enabled=true
+      
+      # Metrics Configuration
+      management.metrics.export.prometheus.enabled=true
+      management.metrics.distribution.percentiles-histogram.http.server.requests=true
+      management.metrics.distribution.percentiles.http.server.requests=0.5,0.95,0.99
+      management.metrics.tags.application=account-service
+      management.metrics.tags.environment=production
+      
+      # Production Logging Configuration
+      logging.level.com.suhasan.finance.account_service=WARN
+      logging.level.org.springframework.security=ERROR
+      logging.level.org.springframework.web=ERROR
+      logging.level.org.hibernate=ERROR
+      logging.pattern.console=%d{yyyy-MM-dd HH:mm:ss} - %msg%n
+      logging.pattern.file=%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n
+      
+      # Security Configuration
+      server.error.include-message=never
+      server.error.include-binding-errors=never
+      server.error.include-stacktrace=never
+      server.error.include-exception=false
+
+# Maximum security context for production
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+# Production node selection
+nodeSelector:
+  environment: production
+  node-type: application
+
+# Production tolerations
+tolerations:
+  - key: "production"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+  - key: "application"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+# Production anti-affinity for high availability
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+                - account-service
+        topologyKey: kubernetes.io/hostname
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: node-type
+              operator: In
+              values:
+                - application

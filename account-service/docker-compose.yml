@@ -1,0 +1,141 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: account-service-postgres-${ENVIRONMENT:-dev}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-myfirstdb}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-myfirstdb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - account-service-network
+
+  app:
+    build:
+      context: .
+      dockerfile: ${DOCKERFILE:-Dockerfile}
+      args:
+        BUILD_ENV: ${ENVIRONMENT:-dev}
+        APP_VERSION: ${VERSION:-latest}
+        BUILD_DATE: ${BUILD_DATE}
+        VCS_REF: ${VCS_REF}
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-account-service}:${VERSION:-latest}
+    container_name: account-service-app-${ENVIRONMENT:-dev}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+      - "${METRICS_PORT:-9001}:9001"
+      - "${DEBUG_PORT:-5005}:5005"  # Debug port for development
+    environment:
+      SPRING_PROFILES_ACTIVE: ${ENVIRONMENT:-dev}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-myfirstdb}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0}
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      LOGGING_LEVEL_ROOT: ${LOG_LEVEL:-INFO}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - account-service-network
+    volumes:
+      - app_logs:/app/logs
+
+  # Redis for caching (optional, can be enabled per environment)
+  redis:
+    image: redis:7-alpine
+    container_name: account-service-redis-${ENVIRONMENT:-dev}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis-password}
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - account-service-network
+    profiles:
+      - redis
+      - full
+
+  # Prometheus for metrics collection (development/staging)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: account-service-prometheus-${ENVIRONMENT:-dev}
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - account-service-network
+    profiles:
+      - monitoring
+      - full
+
+  # Grafana for metrics visualization (development/staging)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: account-service-grafana-${ENVIRONMENT:-dev}
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    restart: unless-stopped
+    networks:
+      - account-service-network
+    profiles:
+      - monitoring
+      - full
+
+volumes:
+  postgres_data:
+    name: account-service-postgres-data-${ENVIRONMENT:-dev}
+  app_logs:
+    name: account-service-app-logs-${ENVIRONMENT:-dev}
+  prometheus_data:
+    name: account-service-prometheus-data-${ENVIRONMENT:-dev}
+  grafana_data:
+    name: account-service-grafana-data-${ENVIRONMENT:-dev}
+
+networks:
+  account-service-network:
+    name: account-service-network-${ENVIRONMENT:-dev}
+    driver: bridge

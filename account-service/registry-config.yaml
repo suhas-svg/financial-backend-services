@@ -1,0 +1,390 @@
+# Container Registry Configuration for Account Service
+# This file defines registry settings, policies, and automation rules
+
+apiVersion: v1
+kind: RegistryConfig
+metadata:
+  name: account-service-registry-config
+  version: "1.0"
+  description: "Container registry configuration for Account Service"
+
+# Registry settings
+registry:
+  # Primary registry
+  primary:
+    url: ghcr.io
+    type: github
+    namespace: suhasan
+    repository: account-service
+    
+  # Mirror registries (optional)
+  mirrors:
+    - url: docker.io
+      type: dockerhub
+      namespace: suhasan
+      repository: account-service
+      sync_enabled: false
+    
+    - url: registry.gitlab.com
+      type: gitlab
+      namespace: suhasan
+      repository: account-service
+      sync_enabled: false
+
+# Image tagging strategy
+tagging:
+  # Semantic versioning
+  semantic_versioning:
+    enabled: true
+    format: "v{major}.{minor}.{patch}"
+    auto_increment: true
+    
+  # Environment-specific tags
+  environment_tags:
+    production:
+      - "latest"
+      - "stable"
+      - "prod-{version}"
+      - "v{major}.{minor}.{patch}"
+    
+    staging:
+      - "staging"
+      - "staging-{version}"
+      - "stage-latest"
+    
+    development:
+      - "dev"
+      - "dev-{branch}"
+      - "dev-{commit-short}"
+  
+  # Build metadata tags
+  build_tags:
+    - "build-{date}-{build-number}"
+    - "{branch}-{commit-short}"
+    - "run-{workflow-run-id}"
+  
+  # Feature branch tags
+  feature_tags:
+    - "feature-{branch-name}"
+    - "pr-{pull-request-number}"
+    - "branch-{branch-name}-{commit-short}"
+
+# Image lifecycle management
+lifecycle:
+  # Retention policies
+  retention:
+    # Production images - keep indefinitely
+    production:
+      keep_count: -1  # -1 means unlimited
+      keep_days: -1
+      tags:
+        - "latest"
+        - "stable"
+        - "v*"
+        - "prod-*"
+    
+    # Staging images - keep last 10
+    staging:
+      keep_count: 10
+      keep_days: 90
+      tags:
+        - "staging*"
+        - "stage-*"
+    
+    # Development images - keep last 10
+    development:
+      keep_count: 10
+      keep_days: 30
+      tags:
+        - "dev*"
+        - "feature-*"
+        - "pr-*"
+    
+    # Build images - keep last 20
+    build:
+      keep_count: 20
+      keep_days: 14
+      tags:
+        - "build-*"
+        - "*-*-*"  # branch-commit-short pattern
+    
+    # Untagged images - delete after 7 days
+    untagged:
+      keep_count: 0
+      keep_days: 7
+  
+  # Cleanup automation
+  cleanup:
+    enabled: true
+    schedule: "0 2 * * 0"  # Weekly on Sunday at 2 AM
+    dry_run: false
+    notifications:
+      enabled: true
+      channels:
+        - slack
+        - email
+
+# Security policies
+security:
+  # Image signing
+  signing:
+    enabled: true
+    required: true
+    tool: cosign
+    keyless: true
+    
+    # Signing policies
+    policies:
+      - name: production
+        required_for:
+          - "latest"
+          - "stable"
+          - "v*"
+          - "prod-*"
+        attestation_required: true
+      
+      - name: staging
+        required_for:
+          - "staging*"
+        attestation_required: false
+      
+      - name: development
+        required_for: []
+        attestation_required: false
+  
+  # Vulnerability scanning
+  scanning:
+    enabled: true
+    required: true
+    tools:
+      - trivy
+      - grype
+    
+    # Scan policies
+    policies:
+      - name: production
+        applies_to:
+          - "latest"
+          - "stable"
+          - "v*"
+          - "prod-*"
+        thresholds:
+          critical: 0
+          high: 0
+          medium: 5
+        block_on_failure: true
+      
+      - name: staging
+        applies_to:
+          - "staging*"
+        thresholds:
+          critical: 0
+          high: 5
+          medium: 20
+        block_on_failure: true
+      
+      - name: development
+        applies_to:
+          - "dev*"
+          - "feature-*"
+          - "pr-*"
+        thresholds:
+          critical: 2
+          high: 10
+          medium: -1
+        block_on_failure: false
+  
+  # SBOM generation
+  sbom:
+    enabled: true
+    required: true
+    formats:
+      - spdx-json
+      - cyclonedx-json
+    attach_to_image: true
+    sign_sbom: true
+
+# Access control
+access:
+  # Read permissions
+  read:
+    public: true
+    authenticated_users: true
+    
+  # Write permissions
+  write:
+    repository_collaborators: true
+    organization_members: false
+    external_contributors: false
+    
+  # Admin permissions
+  admin:
+    repository_owners: true
+    organization_owners: true
+
+# Automation rules
+automation:
+  # Auto-tagging rules
+  auto_tagging:
+    enabled: true
+    rules:
+      - trigger: push_to_main
+        actions:
+          - tag: latest
+          - tag: stable
+          - tag: "v{auto-version}"
+      
+      - trigger: push_to_develop
+        actions:
+          - tag: staging
+          - tag: "staging-{version}"
+      
+      - trigger: push_to_feature_branch
+        actions:
+          - tag: "feature-{branch-name}"
+          - tag: "dev-{commit-short}"
+      
+      - trigger: pull_request
+        actions:
+          - tag: "pr-{pr-number}"
+          - tag: "pr-{pr-number}-{commit-short}"
+  
+  # Auto-cleanup rules
+  auto_cleanup:
+    enabled: true
+    rules:
+      - trigger: schedule
+        schedule: "0 2 * * 0"  # Weekly
+        actions:
+          - cleanup_old_images
+          - cleanup_untagged_images
+          - generate_cleanup_report
+      
+      - trigger: storage_threshold
+        threshold: 80  # 80% of quota
+        actions:
+          - cleanup_old_dev_images
+          - cleanup_old_build_images
+          - send_notification
+  
+  # Promotion rules
+  promotion:
+    enabled: true
+    rules:
+      - name: staging_to_production
+        trigger: manual_approval
+        source_tags:
+          - "staging"
+          - "staging-*"
+        target_tags:
+          - "latest"
+          - "stable"
+        requirements:
+          - security_scan_passed
+          - image_signed
+          - approval_from: ["tech-lead", "security-team"]
+      
+      - name: dev_to_staging
+        trigger: automated
+        source_tags:
+          - "dev"
+        target_tags:
+          - "staging"
+        requirements:
+          - tests_passed
+          - security_scan_passed
+
+# Monitoring and alerting
+monitoring:
+  # Metrics collection
+  metrics:
+    enabled: true
+    collectors:
+      - prometheus
+      - grafana
+    
+    # Metrics to track
+    tracked_metrics:
+      - image_push_count
+      - image_pull_count
+      - storage_usage
+      - vulnerability_count
+      - scan_duration
+      - cleanup_actions
+  
+  # Alerting rules
+  alerts:
+    - name: high_vulnerability_count
+      condition: "critical_vulnerabilities > 0"
+      severity: critical
+      channels:
+        - slack: "#security-alerts"
+        - email: ["security-team@company.com"]
+    
+    - name: storage_quota_warning
+      condition: "storage_usage > 80%"
+      severity: warning
+      channels:
+        - slack: "#devops-alerts"
+    
+    - name: failed_image_push
+      condition: "push_failure_rate > 10%"
+      severity: warning
+      channels:
+        - slack: "#ci-cd-alerts"
+
+# Integration settings
+integrations:
+  # CI/CD platforms
+  cicd:
+    github_actions:
+      enabled: true
+      webhook_url: ""
+      events:
+        - image_pushed
+        - scan_completed
+        - cleanup_performed
+    
+    jenkins:
+      enabled: false
+      webhook_url: ""
+    
+    gitlab_ci:
+      enabled: false
+      webhook_url: ""
+  
+  # Notification platforms
+  notifications:
+    slack:
+      enabled: true
+      webhook_url: "${SLACK_WEBHOOK_URL}"
+      channels:
+        default: "#ci-cd-notifications"
+        security: "#security-alerts"
+        alerts: "#devops-alerts"
+    
+    email:
+      enabled: true
+      smtp_server: "${SMTP_SERVER}"
+      from_address: "noreply@company.com"
+      recipients:
+        default: ["dev-team@company.com"]
+        security: ["security-team@company.com"]
+    
+    discord:
+      enabled: false
+      webhook_url: ""
+  
+  # Security tools
+  security_tools:
+    trivy:
+      enabled: true
+      config_file: ".trivyignore"
+    
+    cosign:
+      enabled: true
+      keyless: true
+    
+    syft:
+      enabled: true
+      output_format: "spdx-json"

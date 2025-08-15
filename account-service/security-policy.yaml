@@ -1,0 +1,260 @@
+# Security Policy Configuration for Account Service
+# This file defines security scanning policies and thresholds
+
+apiVersion: v1
+kind: SecurityPolicy
+metadata:
+  name: account-service-security-policy
+  version: "1.0"
+  description: "Security scanning policy for Account Service container images"
+
+# Vulnerability scanning configuration
+vulnerability_scanning:
+  # Enable/disable vulnerability scanning
+  enabled: true
+  
+  # Scanners to use
+  scanners:
+    - trivy
+    - grype
+    - docker-scout
+  
+  # Severity thresholds (fail build if exceeded)
+  thresholds:
+    critical: 0      # No critical vulnerabilities allowed
+    high: 10         # Maximum 10 high vulnerabilities
+    medium: 50       # Maximum 50 medium vulnerabilities
+    low: -1          # Unlimited low vulnerabilities (-1 = no limit)
+  
+  # Vulnerability age thresholds (days)
+  age_thresholds:
+    critical: 0      # Critical vulnerabilities must be fixed immediately
+    high: 7          # High vulnerabilities must be fixed within 7 days
+    medium: 30       # Medium vulnerabilities must be fixed within 30 days
+    low: 90          # Low vulnerabilities must be fixed within 90 days
+  
+  # Ignore specific vulnerabilities (use with caution)
+  ignore_list:
+    # Example: ignore a specific CVE that doesn't apply to our use case
+    # - CVE-2023-12345
+    # - GHSA-xxxx-xxxx-xxxx
+  
+  # Base image security requirements
+  base_image:
+    # Allowed base image registries
+    allowed_registries:
+      - docker.io
+      - gcr.io
+      - ghcr.io
+      - registry.access.redhat.com
+    
+    # Preferred base images (in order of preference)
+    preferred_images:
+      - eclipse-temurin:22-jre-alpine
+      - eclipse-temurin:22-jre
+      - openjdk:22-jre-slim
+    
+    # Disallowed base images
+    disallowed_images:
+      - "*:latest"     # Don't use latest tags
+      - "ubuntu:*"     # Prefer Alpine or distroless
+      - "centos:*"     # Deprecated
+
+# Secret detection configuration
+secret_detection:
+  enabled: true
+  
+  # Types of secrets to detect
+  secret_types:
+    - api_keys
+    - passwords
+    - private_keys
+    - certificates
+    - tokens
+    - database_urls
+  
+  # Patterns to ignore (false positives)
+  ignore_patterns:
+    - "test-*"
+    - "example-*"
+    - "dummy-*"
+    - "placeholder-*"
+  
+  # Fail build on secret detection
+  fail_on_detection: true
+
+# Configuration scanning
+configuration_scanning:
+  enabled: true
+  
+  # Configuration checks to perform
+  checks:
+    - dockerfile_best_practices
+    - kubernetes_security
+    - docker_security
+    - file_permissions
+  
+  # Severity thresholds for configuration issues
+  thresholds:
+    critical: 0
+    high: 5
+    medium: 20
+    low: -1
+  
+  # Specific configuration rules
+  rules:
+    # Dockerfile security rules
+    dockerfile:
+      - no_root_user: true
+      - no_sudo: true
+      - no_privileged: true
+      - health_check_required: true
+      - minimal_layers: true
+      - no_secrets_in_env: true
+    
+    # Container runtime security
+    runtime:
+      - read_only_filesystem: recommended
+      - no_privileged_containers: true
+      - resource_limits_required: true
+      - security_context_required: true
+
+# License compliance
+license_scanning:
+  enabled: true
+  
+  # Allowed licenses
+  allowed_licenses:
+    - MIT
+    - Apache-2.0
+    - BSD-2-Clause
+    - BSD-3-Clause
+    - ISC
+    - MPL-2.0
+  
+  # Disallowed licenses
+  disallowed_licenses:
+    - GPL-2.0
+    - GPL-3.0
+    - AGPL-3.0
+    - LGPL-2.1
+    - LGPL-3.0
+  
+  # Fail build on license violations
+  fail_on_violation: true
+
+# Software Bill of Materials (SBOM)
+sbom:
+  enabled: true
+  
+  # SBOM formats to generate
+  formats:
+    - spdx-json
+    - cyclonedx-json
+    - syft-table
+  
+  # Include in SBOM
+  include:
+    - packages
+    - files
+    - relationships
+    - vulnerabilities
+  
+  # SBOM signing
+  signing:
+    enabled: true
+    key_provider: cosign
+
+# Reporting configuration
+reporting:
+  # Report formats to generate
+  formats:
+    - json
+    - sarif
+    - html
+    - markdown
+  
+  # Report destinations
+  destinations:
+    - local_file
+    - github_security
+    - artifact_upload
+  
+  # Notification settings
+  notifications:
+    # Slack notifications
+    slack:
+      enabled: false
+      webhook_url: ""
+      channels:
+        critical: "#security-alerts"
+        high: "#security-alerts"
+        medium: "#security-notifications"
+    
+    # Email notifications
+    email:
+      enabled: false
+      smtp_server: ""
+      recipients:
+        critical: ["security-team@company.com"]
+        high: ["security-team@company.com", "dev-team@company.com"]
+
+# Compliance frameworks
+compliance:
+  # Enable compliance checking
+  enabled: true
+  
+  # Frameworks to check against
+  frameworks:
+    - cis_docker_benchmark
+    - nist_cybersecurity_framework
+    - owasp_top_10
+    - pci_dss
+  
+  # Compliance reporting
+  reporting:
+    enabled: true
+    format: json
+    include_evidence: true
+
+# Integration settings
+integrations:
+  # GitHub integration
+  github:
+    security_advisories: true
+    dependabot_alerts: true
+    code_scanning: true
+  
+  # CI/CD integration
+  cicd:
+    fail_build_on_policy_violation: true
+    generate_build_artifacts: true
+    cache_scan_results: true
+  
+  # Registry integration
+  registry:
+    scan_on_push: true
+    quarantine_vulnerable_images: true
+    sign_secure_images: true
+
+# Policy enforcement
+enforcement:
+  # Enforcement mode (strict, permissive, disabled)
+  mode: strict
+  
+  # Grace period for new vulnerabilities (days)
+  grace_period: 7
+  
+  # Override mechanism
+  override:
+    enabled: true
+    requires_approval: true
+    approvers:
+      - security-team
+      - tech-lead
+  
+  # Audit logging
+  audit:
+    enabled: true
+    log_level: info
+    retention_days: 90

@@ -1,0 +1,205 @@
+# Staging environment values for account-service
+
+# Production-like replica count for staging
+replicaCount: 2
+
+# Staging image configuration
+image:
+  registry: ghcr.io
+  repository: your-org/account-service
+  tag: "staging-latest"
+  pullPolicy: Always
+
+# Production-like resources for staging
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+# Enable autoscaling for staging
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Enable pod disruption budget for staging
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Staging database configuration
+database:
+  host: account-service-postgres
+  port: 5432
+  name: myfirstdb
+  username: postgres
+  existingSecret: account-service-db-credentials
+
+# Production-like health checks for staging
+healthChecks:
+  liveness:
+    enabled: true
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  startup:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+
+# Staging environment variables
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: "staging,kubernetes"
+  - name: LOGGING_LEVEL_COM_SUHASAN_FINANCE_ACCOUNT_SERVICE
+    value: "INFO"
+  - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+    value: "health,info,metrics,prometheus"
+
+# Enable network policy for staging
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring-staging
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - podSelector:
+            matchLabels:
+              app: account-service
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: account-service-postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to: {}
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+
+# Staging monitoring configuration
+monitoring:
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring-staging
+    interval: 30s
+    scrapeTimeout: 10s
+
+# Staging ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: account-service-staging.company.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: account-service-staging-tls
+      hosts:
+        - account-service-staging.company.com
+
+# Staging-specific ConfigMap
+configMap:
+  enabled: true
+  data:
+    application.properties: |
+      # Staging Spring Boot Configuration
+      server.port=8080
+      server.servlet.context-path=/
+      
+      # Database Configuration
+      spring.datasource.url=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+      spring.datasource.username=${DB_USERNAME}
+      spring.datasource.password=${DB_PASSWORD}
+      spring.datasource.driver-class-name=org.postgresql.Driver
+      
+      # JPA Configuration
+      spring.jpa.hibernate.ddl-auto=validate
+      spring.jpa.show-sql=false
+      spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+      spring.jpa.properties.hibernate.format_sql=false
+      
+      # Actuator Configuration
+      management.endpoints.web.base-path=/actuator
+      management.endpoints.web.exposure.include=health,info,metrics,prometheus
+      management.endpoint.health.show-details=when-authorized
+      management.endpoint.health.show-components=always
+      management.health.probes.enabled=true
+      
+      # Metrics Configuration
+      management.metrics.export.prometheus.enabled=true
+      management.metrics.distribution.percentiles-histogram.http.server.requests=true
+      management.metrics.distribution.percentiles.http.server.requests=0.5,0.95,0.99
+      
+      # Staging Logging Configuration
+      logging.level.com.suhasan.finance.account_service=INFO
+      logging.level.org.springframework.security=WARN
+      logging.pattern.console=%d{yyyy-MM-dd HH:mm:ss} - %msg%n
+      logging.pattern.file=%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n
+
+# Enhanced security context for staging
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+# Node selection for staging
+nodeSelector:
+  environment: staging
+
+# Tolerations for staging nodes
+tolerations:
+  - key: "staging"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+# Anti-affinity for high availability
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - account-service
+          topologyKey: kubernetes.io/hostname

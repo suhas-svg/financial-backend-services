@@ -1,0 +1,155 @@
+# Development environment values for account-service
+
+# Reduced replica count for development
+replicaCount: 1
+
+# Development image configuration
+image:
+  registry: ghcr.io
+  repository: your-org/account-service
+  tag: "dev-latest"
+  pullPolicy: Always
+
+# Reduced resources for development
+resources:
+  limits:
+    cpu: 500m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+# Disable autoscaling in development
+autoscaling:
+  enabled: false
+
+# Disable pod disruption budget in development
+podDisruptionBudget:
+  enabled: false
+
+# Development database configuration
+database:
+  host: account-service-postgres
+  port: 5432
+  name: myfirstdb
+  username: postgres
+  existingSecret: account-service-db-credentials
+
+# Relaxed health checks for development
+healthChecks:
+  liveness:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 5
+  readiness:
+    enabled: true
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 5
+  startup:
+    enabled: true
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+
+# Development-specific environment variables
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: "dev,kubernetes"
+  - name: LOGGING_LEVEL_COM_SUHASAN_FINANCE_ACCOUNT_SERVICE
+    value: "DEBUG"
+  - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY
+    value: "DEBUG"
+  - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+    value: "health,info,metrics,prometheus,env,configprops"
+
+# Disable network policy for easier development
+networkPolicy:
+  enabled: false
+
+# Development monitoring configuration
+monitoring:
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring-dev
+    interval: 60s
+    scrapeTimeout: 30s
+
+# Development ingress (optional)
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: account-service-dev.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+# Development-specific ConfigMap
+configMap:
+  enabled: true
+  data:
+    application.properties: |
+      # Development Spring Boot Configuration
+      server.port=8080
+      server.servlet.context-path=/
+      
+      # Database Configuration
+      spring.datasource.url=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+      spring.datasource.username=${DB_USERNAME}
+      spring.datasource.password=${DB_PASSWORD}
+      spring.datasource.driver-class-name=org.postgresql.Driver
+      
+      # JPA Configuration - More verbose for development
+      spring.jpa.hibernate.ddl-auto=update
+      spring.jpa.show-sql=true
+      spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+      spring.jpa.properties.hibernate.format_sql=true
+      spring.jpa.properties.hibernate.use_sql_comments=true
+      
+      # Actuator Configuration - More endpoints exposed
+      management.endpoints.web.base-path=/actuator
+      management.endpoints.web.exposure.include=*
+      management.endpoint.health.show-details=always
+      management.endpoint.health.show-components=always
+      management.health.probes.enabled=true
+      
+      # Metrics Configuration
+      management.metrics.export.prometheus.enabled=true
+      management.metrics.distribution.percentiles-histogram.http.server.requests=true
+      management.metrics.distribution.percentiles.http.server.requests=0.5,0.95,0.99
+      
+      # Development Logging Configuration
+      logging.level.com.suhasan.finance.account_service=DEBUG
+      logging.level.org.springframework.security=DEBUG
+      logging.level.org.springframework.web=DEBUG
+      logging.level.org.hibernate.SQL=DEBUG
+      logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
+      logging.pattern.console=%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n
+      logging.pattern.file=%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n
+
+# Security context - less restrictive for development
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false  # Allow writes for development
+  allowPrivilegeEscalation: false
+
+# Node selection for development (if using specific dev nodes)
+nodeSelector: {}
+
+# Tolerations for development
+tolerations: []
+
+# Affinity rules for development
+affinity: {}

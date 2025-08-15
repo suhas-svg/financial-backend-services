@@ -1,0 +1,289 @@
+-- ================================================
+-- Environment-Specific Database Configurations
+-- Version: 4.0
+-- Description: Create environment-specific settings and optimizations
+-- ================================================
+
+-- ================================================
+-- Create configuration table for environment settings
+-- ================================================
+CREATE TABLE IF NOT EXISTS system_configuration (
+    id BIGSERIAL PRIMARY KEY,
+    config_key VARCHAR(100) NOT NULL,
+    config_value TEXT NOT NULL,
+    description TEXT,
+    environment VARCHAR(20) NOT NULL DEFAULT 'ALL',
+    active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(config_key, environment)
+);
+
+-- Create index for quick lookups
+CREATE INDEX IF NOT EXISTS idx_system_configuration_key 
+    ON system_configuration(config_key);
+
+CREATE INDEX IF NOT EXISTS idx_system_configuration_environment 
+    ON system_configuration(environment);
+
+-- ================================================
+-- Insert default system configurations
+-- ================================================
+INSERT INTO system_configuration (config_key, config_value, description, environment) VALUES
+    -- General system settings
+    ('transaction.processing.timeout', '30000', 'Transaction processing timeout in milliseconds', 'ALL'),
+    ('transaction.retry.max.attempts', '3', 'Maximum retry attempts for failed transactions', 'ALL'),
+    ('transaction.retry.delay', '1000', 'Delay between retry attempts in milliseconds', 'ALL'),
+    
+    -- Cache settings
+    ('cache.transaction.history.ttl', '300', 'Transaction history cache TTL in seconds', 'ALL'),
+    ('cache.account.validation.ttl', '60', 'Account validation cache TTL in seconds', 'ALL'),
+    ('cache.transaction.limits.ttl', '3600', 'Transaction limits cache TTL in seconds', 'ALL'),
+    
+    -- Development environment settings
+    ('logging.level.transaction', 'DEBUG', 'Transaction logging level', 'DEV'),
+    ('database.connection.pool.size', '5', 'Database connection pool size', 'DEV'),
+    ('transaction.audit.detailed', 'true', 'Enable detailed transaction auditing', 'DEV'),
+    
+    -- Staging environment settings
+    ('logging.level.transaction', 'INFO', 'Transaction logging level', 'STAGING'),
+    ('database.connection.pool.size', '10', 'Database connection pool size', 'STAGING'),
+    ('transaction.audit.detailed', 'true', 'Enable detailed transaction auditing', 'STAGING'),
+    
+    -- Production environment settings
+    ('logging.level.transaction', 'WARN', 'Transaction logging level', 'PROD'),
+    ('database.connection.pool.size', '20', 'Database connection pool size', 'PROD'),
+    ('transaction.audit.detailed', 'false', 'Enable detailed transaction auditing', 'PROD'),
+    ('monitoring.metrics.enabled', 'true', 'Enable metrics collection', 'PROD'),
+    ('alerting.enabled', 'true', 'Enable alerting for critical events', 'PROD'),
+    
+    -- Performance settings
+    ('batch.processing.size', '100', 'Batch processing size for bulk operations', 'ALL'),
+    ('query.timeout', '30', 'Database query timeout in seconds', 'ALL'),
+    ('connection.timeout', '5', 'Database connection timeout in seconds', 'ALL');
+
+-- ================================================
+-- Create audit table for configuration changes
+-- ================================================
+CREATE TABLE IF NOT EXISTS system_configuration_audit (
+    id BIGSERIAL PRIMARY KEY,
+    config_id BIGINT NOT NULL,
+    config_key VARCHAR(100) NOT NULL,
+    old_value TEXT,
+    new_value TEXT,
+    changed_by VARCHAR(255),
+    changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    change_reason TEXT
+);
+
+-- Create index for audit queries
+CREATE INDEX IF NOT EXISTS idx_system_configuration_audit_config_id 
+    ON system_configuration_audit(config_id);
+
+CREATE INDEX IF NOT EXISTS idx_system_configuration_audit_changed_at 
+    ON system_configuration_audit(changed_at);
+
+-- ================================================
+-- Create trigger for configuration audit
+-- ================================================
+CREATE OR REPLACE FUNCTION audit_system_configuration_changes()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        INSERT INTO system_configuration_audit (
+            config_id, config_key, old_value, new_value, changed_by, change_reason
+        ) VALUES (
+            NEW.id, NEW.config_key, OLD.config_value, NEW.config_value, 
+            COALESCE(current_setting('app.current_user', true), 'system'),
+            'Configuration updated'
+        );
+        RETURN NEW;
+    ELSIF TG_OP = 'DELETE' THEN
+        INSERT INTO system_configuration_audit (
+            config_id, config_key, old_value, new_value, changed_by, change_reason
+        ) VALUES (
+            OLD.id, OLD.config_key, OLD.config_value, NULL,
+            COALESCE(current_setting('app.current_user', true), 'system'),
+            'Configuration deleted'
+        );
+        RETURN OLD;
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create triggers
+CREATE TRIGGER trg_system_configuration_audit
+    AFTER UPDATE OR DELETE ON system_configuration
+    FOR EACH ROW
+    EXECUTE FUNCTION audit_system_configuration_changes();
+
+-- ================================================
+-- Create function to get configuration by environment
+-- ================================================
+CREATE OR REPLACE FUNCTION get_system_config(
+    p_config_key VARCHAR,
+    p_environment VARCHAR DEFAULT 'ALL'
+)
+RETURNS TEXT AS $$
+DECLARE
+    config_value TEXT;
+BEGIN
+    -- First try to get environment-specific configuration
+    SELECT sc.config_value INTO config_value
+    FROM system_configuration sc
+    WHERE sc.config_key = p_config_key 
+        AND sc.environment = p_environment
+        AND sc.active = true;
+    
+    -- If not found, try to get the general configuration
+    IF config_value IS NULL THEN
+        SELECT sc.config_value INTO config_value
+        FROM system_configuration sc
+        WHERE sc.config_key = p_config_key 
+            AND sc.environment = 'ALL'
+            AND sc.active = true;
+    END IF;
+    
+    RETURN config_value;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ================================================
+-- Create performance optimization indexes based on environment
+-- ================================================
+
+-- Additional indexes for production environment
+-- These would be created conditionally based on environment
+CREATE INDEX IF NOT EXISTS idx_transactions_performance_prod 
+    ON transactions(status, created_at, type) 
+    WHERE status IN ('COMPLETED', 'FAILED');
+
+-- Partial index for recent transactions (removed due to IMMUTABLE constraint)
+-- CREATE INDEX IF NOT EXISTS idx_transactions_recent 
+--     ON transactions(created_at, from_account_id, to_account_id) 
+--     WHERE created_at >= CURRENT_DATE - INTERVAL '30 days';
+
+-- Index for transaction analytics
+CREATE INDEX IF NOT EXISTS idx_transactions_analytics 
+    ON transactions(DATE(created_at), type, status, amount);
+
+-- ================================================
+-- Create database maintenance functions
+-- ================================================
+
+-- Function to archive old transactions (for production)
+CREATE OR REPLACE FUNCTION archive_old_transactions(
+    p_days_to_keep INTEGER DEFAULT 2555 -- ~7 years
+)
+RETURNS INTEGER AS $$
+DECLARE
+    archived_count INTEGER;
+BEGIN
+    -- Create archive table if it doesn't exist
+    CREATE TABLE IF NOT EXISTS transactions_archive (LIKE transactions INCLUDING ALL);
+    
+    -- Move old transactions to archive
+    WITH archived_transactions AS (
+        DELETE FROM transactions 
+        WHERE created_at < CURRENT_DATE - INTERVAL '%s days' % p_days_to_keep
+            AND status IN ('COMPLETED', 'FAILED', 'CANCELLED')
+        RETURNING *
+    )
+    INSERT INTO transactions_archive 
+    SELECT * FROM archived_transactions;
+    
+    GET DIAGNOSTICS archived_count = ROW_COUNT;
+    
+    RETURN archived_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to clean up old audit logs
+CREATE OR REPLACE FUNCTION cleanup_audit_logs(
+    p_days_to_keep INTEGER DEFAULT 365
+)
+RETURNS INTEGER AS $$
+DECLARE
+    deleted_count INTEGER;
+BEGIN
+    DELETE FROM system_configuration_audit 
+    WHERE changed_at < CURRENT_DATE - INTERVAL '%s days' % p_days_to_keep;
+    
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    
+    RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to update database statistics
+CREATE OR REPLACE FUNCTION update_database_statistics()
+RETURNS VOID AS $$
+BEGIN
+    -- Update table statistics
+    ANALYZE transactions;
+    ANALYZE transaction_limits;
+    ANALYZE system_configuration;
+    
+    -- Refresh materialized view if it exists
+    IF EXISTS (SELECT 1 FROM pg_matviews WHERE matviewname = 'transaction_analytics') THEN
+        REFRESH MATERIALIZED VIEW CONCURRENTLY transaction_analytics;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ================================================
+-- Create environment-specific stored procedures
+-- ================================================
+
+-- Procedure for development environment data seeding
+CREATE OR REPLACE FUNCTION seed_development_data()
+RETURNS VOID AS $$
+BEGIN
+    -- Only run in development environment
+    IF get_system_config('logging.level.transaction') != 'DEBUG' THEN
+        RAISE NOTICE 'Development data seeding skipped - not in development environment';
+        RETURN;
+    END IF;
+    
+    -- Insert sample transactions for testing
+    INSERT INTO transactions (
+        transaction_id, from_account_id, to_account_id, amount, currency,
+        type, status, description, created_by, created_at
+    ) VALUES 
+        (gen_random_uuid()::text, 'ACC001', 'ACC002', 100.00, 'USD', 'TRANSFER', 'COMPLETED', 'Test transfer 1', 'dev-user', CURRENT_TIMESTAMP - INTERVAL '1 day'),
+        (gen_random_uuid()::text, 'ACC002', 'ACC003', 250.50, 'USD', 'TRANSFER', 'COMPLETED', 'Test transfer 2', 'dev-user', CURRENT_TIMESTAMP - INTERVAL '2 days'),
+        (gen_random_uuid()::text, 'ACC001', 'ACC001', 500.00, 'USD', 'DEPOSIT', 'COMPLETED', 'Test deposit', 'dev-user', CURRENT_TIMESTAMP - INTERVAL '3 days'),
+        (gen_random_uuid()::text, 'ACC002', 'ACC002', 75.25, 'USD', 'WITHDRAWAL', 'COMPLETED', 'Test withdrawal', 'dev-user', CURRENT_TIMESTAMP - INTERVAL '4 days')
+    ON CONFLICT (transaction_id) DO NOTHING;
+    
+    RAISE NOTICE 'Development data seeded successfully';
+END;
+$$ LANGUAGE plpgsql;
+
+-- ================================================
+-- Add comments for documentation
+-- ================================================
+COMMENT ON TABLE system_configuration IS 'System configuration settings for different environments';
+COMMENT ON TABLE system_configuration_audit IS 'Audit trail for system configuration changes';
+COMMENT ON FUNCTION get_system_config IS 'Retrieves system configuration value with environment fallback';
+COMMENT ON FUNCTION archive_old_transactions IS 'Archives old transactions to reduce main table size';
+COMMENT ON FUNCTION cleanup_audit_logs IS 'Cleans up old audit log entries';
+COMMENT ON FUNCTION update_database_statistics IS 'Updates database statistics and refreshes materialized views';
+COMMENT ON FUNCTION seed_development_data IS 'Seeds development environment with test data';
+
+-- ================================================
+-- Final verification
+-- ================================================
+DO $$
+DECLARE
+    config_count INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO config_count FROM system_configuration WHERE active = true;
+    
+    IF config_count < 15 THEN
+        RAISE EXCEPTION 'System configuration setup failed. Expected at least 15 records, found %', config_count;
+    ELSE
+        RAISE NOTICE 'Successfully configured % system configuration entries', config_count;
+    END IF;
+END $$;

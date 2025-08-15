@@ -1,0 +1,155 @@
+name: Repository Setup Validation
+
+on:
+  workflow_dispatch: # Manual trigger for setup validation
+  schedule:
+    # Run weekly to validate repository configuration
+    - cron: '0 0 * * 0'
+
+jobs:
+  validate-repository-config:
+    name: Validate Repository Configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate branch protection
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              const protection = await github.rest.repos.getBranchProtection({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                branch: 'main'
+              });
+              
+              console.log('✅ Main branch protection is configured');
+              console.log('Required status checks:', protection.data.required_status_checks?.contexts || []);
+              console.log('Required reviews:', protection.data.required_pull_request_reviews?.required_approving_review_count || 0);
+              
+              // Validate required settings
+              const checks = protection.data.required_status_checks?.contexts || [];
+              const requiredChecks = ['validate', 'security-scan'];
+              const missingChecks = requiredChecks.filter(check => !checks.some(c => c.includes(check)));
+              
+              if (missingChecks.length > 0) {
+                core.setFailed(`Missing required status checks: ${missingChecks.join(', ')}`);
+              }
+              
+              if (!protection.data.required_pull_request_reviews?.required_approving_review_count || 
+                  protection.data.required_pull_request_reviews.required_approving_review_count < 1) {
+                core.setFailed('Branch protection requires at least 1 approving review');
+              }
+              
+            } catch (error) {
+              core.setFailed(`Branch protection not configured: ${error.message}`);
+            }
+
+      - name: Validate security features
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              const repo = await github.rest.repos.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              });
+              
+              console.log('Repository security settings:');
+              console.log('- Has issues:', repo.data.has_issues);
+              console.log('- Has projects:', repo.data.has_projects);
+              console.log('- Has wiki:', repo.data.has_wiki);
+              console.log('- Visibility:', repo.data.visibility);
+              
+              // Check if security features are enabled
+              const securityFeatures = await github.rest.repos.getVulnerabilityAlerts({
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              }).catch(() => null);
+              
+              if (securityFeatures) {
+                console.log('✅ Vulnerability alerts are enabled');
+              } else {
+                console.log('⚠️ Vulnerability alerts may not be enabled');
+              }
+              
+            } catch (error) {
+              console.log('Error checking security features:', error.message);
+            }
+
+      - name: Validate required files
+        run: |
+          echo "Validating required repository files..."
+          
+          # Check for required files
+          required_files=(
+            ".github/workflows/ci-cd-pipeline.yml"
+            ".github/workflows/pr-validation.yml"
+            ".github/CODEOWNERS"
+            ".github/pull_request_template.md"
+            ".github/ISSUE_TEMPLATE/bug_report.md"
+            ".github/ISSUE_TEMPLATE/feature_request.md"
+            ".github/ISSUE_TEMPLATE/security_issue.md"
+          )
+          
+          missing_files=()
+          for file in "${required_files[@]}"; do
+            if [[ ! -f "$file" ]]; then
+              missing_files+=("$file")
+            else
+              echo "✅ Found: $file"
+            fi
+          done
+          
+          if [[ ${#missing_files[@]} -gt 0 ]]; then
+            echo "❌ Missing required files:"
+            printf '%s\n' "${missing_files[@]}"
+            exit 1
+          else
+            echo "✅ All required files are present"
+          fi
+
+      - name: Validate workflow syntax
+        run: |
+          echo "Validating GitHub Actions workflow syntax..."
+          
+          # Check if workflows are valid YAML
+          for workflow in .github/workflows/*.yml .github/workflows/*.yaml; do
+            if [[ -f "$workflow" ]]; then
+              echo "Validating: $workflow"
+              # Basic YAML syntax check
+              python -c "import yaml; yaml.safe_load(open('$workflow'))" || exit 1
+              echo "✅ Valid YAML: $workflow"
+            fi
+          done
+
+      - name: Generate setup report
+        run: |
+          echo "# Repository Setup Report" > setup-report.md
+          echo "" >> setup-report.md
+          echo "Generated on: $(date)" >> setup-report.md
+          echo "" >> setup-report.md
+          echo "## Files Created" >> setup-report.md
+          echo "" >> setup-report.md
+          find .github -type f -name "*.yml" -o -name "*.yaml" -o -name "*.md" | sort | while read file; do
+            echo "- $file" >> setup-report.md
+          done
+          echo "" >> setup-report.md
+          echo "## Next Steps" >> setup-report.md
+          echo "" >> setup-report.md
+          echo "1. Configure branch protection rules in repository settings" >> setup-report.md
+          echo "2. Enable security features (vulnerability alerts, secret scanning)" >> setup-report.md
+          echo "3. Set up required secrets for CI/CD pipeline" >> setup-report.md
+          echo "4. Configure environments (development, staging, production)" >> setup-report.md
+          echo "5. Add team members and configure CODEOWNERS" >> setup-report.md
+          
+          cat setup-report.md
+
+      - name: Upload setup report
+        uses: actions/upload-artifact@v4
+        with:
+          name: repository-setup-report
+          path: setup-report.md
+          retention-days: 30

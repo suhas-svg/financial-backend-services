@@ -1,0 +1,254 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: account-service-blue
+  namespace: finance-services-production
+  labels:
+    app: account-service
+    tier: backend
+    version: blue
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: account-service
+      version: blue
+  template:
+    metadata:
+      labels:
+        app: account-service
+        tier: backend
+        version: blue
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "9001"
+    spec:
+      containers:
+      - name: account-service
+        image: ghcr.io/suhasan/account-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 9001
+          name: actuator
+        envFrom:
+        - configMapRef:
+            name: account-service-config
+        - secretRef:
+            name: account-service-secrets
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 9001
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 9001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /actuator/health
+            port: 9001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 10
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+      volumes:
+      - name: tmp-volume
+        emptyDir: {}
+      securityContext:
+        fsGroup: 1000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: account-service-green
+  namespace: finance-services-production
+  labels:
+    app: account-service
+    tier: backend
+    version: green
+spec:
+  replicas: 0  # Initially set to 0, will be scaled up during deployment
+  selector:
+    matchLabels:
+      app: account-service
+      version: green
+  template:
+    metadata:
+      labels:
+        app: account-service
+        tier: backend
+        version: green
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "9001"
+    spec:
+      containers:
+      - name: account-service
+        image: ghcr.io/suhasan/account-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 9001
+          name: actuator
+        envFrom:
+        - configMapRef:
+            name: account-service-config
+        - secretRef:
+            name: account-service-secrets
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 9001
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 9001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /actuator/health
+            port: 9001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 10
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+      volumes:
+      - name: tmp-volume
+        emptyDir: {}
+      securityContext:
+        fsGroup: 1000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: account-service
+  namespace: finance-services-production
+  labels:
+    app: account-service
+spec:
+  selector:
+    app: account-service
+    # No version selector here - will be controlled by blue-green switch
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  - name: actuator
+    port: 9001
+    targetPort: 9001
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: account-service-blue
+  namespace: finance-services-production
+  labels:
+    app: account-service
+    version: blue
+spec:
+  selector:
+    app: account-service
+    version: blue
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  - name: actuator
+    port: 9001
+    targetPort: 9001
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: account-service-green
+  namespace: finance-services-production
+  labels:
+    app: account-service
+    version: green
+spec:
+  selector:
+    app: account-service
+    version: green
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  - name: actuator
+    port: 9001
+    targetPort: 9001
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: account-service-actuator
+  namespace: finance-services-production
+  labels:
+    app: account-service
+    service-type: monitoring
+spec:
+  selector:
+    app: account-service
+  ports:
+  - name: actuator
+    port: 9001
+    targetPort: 9001
+  type: ClusterIP

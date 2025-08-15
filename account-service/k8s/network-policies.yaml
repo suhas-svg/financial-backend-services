@@ -1,0 +1,152 @@
+# Default deny all ingress traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: finance-services
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+---
+# Default deny all egress traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+  namespace: finance-services
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+---
+# Allow account-service to communicate with postgres
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: account-service-to-postgres
+  namespace: finance-services
+spec:
+  podSelector:
+    matchLabels:
+      app: account-service
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+---
+# Allow postgres to receive connections from account-service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-from-account-service
+  namespace: finance-services
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: account-service
+    ports:
+    - protocol: TCP
+      port: 5432
+---
+# Allow ingress controller to reach account-service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-account-service
+  namespace: finance-services
+spec:
+  podSelector:
+    matchLabels:
+      app: account-service
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Allow internal service communication
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: finance-services
+    ports:
+    - protocol: TCP
+      port: 8080
+---
+# Allow monitoring systems to scrape metrics
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-to-actuator
+  namespace: finance-services
+spec:
+  podSelector:
+    matchLabels:
+      app: account-service
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9001
+  # Allow internal health checks
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: finance-services
+    ports:
+    - protocol: TCP
+      port: 9001
+---
+# Allow account-service egress for external APIs (if needed)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: account-service-external-egress
+  namespace: finance-services
+spec:
+  podSelector:
+    matchLabels:
+      app: account-service
+  policyTypes:
+  - Egress
+  egress:
+  # Allow HTTPS to external services
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow HTTP to external services (if needed)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80

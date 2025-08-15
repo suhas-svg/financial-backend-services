@@ -1,0 +1,366 @@
+-- ================================================
+-- Additional Database Indexes and Performance Optimizations
+-- Version: 5.0
+-- Description: Create additional indexes and performance optimizations
+-- ================================================
+
+-- ================================================
+-- Advanced Composite Indexes for Complex Queries
+-- ================================================
+
+-- Index for transaction history queries with pagination
+CREATE INDEX IF NOT EXISTS idx_transactions_history_pagination 
+    ON transactions(from_account_id, created_at DESC, transaction_id) 
+    WHERE status = 'COMPLETED';
+
+-- Index for user transaction queries with date range
+CREATE INDEX IF NOT EXISTS idx_transactions_user_daterange 
+    ON transactions(created_by, created_at DESC, status, type);
+
+-- Index for account balance calculation queries
+CREATE INDEX IF NOT EXISTS idx_transactions_balance_calc 
+    ON transactions(from_account_id, status, amount, created_at) 
+    WHERE status = 'COMPLETED';
+
+-- Index for transaction limit checking queries (removed CURRENT_DATE constraint)
+CREATE INDEX IF NOT EXISTS idx_transactions_limit_check 
+    ON transactions(from_account_id, type, status, amount, created_at) 
+    WHERE status = 'COMPLETED';
+
+-- Index for reversal transaction queries
+CREATE INDEX IF NOT EXISTS idx_transactions_reversal_lookup 
+    ON transactions(original_transaction_id, reversal_transaction_id, status) 
+    WHERE original_transaction_id IS NOT NULL OR reversal_transaction_id IS NOT NULL;
+
+-- ================================================
+-- Partial Indexes for Specific Use Cases
+-- ================================================
+
+-- Index for pending transactions (hot data)
+CREATE INDEX IF NOT EXISTS idx_transactions_pending_hot 
+    ON transactions(created_at DESC, from_account_id, amount) 
+    WHERE status = 'PENDING';
+
+-- Index for processing transactions
+CREATE INDEX IF NOT EXISTS idx_transactions_processing_hot 
+    ON transactions(created_at DESC, from_account_id, to_account_id) 
+    WHERE status = 'PROCESSING';
+
+-- Index for failed transactions (for retry logic)
+CREATE INDEX IF NOT EXISTS idx_transactions_failed_retry 
+    ON transactions(created_at DESC, from_account_id, type) 
+    WHERE status = 'FAILED';
+
+-- Index for high-value transactions (for monitoring)
+CREATE INDEX IF NOT EXISTS idx_transactions_high_value 
+    ON transactions(amount DESC, created_at DESC, type) 
+    WHERE amount >= 10000.00 AND status = 'COMPLETED';
+
+-- ================================================
+-- Functional Indexes for Date-based Queries
+-- ================================================
+
+-- Index for daily transaction summaries
+CREATE INDEX IF NOT EXISTS idx_transactions_daily_summary 
+    ON transactions(DATE(created_at), type, status, from_account_id, amount);
+
+-- Index for monthly transaction summaries
+CREATE INDEX IF NOT EXISTS idx_transactions_monthly_summary 
+    ON transactions(EXTRACT(YEAR FROM created_at), EXTRACT(MONTH FROM created_at), type, status, from_account_id);
+
+-- Index for weekly transaction patterns
+CREATE INDEX IF NOT EXISTS idx_transactions_weekly_pattern 
+    ON transactions(EXTRACT(DOW FROM created_at), EXTRACT(HOUR FROM created_at), type, amount);
+
+-- ================================================
+-- Covering Indexes for Read-Heavy Queries
+-- ================================================
+
+-- Covering index for transaction list queries
+CREATE INDEX IF NOT EXISTS idx_transactions_list_covering 
+    ON transactions(from_account_id, created_at DESC) 
+    INCLUDE (transaction_id, to_account_id, amount, currency, type, status, description);
+
+-- Covering index for transaction search queries
+CREATE INDEX IF NOT EXISTS idx_transactions_search_covering 
+    ON transactions(created_by, type, status) 
+    INCLUDE (transaction_id, from_account_id, to_account_id, amount, created_at, description);
+
+-- ================================================
+-- Indexes for Transaction Limits Table
+-- ================================================
+
+-- Composite index for limit lookups
+CREATE INDEX IF NOT EXISTS idx_transaction_limits_lookup 
+    ON transaction_limits(account_type, transaction_type, active) 
+    INCLUDE (daily_limit, monthly_limit, per_transaction_limit);
+
+-- Index for active limits only
+CREATE INDEX IF NOT EXISTS idx_transaction_limits_active_only 
+    ON transaction_limits(account_type, transaction_type) 
+    WHERE active = true;
+
+-- ================================================
+-- Create Hash Indexes for Equality Searches
+-- ================================================
+
+-- Hash index for transaction ID lookups (if supported)
+-- Note: Hash indexes are only useful for equality comparisons
+CREATE INDEX IF NOT EXISTS idx_transactions_id_hash 
+    ON transactions USING HASH (transaction_id);
+
+-- Hash index for account ID lookups
+CREATE INDEX IF NOT EXISTS idx_transactions_from_account_hash 
+    ON transactions USING HASH (from_account_id);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_to_account_hash 
+    ON transactions USING HASH (to_account_id);
+
+-- ================================================
+-- Create Expression Indexes for Calculated Fields
+-- ================================================
+
+-- Index for transaction processing time calculations
+CREATE INDEX IF NOT EXISTS idx_transactions_processing_time 
+    ON transactions(EXTRACT(EPOCH FROM (processed_at - created_at))) 
+    WHERE processed_at IS NOT NULL AND created_at IS NOT NULL;
+
+-- Index for transaction amount ranges (simplified - removed CASE expression)
+CREATE INDEX IF NOT EXISTS idx_transactions_amount_ranges 
+    ON transactions(amount, created_at DESC);
+
+-- ================================================
+-- Create Unique Constraints for Data Integrity
+-- ================================================
+
+-- Ensure no duplicate reversal relationships
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_unique_reversal 
+    ON transactions(original_transaction_id) 
+    WHERE reversal_transaction_id IS NOT NULL;
+
+-- ================================================
+-- Create Statistics for Query Optimization
+-- ================================================
+
+-- Create extended statistics for correlated columns
+CREATE STATISTICS IF NOT EXISTS stat_transactions_account_type_amount 
+    ON from_account_id, type, amount 
+    FROM transactions;
+
+CREATE STATISTICS IF NOT EXISTS stat_transactions_date_status_type 
+    ON created_at, status, type 
+    FROM transactions;
+
+-- ================================================
+-- Create Materialized Views for Heavy Queries
+-- ================================================
+
+-- Materialized view for daily transaction volumes
+CREATE MATERIALIZED VIEW IF NOT EXISTS daily_transaction_volumes AS
+SELECT 
+    DATE(t.created_at) as transaction_date,
+    t.type as transaction_type,
+    COUNT(*) as transaction_count,
+    SUM(t.amount) as total_volume,
+    AVG(t.amount) as avg_amount,
+    MAX(t.amount) as max_amount,
+    MIN(t.amount) as min_amount,
+    COUNT(DISTINCT t.from_account_id) as unique_accounts,
+    COUNT(*) FILTER (WHERE t.status = 'COMPLETED') as successful_transactions,
+    COUNT(*) FILTER (WHERE t.status = 'FAILED') as failed_transactions
+FROM transactions t
+WHERE t.created_at >= CURRENT_DATE - INTERVAL '90 days'
+GROUP BY DATE(t.created_at), t.type
+ORDER BY transaction_date DESC, transaction_type;
+
+-- Create indexes on materialized view
+CREATE INDEX IF NOT EXISTS idx_daily_volumes_date 
+    ON daily_transaction_volumes(transaction_date DESC);
+
+CREATE INDEX IF NOT EXISTS idx_daily_volumes_type 
+    ON daily_transaction_volumes(transaction_type);
+
+-- Materialized view for account transaction summaries
+CREATE MATERIALIZED VIEW IF NOT EXISTS account_transaction_summaries AS
+SELECT 
+    t.from_account_id as account_id,
+    COUNT(*) as total_transactions,
+    SUM(t.amount) as total_amount,
+    AVG(t.amount) as avg_amount,
+    MAX(t.amount) as max_amount,
+    MIN(t.amount) as min_amount,
+    MAX(t.created_at) as last_transaction_date,
+    COUNT(*) FILTER (WHERE t.status = 'COMPLETED') as successful_transactions,
+    COUNT(*) FILTER (WHERE t.status = 'FAILED') as failed_transactions,
+    COUNT(*) FILTER (WHERE t.created_at >= CURRENT_DATE - INTERVAL '30 days') as recent_transactions
+FROM transactions t
+WHERE t.created_at >= CURRENT_DATE - INTERVAL '1 year'
+GROUP BY t.from_account_id
+HAVING COUNT(*) > 0
+ORDER BY total_amount DESC;
+
+-- Create indexes on account summaries
+CREATE UNIQUE INDEX IF NOT EXISTS idx_account_summaries_account_id 
+    ON account_transaction_summaries(account_id);
+
+CREATE INDEX IF NOT EXISTS idx_account_summaries_total_amount 
+    ON account_transaction_summaries(total_amount DESC);
+
+-- ================================================
+-- Create Functions for Index Maintenance
+-- ================================================
+
+-- Function to rebuild indexes
+CREATE OR REPLACE FUNCTION rebuild_transaction_indexes()
+RETURNS VOID AS $$
+DECLARE
+    index_record RECORD;
+BEGIN
+    -- Reindex all transaction-related indexes
+    FOR index_record IN 
+        SELECT indexname 
+        FROM pg_indexes 
+        WHERE tablename IN ('transactions', 'transaction_limits', 'system_configuration')
+        AND schemaname = 'public'
+    LOOP
+        EXECUTE 'REINDEX INDEX ' || quote_ident(index_record.indexname);
+        RAISE NOTICE 'Reindexed: %', index_record.indexname;
+    END LOOP;
+    
+    -- Refresh materialized views
+    REFRESH MATERIALIZED VIEW CONCURRENTLY daily_transaction_volumes;
+    REFRESH MATERIALIZED VIEW CONCURRENTLY account_transaction_summaries;
+    
+    -- Update table statistics
+    ANALYZE transactions;
+    ANALYZE transaction_limits;
+    ANALYZE system_configuration;
+    
+    RAISE NOTICE 'Index rebuild and statistics update completed';
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to get index usage statistics
+CREATE OR REPLACE FUNCTION get_index_usage_stats()
+RETURNS TABLE(
+    table_name TEXT,
+    index_name TEXT,
+    index_scans BIGINT,
+    tuples_read BIGINT,
+    tuples_fetched BIGINT,
+    index_size TEXT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        schemaname || '.' || tablename as table_name,
+        indexrelname as index_name,
+        idx_scan as index_scans,
+        idx_tup_read as tuples_read,
+        idx_tup_fetch as tuples_fetched,
+        pg_size_pretty(pg_relation_size(indexrelid)) as index_size
+    FROM pg_stat_user_indexes
+    WHERE schemaname = 'public'
+        AND tablename IN ('transactions', 'transaction_limits', 'system_configuration')
+    ORDER BY idx_scan DESC;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to identify unused indexes
+CREATE OR REPLACE FUNCTION find_unused_indexes()
+RETURNS TABLE(
+    table_name TEXT,
+    index_name TEXT,
+    index_size TEXT,
+    index_scans BIGINT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        schemaname || '.' || tablename as table_name,
+        indexrelname as index_name,
+        pg_size_pretty(pg_relation_size(indexrelid)) as index_size,
+        idx_scan as index_scans
+    FROM pg_stat_user_indexes
+    WHERE schemaname = 'public'
+        AND tablename IN ('transactions', 'transaction_limits', 'system_configuration')
+        AND idx_scan < 10  -- Indexes with less than 10 scans
+    ORDER BY pg_relation_size(indexrelid) DESC;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ================================================
+-- Create Maintenance Schedule Functions
+-- ================================================
+
+-- Function to perform daily maintenance
+CREATE OR REPLACE FUNCTION daily_maintenance()
+RETURNS VOID AS $$
+BEGIN
+    -- Update statistics for heavily used tables
+    ANALYZE transactions;
+    ANALYZE transaction_limits;
+    
+    -- Refresh materialized views
+    REFRESH MATERIALIZED VIEW CONCURRENTLY daily_transaction_volumes;
+    REFRESH MATERIALIZED VIEW CONCURRENTLY account_transaction_summaries;
+    
+    -- Log maintenance completion
+    RAISE NOTICE 'Daily maintenance completed at %', CURRENT_TIMESTAMP;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to perform weekly maintenance
+CREATE OR REPLACE FUNCTION weekly_maintenance()
+RETURNS VOID AS $$
+BEGIN
+    -- Perform daily maintenance tasks
+    PERFORM daily_maintenance();
+    
+    -- Update extended statistics
+    ANALYZE transactions;
+    
+    -- Vacuum analyze for better performance
+    -- Note: This would typically be done by autovacuum, but can be forced if needed
+    
+    RAISE NOTICE 'Weekly maintenance completed at %', CURRENT_TIMESTAMP;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ================================================
+-- Add Comments for Documentation
+-- ================================================
+COMMENT ON INDEX idx_transactions_history_pagination IS 'Optimizes transaction history queries with pagination';
+COMMENT ON INDEX idx_transactions_limit_check IS 'Optimizes transaction limit checking queries';
+COMMENT ON INDEX idx_transactions_reversal_lookup IS 'Optimizes reversal transaction lookups';
+COMMENT ON MATERIALIZED VIEW daily_transaction_volumes IS 'Pre-calculated daily transaction volume statistics';
+COMMENT ON MATERIALIZED VIEW account_transaction_summaries IS 'Pre-calculated account transaction summaries';
+COMMENT ON FUNCTION rebuild_transaction_indexes IS 'Rebuilds all transaction-related indexes and updates statistics';
+COMMENT ON FUNCTION get_index_usage_stats IS 'Returns index usage statistics for performance monitoring';
+COMMENT ON FUNCTION find_unused_indexes IS 'Identifies potentially unused indexes for cleanup';
+
+-- ================================================
+-- Final Verification and Statistics
+-- ================================================
+DO $$
+DECLARE
+    index_count INTEGER;
+    matview_count INTEGER;
+BEGIN
+    -- Count indexes on transaction tables
+    SELECT COUNT(*) INTO index_count
+    FROM pg_indexes 
+    WHERE tablename IN ('transactions', 'transaction_limits', 'system_configuration')
+    AND schemaname = 'public';
+    
+    -- Count materialized views
+    SELECT COUNT(*) INTO matview_count
+    FROM pg_matviews 
+    WHERE schemaname = 'public'
+    AND matviewname LIKE '%transaction%';
+    
+    RAISE NOTICE 'Created % indexes and % materialized views for performance optimization', index_count, matview_count;
+    
+    -- Display index summary
+    RAISE NOTICE 'Index optimization completed successfully';
+END $$;

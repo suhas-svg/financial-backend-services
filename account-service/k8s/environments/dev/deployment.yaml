@@ -1,0 +1,219 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: account-service-deployment
+  namespace: finance-services-dev
+  labels:
+    app: account-service
+    tier: backend
+    environment: development
+    version: "1.0.0"
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    description: "Account service deployment for development environment"
+spec:
+  replicas: 1  # Single replica for dev environment
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: account-service
+      environment: development
+  template:
+    metadata:
+      labels:
+        app: account-service
+        tier: backend
+        environment: development
+        version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9001"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      serviceAccountName: account-service-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: account-service
+        image: ghcr.io/your-org/account-service:dev-latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        - containerPort: 9001
+          name: actuator
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: account-service-config
+        - secretRef:
+            name: account-service-secrets
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+            ephemeral-storage: "1Gi"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+            ephemeral-storage: "2Gi"
+        # Health checks with proper configuration
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 9001
+            scheme: HTTP
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+          successThreshold: 1
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 9001
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        startupProbe:
+          httpGet:
+            path: /actuator/health
+            port: 9001
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 15  # Allow up to 150 seconds for startup
+          successThreshold: 1
+        # Security context
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        # Volume mounts
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+        - name: logs-volume
+          mountPath: /app/logs
+        - name: cache-volume
+          mountPath: /app/cache
+      # Volumes
+      volumes:
+      - name: tmp-volume
+        emptyDir:
+          sizeLimit: 100Mi
+      - name: logs-volume
+        emptyDir:
+          sizeLimit: 500Mi
+      - name: cache-volume
+        emptyDir:
+          sizeLimit: 100Mi
+      # Pod scheduling and affinity
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - account-service
+              topologyKey: kubernetes.io/hostname
+      # Tolerations for development nodes
+      tolerations:
+      - key: "development"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+      # Restart policy
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: account-service
+  namespace: finance-services-dev
+  labels:
+    app: account-service
+    environment: development
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  selector:
+    app: account-service
+    environment: development
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: actuator
+    port: 9001
+    targetPort: 9001
+    protocol: TCP
+  type: ClusterIP
+  sessionAffinity: None
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: account-service-actuator
+  namespace: finance-services-dev
+  labels:
+    app: account-service
+    service-type: monitoring
+    environment: development
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9001"
+    prometheus.io/path: "/actuator/prometheus"
+spec:
+  selector:
+    app: account-service
+    environment: development
+  ports:
+  - name: actuator
+    port: 9001
+    targetPort: 9001
+    protocol: TCP
+  type: ClusterIP

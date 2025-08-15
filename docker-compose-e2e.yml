@@ -1,0 +1,411 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database for Account Service
+  postgres-account-e2e:
+    image: postgres:15-alpine
+    container_name: postgres-account-e2e
+    environment:
+      POSTGRES_DB: account_db_e2e
+      POSTGRES_USER: e2e_user
+      POSTGRES_PASSWORD: e2e_password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_account_e2e_data:/var/lib/postgresql/data
+      - ./account-service/scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init-account-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U e2e_user -d account_db_e2e"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - e2e-network
+    labels:
+      - "e2e.service=database"
+      - "e2e.component=account-database"
+
+  # PostgreSQL Database for Transaction Service
+  postgres-transaction-e2e:
+    image: postgres:15-alpine
+    container_name: postgres-transaction-e2e
+    environment:
+      POSTGRES_DB: transaction_db_e2e
+      POSTGRES_USER: e2e_user
+      POSTGRES_PASSWORD: e2e_password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_transaction_e2e_data:/var/lib/postgresql/data
+      - ./transaction-service/scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init-transaction-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U e2e_user -d transaction_db_e2e"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - e2e-network
+    labels:
+      - "e2e.service=database"
+      - "e2e.component=transaction-database"
+
+  # Redis Cache for both services
+  redis-e2e:
+    image: redis:7-alpine
+    container_name: redis-e2e
+    ports:
+      - "6380:6379"
+    command: redis-server --requirepass e2e_redis_password --appendonly yes
+    volumes:
+      - redis_e2e_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "e2e_redis_password", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - e2e-network
+    labels:
+      - "e2e.service=cache"
+      - "e2e.component=redis"
+
+  # Account Service
+  account-service-e2e:
+    build:
+      context: ./account-service
+      dockerfile: Dockerfile
+      args:
+        BUILD_ENV: e2e
+        APP_VERSION: e2e-latest
+    image: account-service:e2e-latest
+    container_name: account-service-e2e
+    environment:
+      # Spring Configuration
+      SPRING_PROFILES_ACTIVE: e2e
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-account-e2e:5432/account_db_e2e
+      SPRING_DATASOURCE_USERNAME: e2e_user
+      SPRING_DATASOURCE_PASSWORD: e2e_password
+      SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+      SPRING_JPA_SHOW_SQL: false
+      
+      # Flyway Configuration for E2E - Disable migrations
+      SPRING_FLYWAY_ENABLED: false
+      
+      # Server Configuration
+      SERVER_PORT: 8080
+      
+      # Management and Monitoring
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+      MANAGEMENT_HEALTH_CIRCUITBREAKERS_ENABLED: true
+      MANAGEMENT_HEALTH_RATELIMITERS_ENABLED: true
+      
+      # JWT Configuration
+      JWT_SECRET: e2e-test-secret-key-for-comprehensive-testing-AY8Ro0HSBFyllm9ZPafT2GWuE
+      JWT_EXPIRATION: 3600000
+      
+      # Logging Configuration
+      LOGGING_CONFIG: "/tmp/logback-e2e.xml"
+      LOGGING_LEVEL_ROOT: INFO
+      LOGGING_LEVEL_COM_SUHASAN_FINANCE: DEBUG
+      
+      # JVM Configuration
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
+      
+      # E2E Test Configuration
+      E2E_MODE: true
+      E2E_RESET_DATA_ON_STARTUP: true
+      
+      # Spring Cloud Configuration
+      SPRING_CLOUD_COMPATIBILITY_VERIFIER_ENABLED: false
+    ports:
+      - "8083:8080"
+      - "9001:9001"  # Metrics port
+    depends_on:
+      postgres-account-e2e:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    restart: unless-stopped
+    networks:
+      - e2e-network
+    volumes:
+      - account_service_e2e_logs:/app/logs
+      - ./e2e-tests/logback-e2e.xml:/tmp/logback-e2e.xml:ro
+    labels:
+      - "e2e.service=application"
+      - "e2e.component=account-service"
+      - "e2e.port=8080"
+      - "e2e.health=/actuator/health"
+
+  # Transaction Service
+  transaction-service-e2e:
+    build:
+      context: ./transaction-service
+      dockerfile: Dockerfile
+      args:
+        BUILD_ENV: e2e
+        APP_VERSION: e2e-latest
+    image: transaction-service:e2e-latest
+    container_name: transaction-service-e2e
+    environment:
+      # Spring Configuration
+      SPRING_PROFILES_ACTIVE: e2e
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-transaction-e2e:5432/transaction_db_e2e
+      SPRING_DATASOURCE_USERNAME: e2e_user
+      SPRING_DATASOURCE_PASSWORD: e2e_password
+      SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+      SPRING_JPA_SHOW_SQL: false
+      
+      # Flyway Configuration for E2E - Disable migrations
+      SPRING_FLYWAY_ENABLED: false
+      
+      # Redis Configuration
+      SPRING_DATA_REDIS_HOST: redis-e2e
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: e2e_redis_password
+      SPRING_DATA_REDIS_TIMEOUT: 2000ms
+      
+      # Server Configuration
+      SERVER_PORT: 8080
+      
+      # Account Service Integration
+      ACCOUNT_SERVICE_BASE_URL: http://account-service-e2e:8080
+      ACCOUNT_SERVICE_TIMEOUT: 30000
+      
+      # Management and Monitoring
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+      MANAGEMENT_HEALTH_CIRCUITBREAKERS_ENABLED: true
+      MANAGEMENT_HEALTH_RATELIMITERS_ENABLED: true
+      
+      # JWT Configuration
+      JWT_SECRET: e2e-test-secret-key-for-comprehensive-testing-AY8Ro0HSBFyllm9ZPafT2GWuE
+      JWT_EXPIRATION: 3600000
+      
+      # Circuit Breaker Configuration
+      RESILIENCE4J_CIRCUITBREAKER_INSTANCES_ACCOUNT_SERVICE_SLIDING_WINDOW_SIZE: 10
+      RESILIENCE4J_CIRCUITBREAKER_INSTANCES_ACCOUNT_SERVICE_FAILURE_RATE_THRESHOLD: 50
+      RESILIENCE4J_CIRCUITBREAKER_INSTANCES_ACCOUNT_SERVICE_WAIT_DURATION_IN_OPEN_STATE: 30s
+      RESILIENCE4J_CIRCUITBREAKER_INSTANCES_ACCOUNT_SERVICE_PERMITTED_NUMBER_OF_CALLS_IN_HALF_OPEN_STATE: 3
+      
+      # Retry Configuration
+      RESILIENCE4J_RETRY_INSTANCES_ACCOUNT_SERVICE_MAX_ATTEMPTS: 3
+      RESILIENCE4J_RETRY_INSTANCES_ACCOUNT_SERVICE_WAIT_DURATION: 1s
+      
+      # Logging Configuration
+      LOGGING_CONFIG: "/tmp/logback-e2e.xml"
+      LOGGING_LEVEL_ROOT: INFO
+      LOGGING_LEVEL_COM_SUHASAN_FINANCE: DEBUG
+      
+      # JVM Configuration
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
+      
+      # E2E Test Configuration
+      E2E_MODE: true
+      E2E_RESET_DATA_ON_STARTUP: true
+      
+      # Spring Cloud Configuration
+      SPRING_CLOUD_COMPATIBILITY_VERIFIER_ENABLED: false
+    ports:
+      - "8082:8080"
+      - "9002:9002"  # Metrics port
+    depends_on:
+      postgres-transaction-e2e:
+        condition: service_healthy
+      redis-e2e:
+        condition: service_healthy
+      account-service-e2e:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    restart: unless-stopped
+    networks:
+      - e2e-network
+    volumes:
+      - transaction_service_e2e_logs:/app/logs
+      - ./e2e-tests/logback-e2e.xml:/tmp/logback-e2e.xml:ro
+    labels:
+      - "e2e.service=application"
+      - "e2e.component=transaction-service"
+      - "e2e.port=8080"
+      - "e2e.health=/actuator/health"
+
+  # E2E Test Environment Validator
+  e2e-validator:
+    image: curlimages/curl:latest
+    container_name: e2e-validator
+    environment:
+      ACCOUNT_SERVICE_URL: http://account-service-e2e:8080
+      TRANSACTION_SERVICE_URL: http://transaction-service-e2e:8080
+      POSTGRES_ACCOUNT_HOST: postgres-account-e2e
+      POSTGRES_TRANSACTION_HOST: postgres-transaction-e2e
+      REDIS_HOST: redis-e2e
+    depends_on:
+      account-service-e2e:
+        condition: service_healthy
+      transaction-service-e2e:
+        condition: service_healthy
+    networks:
+      - e2e-network
+    command: |
+      sh -c '
+        echo "=== E2E Environment Validation ==="
+        echo "Validating Account Service..."
+        curl -f $$ACCOUNT_SERVICE_URL/actuator/health || exit 1
+        echo "✓ Account Service is healthy"
+        
+        echo "Validating Transaction Service..."
+        curl -f $$TRANSACTION_SERVICE_URL/actuator/health || exit 1
+        echo "✓ Transaction Service is healthy"
+        
+        echo "=== All services are ready for E2E testing ==="
+        exit 0
+      '
+    profiles:
+      - validate
+    labels:
+      - "e2e.service=validator"
+      - "e2e.component=environment-validator"
+
+  # E2E Test Data Setup Service
+  e2e-data-setup:
+    image: postgres:15-alpine
+    container_name: e2e-data-setup
+    environment:
+      PGPASSWORD: e2e_password
+    depends_on:
+      postgres-account-e2e:
+        condition: service_healthy
+      postgres-transaction-e2e:
+        condition: service_healthy
+    networks:
+      - e2e-network
+    volumes:
+      - ./e2e-tests/data:/e2e-data:ro
+    command: |
+      sh -c '
+        echo "=== Setting up E2E Test Data ==="
+        
+        echo "Setting up Account Service test data..."
+        if [ -f /e2e-data/account-test-data.sql ]; then
+          psql -h postgres-account-e2e -U e2e_user -d account_db_e2e -f /e2e-data/account-test-data.sql
+          echo "✓ Account test data loaded"
+        fi
+        
+        echo "Setting up Transaction Service test data..."
+        if [ -f /e2e-data/transaction-test-data.sql ]; then
+          psql -h postgres-transaction-e2e -U e2e_user -d transaction_db_e2e -f /e2e-data/transaction-test-data.sql
+          echo "✓ Transaction test data loaded"
+        fi
+        
+        echo "=== E2E Test Data Setup Complete ==="
+      '
+    profiles:
+      - setup-data
+    labels:
+      - "e2e.service=utility"
+      - "e2e.component=data-setup"
+
+  # E2E Environment Cleanup Service
+  e2e-cleanup:
+    image: postgres:15-alpine
+    container_name: e2e-cleanup
+    environment:
+      PGPASSWORD: e2e_password
+    networks:
+      - e2e-network
+    volumes:
+      - ./e2e-tests/cleanup:/e2e-cleanup:ro
+    command: |
+      sh -c '
+        echo "=== E2E Environment Cleanup ==="
+        
+        echo "Cleaning Account Service data..."
+        if [ -f /e2e-cleanup/cleanup-account-data.sql ]; then
+          psql -h postgres-account-e2e -U e2e_user -d account_db_e2e -f /e2e-cleanup/cleanup-account-data.sql 2>/dev/null || true
+          echo "✓ Account data cleaned"
+        fi
+        
+        echo "Cleaning Transaction Service data..."
+        if [ -f /e2e-cleanup/cleanup-transaction-data.sql ]; then
+          psql -h postgres-transaction-e2e -U e2e_user -d transaction_db_e2e -f /e2e-cleanup/cleanup-transaction-data.sql 2>/dev/null || true
+          echo "✓ Transaction data cleaned"
+        fi
+        
+        echo "Flushing Redis cache..."
+        redis-cli -h redis-e2e -a e2e_redis_password FLUSHALL 2>/dev/null || true
+        echo "✓ Redis cache flushed"
+        
+        echo "=== E2E Environment Cleanup Complete ==="
+      '
+    profiles:
+      - cleanup
+    labels:
+      - "e2e.service=utility"
+      - "e2e.component=cleanup"
+
+volumes:
+  postgres_account_e2e_data:
+    name: postgres-account-e2e-data
+    driver: local
+    labels:
+      - "e2e.volume=database"
+      - "e2e.component=account-database"
+  
+  postgres_transaction_e2e_data:
+    name: postgres-transaction-e2e-data
+    driver: local
+    labels:
+      - "e2e.volume=database"
+      - "e2e.component=transaction-database"
+  
+  redis_e2e_data:
+    name: redis-e2e-data
+    driver: local
+    labels:
+      - "e2e.volume=cache"
+      - "e2e.component=redis"
+  
+  account_service_e2e_logs:
+    name: account-service-e2e-logs
+    driver: local
+    labels:
+      - "e2e.volume=logs"
+      - "e2e.component=account-service"
+  
+  transaction_service_e2e_logs:
+    name: transaction-service-e2e-logs
+    driver: local
+    labels:
+      - "e2e.volume=logs"
+      - "e2e.component=transaction-service"
+
+networks:
+  e2e-network:
+    name: e2e-network
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.30.0.0/16
+          gateway: 172.30.0.1
+    labels:
+      - "e2e.network=main"
+      - "e2e.purpose=service-communication"

@@ -1,0 +1,198 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: finance-services
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    rule_files:
+      - "alert_rules.yml"
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: []
+
+    scrape_configs:
+      # Account Service Application
+      - job_name: 'account-service'
+        kubernetes_sd_configs:
+        - role: endpoints
+          namespaces:
+            names:
+            - finance-services
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_name]
+          action: keep
+          regex: account-service
+        - source_labels: [__meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: metrics
+        - source_labels: [__meta_kubernetes_pod_name]
+          target_label: pod
+        - source_labels: [__meta_kubernetes_service_name]
+          target_label: service
+        metrics_path: '/actuator/prometheus'
+        scrape_interval: 10s
+
+      # Kubernetes API Server
+      - job_name: 'kubernetes-apiservers'
+        kubernetes_sd_configs:
+        - role: endpoints
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: default;kubernetes;https
+
+      # Kubernetes Nodes
+      - job_name: 'kubernetes-nodes'
+        kubernetes_sd_configs:
+        - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+        - source_labels: [__meta_kubernetes_node_name]
+          regex: (.+)
+          target_label: __metrics_path__
+          replacement: /api/v1/nodes/${1}/proxy/metrics
+
+      # Kubernetes Pods
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+        - role: pod
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
+        - action: labelmap
+          regex: __meta_kubernetes_pod_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_pod_name]
+          action: replace
+          target_label: kubernetes_pod_name
+
+      # PostgreSQL Database (if exposed with metrics)
+      - job_name: 'postgres'
+        kubernetes_sd_configs:
+        - role: endpoints
+          namespaces:
+            names:
+            - finance-services
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_name]
+          action: keep
+          regex: postgres
+        - source_labels: [__meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: metrics
+        scrape_interval: 30s
+
+      # Prometheus Self-Monitoring
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+        scrape_interval: 30s
+
+  alert_rules.yml: |
+    groups:
+      - name: account-service-alerts
+        rules:
+          # Application Health Alerts
+          - alert: ApplicationDown
+            expr: up{job="account-service"} == 0
+            for: 1m
+            labels:
+              severity: critical
+              service: account-service
+            annotations:
+              summary: "Account Service is down"
+              description: "Account Service has been down for more than 1 minute"
+
+          - alert: HighErrorRate
+            expr: rate(http_server_requests_seconds_count{status=~"5.."}[5m]) / rate(http_server_requests_seconds_count[5m]) > 0.05
+            for: 2m
+            labels:
+              severity: warning
+              service: account-service
+            annotations:
+              summary: "High error rate detected"
+              description: "Error rate is {{ $value | humanizePercentage }} for the last 5 minutes"
+
+          - alert: HighResponseTime
+            expr: histogram_quantile(0.95, rate(http_server_requests_seconds_bucket[5m])) > 2
+            for: 3m
+            labels:
+              severity: warning
+              service: account-service
+            annotations:
+              summary: "High response time detected"
+              description: "95th percentile response time is {{ $value }}s for the last 5 minutes"
+
+          # Database Alerts
+          - alert: DatabaseConnectionsHigh
+            expr: hikaricp_connections_active / hikaricp_connections_max > 0.8
+            for: 2m
+            labels:
+              severity: warning
+              service: database
+            annotations:
+              summary: "Database connection pool usage is high"
+              description: "Database connection pool usage is {{ $value | humanizePercentage }}"
+
+          # JVM Alerts
+          - alert: HighMemoryUsage
+            expr: jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"} > 0.85
+            for: 5m
+            labels:
+              severity: warning
+              service: jvm
+            annotations:
+              summary: "High JVM heap memory usage"
+              description: "JVM heap memory usage is {{ $value | humanizePercentage }}"
+
+          # Business Logic Alerts
+          - alert: HighFailedAuthenticationRate
+            expr: rate(auth_failed_total[5m]) > 10
+            for: 2m
+            labels:
+              severity: warning
+              service: security
+            annotations:
+              summary: "High failed authentication rate"
+              description: "Failed authentication rate is {{ $value }} per second"
+
+          # System Resource Alerts
+          - alert: HighCPUUsage
+            expr: system_cpu_usage > 0.8
+            for: 5m
+            labels:
+              severity: warning
+              service: system
+            annotations:
+              summary: "High CPU usage"
+              description: "CPU usage is {{ $value | humanizePercentage }}"

@@ -1,0 +1,23 @@
+<configuration>
+  <!-- grab app name + env from Spring -->
+  <springProperty scope="context" name="appName" source="spring.application.name"/>
+  <springProperty scope="context" name="env"     source="spring.profiles.active"/>
+
+  <!-- console appender → JSON -->
+  <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+      <customFields>{"app":"${appName}","env":"${env}"}</customFields>
+      <includeMdcKeyName>requestId</includeMdcKeyName>
+      <includeMdcKeyName>method</includeMdcKeyName>
+      <includeMdcKeyName>path</includeMdcKeyName>
+    </encoder>
+  </appender>
+
+  <!-- root logger -->
+  <root level="INFO">
+    <appender-ref ref="JSON_CONSOLE"/>
+  </root>
+
+  <!-- reduce Spring boot noise -->
+  <logger name="org.springframework" level="WARN"/>
+</configuration>

@@ -1,0 +1,22 @@
+# Trivy ignore file for Account Service
+# This file contains vulnerabilities that are intentionally ignored
+# Use with extreme caution and proper justification
+
+# Example entries (remove these and add actual CVEs if needed):
+# CVE-2023-12345  # Justification: Not applicable to our use case because...
+# GHSA-xxxx-xxxx-xxxx  # Justification: Fixed in our custom build...
+
+# Development-only dependencies (if any)
+# These should only be ignored in development builds, not production
+
+# Test-related vulnerabilities that don't affect production
+# CVE-2023-test-only  # Only affects test dependencies, not runtime
+
+# Note: Every entry in this file should have:
+# 1. A clear justification comment
+# 2. An expiration date or review date
+# 3. Approval from security team
+# 4. Regular review process
+
+# Template for new entries:
+# CVE-YYYY-NNNNN  # Justification: [reason] | Approved by: [name] | Review by: [date]

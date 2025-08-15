@@ -1,0 +1,188 @@
+# Prometheus configuration for Transaction Service monitoring
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+  - "transaction_service_alerts.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Transaction Service metrics
+  - job_name: 'transaction-service'
+    static_configs:
+      - targets: ['localhost:8081']
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    honor_labels: true
+    params:
+      format: ['prometheus']
+    
+    # Relabel configurations for better metric organization
+    metric_relabel_configs:
+      # Add service label to all metrics
+      - source_labels: [__name__]
+        target_label: service
+        replacement: transaction-service
+      
+      # Rename transaction metrics for consistency
+      - source_labels: [__name__]
+        regex: 'transaction_(.+)_total'
+        target_label: __name__
+        replacement: 'transaction_${1}_count'
+      
+      # Add environment label from instance
+      - source_labels: [instance]
+        target_label: environment
+        replacement: 'production'
+      
+      # Add team and component labels for organization
+      - source_labels: [__name__]
+        target_label: team
+        replacement: 'platform'
+      
+      - source_labels: [__name__]
+        target_label: component
+        replacement: 'transaction-processing'
+
+  # JVM metrics with specific configuration
+  - job_name: 'transaction-service-jvm'
+    static_configs:
+      - targets: ['localhost:8081']
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 30s
+    metric_relabel_configs:
+      # Only collect JVM metrics
+      - source_labels: [__name__]
+        regex: 'jvm_.*'
+        action: keep
+      
+      # Add service label
+      - source_labels: [__name__]
+        target_label: service
+        replacement: transaction-service
+
+  # Health check endpoint
+  - job_name: 'transaction-service-health'
+    static_configs:
+      - targets: ['localhost:8081']
+    metrics_path: '/actuator/health'
+    scrape_interval: 30s
+    
+  # Custom business metrics
+  - job_name: 'transaction-service-business'
+    static_configs:
+      - targets: ['localhost:8081']
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 5s
+    metric_relabel_configs:
+      # Only collect business metrics
+      - source_labels: [__name__]
+        regex: '(transaction|account|alerts)_.*'
+        action: keep
+      
+      # Add business domain label
+      - source_labels: [__name__]
+        target_label: business_domain
+        replacement: 'financial_services'
+      
+      # Add criticality label
+      - source_labels: [__name__]
+        target_label: criticality
+        replacement: 'high'
+
+  # Database metrics
+  - job_name: 'transaction-service-database'
+    static_configs:
+      - targets: ['localhost:8081']
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+    metric_relabel_configs:
+      # Only collect database and connection pool metrics
+      - source_labels: [__name__]
+        regex: '(database|hikaricp)_.*'
+        action: keep
+      
+      # Add database type label
+      - source_labels: [__name__]
+        target_label: database_type
+        replacement: 'postgresql'
+
+# Recording rules for derived metrics
+recording_rules:
+  - name: transaction_service_derived_metrics
+    rules:
+      # Transaction success rate
+      - record: transaction:success_rate
+        expr: |
+          (
+            rate(transaction_completed_count[5m]) /
+            (rate(transaction_completed_count[5m]) + rate(transaction_failed_count[5m]))
+          ) * 100
+      
+      # Transaction error rate
+      - record: transaction:error_rate
+        expr: |
+          (
+            rate(transaction_failed_count[5m]) /
+            (rate(transaction_completed_count[5m]) + rate(transaction_failed_count[5m]))
+          ) * 100
+      
+      # Transaction throughput (transactions per second)
+      - record: transaction:throughput
+        expr: rate(transaction_completed_count[1m])
+      
+      # Average transaction processing time
+      - record: transaction:avg_processing_time
+        expr: rate(transaction_processing_duration_sum[5m]) / rate(transaction_processing_duration_count[5m])
+      
+      # P95 transaction processing time
+      - record: transaction:p95_processing_time
+        expr: histogram_quantile(0.95, rate(transaction_processing_duration_bucket[5m]))
+      
+      # Account Service availability
+      - record: account_service:availability
+        expr: |
+          (
+            1 - (
+              rate(account_service_error_count[5m]) /
+              rate(account_service_call_duration_count[5m])
+            )
+          ) * 100
+      
+      # Database query performance
+      - record: database:avg_query_time
+        expr: rate(database_operation_duration_sum[5m]) / rate(database_operation_duration_count[5m])
+      
+      # JVM memory usage percentage
+      - record: jvm:memory_usage_percent
+        expr: (jvm_memory_used_bytes / jvm_memory_max_bytes) * 100
+      
+      # HTTP request rate
+      - record: http:request_rate
+        expr: rate(http_server_requests_seconds_count[1m])
+      
+      # HTTP error rate
+      - record: http:error_rate
+        expr: |
+          (
+            rate(http_server_requests_seconds_count{status=~"5.."}[5m]) /
+            rate(http_server_requests_seconds_count[5m])
+          ) * 100
+
+# Global labels to add to all metrics
+global:
+  external_labels:
+    cluster: 'production'
+    region: 'us-east-1'
+    service: 'transaction-service'
+    version: '1.0.0'

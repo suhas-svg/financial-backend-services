@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+    <!-- 
+    This file contains suppressions for OWASP Dependency Check false positives.
+    Each suppression should include a justification comment.
+    -->
+    
+    <!-- Example suppression for a known false positive -->
+    <!--
+    <suppress>
+        <notes><![CDATA[
+        This is a false positive because the vulnerability affects a different component
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/org\.example/.*$</packageUrl>
+        <cve>CVE-2021-12345</cve>
+    </suppress>
+    -->
+    
+    <!-- Suppress Spring Boot test dependencies that may have vulnerabilities but are not used in production -->
+    <suppress>
+        <notes><![CDATA[
+        Test dependencies are not included in production builds and pose no runtime risk
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/org\.springframework\.boot/spring\-boot\-starter\-test.*$</packageUrl>
+    </suppress>
+    
+    <!-- Suppress vulnerabilities in Maven plugins that don't affect runtime -->
+    <suppress>
+        <notes><![CDATA[
+        Maven plugins are build-time dependencies and don't affect runtime security
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/org\.apache\.maven\.plugins/.*$</packageUrl>
+    </suppress>
+</suppressions>

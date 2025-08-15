@@ -1,0 +1,119 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: account-service-dev
+  annotations:
+    config.kubernetes.io/local-config: "true"
+
+# Namespace for all resources
+namespace: finance-services-dev
+
+# Common labels applied to all resources
+commonLabels:
+  environment: development
+  managed-by: kustomize
+  app.kubernetes.io/part-of: account-service
+  app.kubernetes.io/managed-by: ci-cd-pipeline
+
+# Common annotations applied to all resources
+commonAnnotations:
+  deployment.kubernetes.io/environment: development
+  deployment.kubernetes.io/managed-by: github-actions
+
+# Resources to include
+resources:
+  - namespace.yaml
+  - secrets.yaml
+  - configmap.yaml
+  - postgres-deployment.yaml
+  - deployment.yaml
+  - smoke-tests.yaml
+
+# Images to replace
+images:
+  - name: ghcr.io/your-org/account-service
+    newTag: dev-latest
+  - name: postgres
+    newTag: 15-alpine
+
+# ConfigMap generator for environment-specific config
+configMapGenerator:
+  - name: dev-environment-config
+    literals:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - METRICS_ENABLED=true
+      - TRACING_ENABLED=true
+    options:
+      disableNameSuffixHash: true
+
+# Secret generator for development secrets
+secretGenerator:
+  - name: dev-generated-secrets
+    literals:
+      - DEV_API_KEY=dev-api-key-placeholder
+      - DEV_WEBHOOK_SECRET=dev-webhook-secret-placeholder
+    type: Opaque
+    options:
+      disableNameSuffixHash: true
+
+# Patches for development-specific modifications
+patches:
+  # Reduce resource requirements for development
+  - target:
+      kind: Deployment
+      name: account-service-deployment
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "256Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "100m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "512Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "500m"
+
+  # Enable debug logging for development
+  - target:
+      kind: ConfigMap
+      name: account-service-config
+    patch: |-
+      - op: add
+        path: /data/LOGGING_LEVEL_ROOT
+        value: "INFO"
+      - op: add
+        path: /data/LOGGING_LEVEL_COM_SUHASAN_FINANCE
+        value: "DEBUG"
+      - op: add
+        path: /data/SPRING_JPA_SHOW_SQL
+        value: "true"
+
+  # Reduce PostgreSQL resources for development
+  - target:
+      kind: Deployment
+      name: postgres-deployment
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "128Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "100m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "256Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "200m"
+
+# Replica count patches for development (single replica)
+replicas:
+  - name: account-service-deployment
+    count: 1
+  - name: postgres-deployment
+    count: 1

@@ -1,0 +1,117 @@
+# Pre-commit hooks configuration for code quality and security
+repos:
+  # General code formatting and linting
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-xml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: detect-private-key
+      - id: mixed-line-ending
+
+  # Java code formatting with Google Java Format
+  - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+    rev: v2.14.0
+    hooks:
+      - id: pretty-format-java
+        args: [--autofix]
+
+  # Secret detection
+  - repo: https://github.com/trufflesecurity/trufflehog
+    rev: v3.82.13
+    hooks:
+      - id: trufflehog
+        name: TruffleHog
+        description: Detect secrets in your data.
+        entry: bash -c 'trufflehog git file://. --since-commit HEAD --only-verified --fail'
+        language: system
+        stages: ["commit", "push"]
+
+  # Security scanning with Semgrep
+  - repo: https://github.com/semgrep/semgrep
+    rev: v1.95.0
+    hooks:
+      - id: semgrep
+        args: ['--config=p/security-audit', '--config=p/secrets', '--config=p/owasp-top-ten', '--config=p/java', '--error']
+
+  # License header check
+  - repo: local
+    hooks:
+      - id: license-check
+        name: License Header Check
+        entry: bash -c 'cd account-service && ./mvnw license:check-file-header'
+        language: system
+        files: '\.java$'
+        pass_filenames: false
+
+  # Maven compile check
+  - repo: local
+    hooks:
+      - id: maven-compile
+        name: Maven Compile
+        entry: bash -c 'cd account-service && ./mvnw clean compile'
+        language: system
+        files: '(\.java$|pom\.xml$)'
+        pass_filenames: false
+
+  # Maven test check
+  - repo: local
+    hooks:
+      - id: maven-test
+        name: Maven Test
+        entry: bash -c 'cd account-service && ./mvnw test'
+        language: system
+        files: '\.java$'
+        pass_filenames: false
+
+  # PMD static analysis
+  - repo: local
+    hooks:
+      - id: pmd-check
+        name: PMD Static Analysis
+        entry: bash -c 'cd account-service && ./mvnw pmd:check'
+        language: system
+        files: '\.java$'
+        pass_filenames: false
+
+  # SpotBugs static analysis
+  - repo: local
+    hooks:
+      - id: spotbugs-check
+        name: SpotBugs Static Analysis
+        entry: bash -c 'cd account-service && ./mvnw spotbugs:check'
+        language: system
+        files: '\.java$'
+        pass_filenames: false
+
+  # Docker file linting
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        args: [--ignore, DL3008, --ignore, DL3009]
+
+  # YAML linting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: [-c=.yamllint.yml]
+
+  # Markdown linting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.42.0
+    hooks:
+      - id: markdownlint
+        args: [--fix]
+
+# Configuration for specific hooks
+default_language_version:
+  java: system

@@ -1,0 +1,28 @@
+# Global code owners
+* @team-leads
+
+# CI/CD pipeline configuration
+/.github/ @devops-team @team-leads
+
+# Account service code
+/account-service/ @backend-team @team-leads
+
+# Infrastructure and deployment
+/infrastructure/ @devops-team @team-leads
+/k8s/ @devops-team @team-leads
+
+# Security-related files
+/security/ @security-team @team-leads
+*.security.* @security-team
+
+# Documentation
+/docs/ @tech-writers @team-leads
+README.md @tech-writers @team-leads
+
+# Configuration files
+*.yml @devops-team @team-leads
+*.yaml @devops-team @team-leads
+*.properties @backend-team @devops-team
+
+# Database migrations
+**/migrations/ @backend-team @dba-team @team-leads

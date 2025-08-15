@@ -1,0 +1,103 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: account-service-comprehensive-tests
+  namespace: finance-services-staging
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      containers:
+      - name: test-runner
+        image: ghcr.io/your-org/account-service-test-runner:latest
+        env:
+        - name: SERVICE_URL
+          value: "http://account-service:8080"
+        - name: ACTUATOR_URL
+          value: "http://account-service-actuator:9001"
+        - name: SPRING_PROFILES_ACTIVE
+          value: "staging"
+        - name: TEST_TYPES
+          value: "integration,performance,security,contract"
+        resources:
+          limits:
+            memory: "1Gi"
+            cpu: "1"
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: test-results
+          mountPath: /app/test-results
+      volumes:
+      - name: test-results
+        emptyDir: {}
+      restartPolicy: Never
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: finance-services-staging
+data:
+  performance-test-config.json: |
+    {
+      "scenarios": [
+        {
+          "name": "basic-load",
+          "duration": "5m",
+          "vus": 50,
+          "thresholds": {
+            "http_req_duration": ["p(95)<500"]
+          }
+        },
+        {
+          "name": "stress-test",
+          "duration": "2m",
+          "vus": 100,
+          "thresholds": {
+            "http_req_duration": ["p(95)<1000"],
+            "http_req_failed": ["rate<0.01"]
+          }
+        }
+      ]
+    }
+  security-test-config.json: |
+    {
+      "scanners": ["xss", "sqli", "csrf", "auth"],
+      "targets": [
+        "/api/v1/accounts",
+        "/api/v1/transactions",
+        "/api/v1/auth"
+      ],
+      "thresholds": {
+        "high": 0,
+        "medium": 5
+      }
+    }
+  contract-test-config.json: |
+    {
+      "providers": [
+        {
+          "name": "account-service",
+          "url": "http://account-service:8080"
+        }
+      ],
+      "consumers": [
+        "web-portal",
+        "mobile-app",
+        "notification-service"
+      ]
+    }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-results-pvc
+  namespace: finance-services-staging
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

@@ -1,0 +1,46 @@
+# YAML Lint Configuration
+extends: default
+
+rules:
+  # Allow longer lines for readability
+  line-length:
+    max: 120
+    level: warning
+
+  # Allow multiple spaces after colons for alignment
+  colons:
+    max-spaces-before: 0
+    max-spaces-after: -1
+
+  # Allow multiple blank lines for readability
+  empty-lines:
+    max: 2
+    max-start: 1
+    max-end: 1
+
+  # Allow indentation variations
+  indentation:
+    spaces: 2
+    indent-sequences: true
+    check-multi-line-strings: false
+
+  # Allow truthy values like 'yes', 'no', 'on', 'off'
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no', 'on', 'off']
+    check-keys: false
+
+  # Allow comments to start at any column
+  comments:
+    min-spaces-from-content: 1
+
+  # Allow document start markers to be optional
+  document-start: disable
+
+  # Allow brackets for inline arrays and objects
+  brackets:
+    max-spaces-inside: 1
+    max-spaces-inside-empty: 0
+
+  braces:
+    max-spaces-inside: 1
+    max-spaces-inside-empty: 0

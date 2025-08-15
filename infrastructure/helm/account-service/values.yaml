@@ -1,0 +1,267 @@
+# Default values for account-service
+# This is a YAML-formatted file.
+
+# Global configuration
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+
+# Application configuration
+app:
+  name: account-service
+  version: "1.0.0"
+
+# Image configuration
+image:
+  registry: ghcr.io
+  repository: your-org/account-service
+  tag: "latest"
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# Deployment configuration
+replicaCount: 3
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: account-service.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Resource configuration
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Health checks
+healthChecks:
+  liveness:
+    enabled: true
+    path: /actuator/health/liveness
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    path: /actuator/health/readiness
+    initialDelaySeconds: 30
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  startup:
+    enabled: true
+    path: /actuator/health
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+
+# Security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+
+# Node selection
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Pod annotations and labels
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: "/actuator/prometheus"
+  prometheus.io/port: "8080"
+
+podLabels: {}
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Environment variables
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: "kubernetes"
+  - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+    value: "health,info,metrics,prometheus"
+  - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS
+    value: "always"
+
+# Environment variables from secrets/configmaps
+envFrom:
+  - secretRef:
+      name: account-service-db-credentials
+  - configMapRef:
+      name: account-service-config
+
+# Volume mounts
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+  - name: logs
+    mountPath: /app/logs
+
+# Volumes
+volumes:
+  - name: tmp
+    emptyDir: {}
+  - name: logs
+    emptyDir: {}
+
+# ConfigMap data
+configMap:
+  enabled: true
+  data:
+    application.properties: |
+      # Spring Boot Configuration
+      server.port=8080
+      server.servlet.context-path=/
+      
+      # Database Configuration
+      spring.datasource.url=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+      spring.datasource.username=${DB_USERNAME}
+      spring.datasource.password=${DB_PASSWORD}
+      spring.datasource.driver-class-name=org.postgresql.Driver
+      
+      # JPA Configuration
+      spring.jpa.hibernate.ddl-auto=update
+      spring.jpa.show-sql=false
+      spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+      spring.jpa.properties.hibernate.format_sql=true
+      
+      # Actuator Configuration
+      management.endpoints.web.base-path=/actuator
+      management.endpoints.web.exposure.include=health,info,metrics,prometheus
+      management.endpoint.health.show-details=always
+      management.endpoint.health.show-components=always
+      management.health.probes.enabled=true
+      
+      # Metrics Configuration
+      management.metrics.export.prometheus.enabled=true
+      management.metrics.distribution.percentiles-histogram.http.server.requests=true
+      management.metrics.distribution.percentiles.http.server.requests=0.5,0.95,0.99
+      
+      # Logging Configuration
+      logging.level.com.suhasan.finance.account_service=INFO
+      logging.level.org.springframework.security=DEBUG
+      logging.pattern.console=%d{yyyy-MM-dd HH:mm:ss} - %msg%n
+      logging.pattern.file=%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n
+
+# Database configuration (using external PostgreSQL)
+database:
+  enabled: false  # We use Terraform-managed PostgreSQL
+  host: account-service-postgres
+  port: 5432
+  name: myfirstdb
+  username: postgres
+  existingSecret: account-service-db-credentials
+  secretKeys:
+    password: password
+
+# PostgreSQL subchart configuration (disabled by default)
+postgresql:
+  enabled: false  # We use Terraform-managed PostgreSQL
+
+# Monitoring configuration
+monitoring:
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /actuator/prometheus
+    labels:
+      app: account-service
+
+# Network policy
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - podSelector:
+            matchLabels:
+              app: account-service
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: account-service-postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to: {}
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+
+# Pod Security Policy (deprecated in favor of Pod Security Standards)
+podSecurityPolicy:
+  enabled: false
+
+# Tests
+tests:
+  enabled: true
+  image:
+    repository: curlimages/curl
+    tag: latest
+    pullPolicy: IfNotPresent

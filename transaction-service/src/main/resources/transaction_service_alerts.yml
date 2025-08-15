@@ -1,0 +1,247 @@
+# Alerting rules for Transaction Service
+groups:
+  - name: transaction_service_critical
+    interval: 30s
+    rules:
+      # High error rate alert
+      - alert: TransactionHighErrorRate
+        expr: transaction:error_rate > 5
+        for: 2m
+        labels:
+          severity: critical
+          service: transaction-service
+          team: platform
+          component: transaction-processing
+        annotations:
+          summary: "High transaction error rate detected"
+          description: "Transaction error rate is {{ $value }}% which is above the 5% threshold for more than 2 minutes"
+          runbook_url: "https://wiki.company.com/runbooks/transaction-service/high-error-rate"
+          dashboard_url: "https://grafana.company.com/d/transaction-service/overview"
+
+      # Low success rate alert
+      - alert: TransactionLowSuccessRate
+        expr: transaction:success_rate < 95
+        for: 3m
+        labels:
+          severity: critical
+          service: transaction-service
+          team: platform
+          component: transaction-processing
+        annotations:
+          summary: "Low transaction success rate detected"
+          description: "Transaction success rate is {{ $value }}% which is below the 95% threshold for more than 3 minutes"
+          runbook_url: "https://wiki.company.com/runbooks/transaction-service/low-success-rate"
+
+      # Slow transaction processing
+      - alert: TransactionSlowProcessing
+        expr: transaction:p95_processing_time > 2000
+        for: 5m
+        labels:
+          severity: warning
+          service: transaction-service
+          team: platform
+          component: transaction-processing
+        annotations:
+          summary: "Slow transaction processing detected"
+          description: "95th percentile transaction processing time is {{ $value }}ms which is above the 2000ms threshold"
+          runbook_url: "https://wiki.company.com/runbooks/transaction-service/slow-processing"
+
+      # Account Service unavailable
+      - alert: AccountServiceUnavailable
+        expr: account_service:availability < 95
+        for: 1m
+        labels:
+          severity: critical
+          service: transaction-service
+          team: platform
+          component: account-service-integration
+        annotations:
+          summary: "Account Service availability is low"
+          description: "Account Service availability is {{ $value }}% which is below the 95% threshold"
+          runbook_url: "https://wiki.company.com/runbooks/transaction-service/account-service-unavailable"
+
+      # High number of consecutive Account Service errors
+      - alert: AccountServiceConsecutiveErrors
+        expr: alerts_account_service_consecutive_errors > 10
+        for: 0m
+        labels:
+          severity: critical
+          service: transaction-service
+          team: platform
+          component: account-service-integration
+        annotations:
+          summary: "High number of consecutive Account Service errors"
+          description: "There have been {{ $value }} consecutive Account Service errors"
+          runbook_url: "https://wiki.company.com/runbooks/transaction-service/account-service-errors"
+
+  - name: transaction_service_warning
+    interval: 60s
+    rules:
+      # High daily transaction volume
+      - alert: TransactionHighDailyVolume
+        expr: transaction_daily_volume > 10000
+        for: 0m
+        labels:
+          severity: warning
+          service: transaction-service
+          team: platform
+          component: transaction-processing
+        annotations:
+          summary: "High daily transaction volume detected"
+          description: "Daily transaction volume is {{ $value }} which is above the 10,000 threshold"
+          runbook_url: "https://wiki.company.com/runbooks/transaction-service/high-volume"
+
+      # High number of active transactions
+      - alert: TransactionHighActiveCount
+        expr: transaction_active_count > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: transaction-service
+          team: platform
+          component: transaction-processing
+        annotations:
+          summary: "High number of active transactions"
+          description: "There are {{ $value }} active transactions which is above the 100 threshold"
+          runbook_url: "https://wiki.company.com/runbooks/transaction-service/high-active-transactions"
+
+      # Database slow queries
+      - alert: DatabaseSlowQueries
+        expr: database:avg_query_time > 500
+        for: 3m
+        labels:
+          severity: warning
+          service: transaction-service
+          team: platform
+          component: database
+        annotations:
+          summary: "Database queries are slow"
+          description: "Average database query time is {{ $value }}ms which is above the 500ms threshold"
+          runbook_url: "https://wiki.company.com/runbooks/transaction-service/slow-database"
+
+      # High JVM memory usage
+      - alert: JVMHighMemoryUsage
+        expr: jvm:memory_usage_percent > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: transaction-service
+          team: platform
+          component: jvm
+        annotations:
+          summary: "High JVM memory usage"
+          description: "JVM memory usage is {{ $value }}% which is above the 85% threshold"
+          runbook_url: "https://wiki.company.com/runbooks/transaction-service/high-memory"
+
+      # High HTTP error rate
+      - alert: HTTPHighErrorRate
+        expr: http:error_rate > 2
+        for: 3m
+        labels:
+          severity: warning
+          service: transaction-service
+          team: platform
+          component: http-api
+        annotations:
+          summary: "High HTTP error rate"
+          description: "HTTP error rate is {{ $value }}% which is above the 2% threshold"
+          runbook_url: "https://wiki.company.com/runbooks/transaction-service/http-errors"
+
+  - name: transaction_service_info
+    interval: 300s
+    rules:
+      # Service health check
+      - alert: TransactionServiceDown
+        expr: up{job="transaction-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: transaction-service
+          team: platform
+          component: service-health
+        annotations:
+          summary: "Transaction Service is down"
+          description: "Transaction Service has been down for more than 1 minute"
+          runbook_url: "https://wiki.company.com/runbooks/transaction-service/service-down"
+
+      # Database connection issues
+      - alert: DatabaseConnectionPoolExhausted
+        expr: hikaricp_connections_active >= hikaricp_connections_max
+        for: 2m
+        labels:
+          severity: critical
+          service: transaction-service
+          team: platform
+          component: database
+        annotations:
+          summary: "Database connection pool exhausted"
+          description: "All database connections are in use ({{ $value }}/{{ hikaricp_connections_max }})"
+          runbook_url: "https://wiki.company.com/runbooks/transaction-service/db-connection-pool"
+
+      # Insufficient funds errors spike
+      - alert: InsufficientFundsErrorsSpike
+        expr: rate(transaction_error_insufficient_funds_count[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          service: transaction-service
+          team: platform
+          component: transaction-processing
+        annotations:
+          summary: "Spike in insufficient funds errors"
+          description: "Rate of insufficient funds errors is {{ $value }} per second"
+          runbook_url: "https://wiki.company.com/runbooks/transaction-service/insufficient-funds-spike"
+
+      # Transaction limit exceeded errors spike
+      - alert: TransactionLimitExceededSpike
+        expr: rate(transaction_error_limit_exceeded_count[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+          service: transaction-service
+          team: platform
+          component: transaction-processing
+        annotations:
+          summary: "Spike in transaction limit exceeded errors"
+          description: "Rate of transaction limit exceeded errors is {{ $value }} per second"
+          runbook_url: "https://wiki.company.com/runbooks/transaction-service/limit-exceeded-spike"
+
+  - name: transaction_service_business
+    interval: 300s
+    rules:
+      # Business metrics alerts
+      - alert: DailyTransactionVolumeAnomaly
+        expr: |
+          (
+            transaction_daily_volume - 
+            avg_over_time(transaction_daily_volume[7d])
+          ) / avg_over_time(transaction_daily_volume[7d]) > 0.5
+        for: 0m
+        labels:
+          severity: info
+          service: transaction-service
+          team: business
+          component: transaction-processing
+        annotations:
+          summary: "Daily transaction volume anomaly detected"
+          description: "Daily transaction volume is {{ $value }} which is 50% higher than the 7-day average"
+          runbook_url: "https://wiki.company.com/runbooks/transaction-service/volume-anomaly"
+
+      # Revenue impact alert
+      - alert: TransactionRevenueImpact
+        expr: |
+          (
+            rate(transaction_failed_count[1h]) * 
+            avg_over_time(transaction_daily_amount[1d]) / 
+            avg_over_time(transaction_daily_volume[1d])
+          ) > 1000
+        for: 0m
+        labels:
+          severity: warning
+          service: transaction-service
+          team: business
+          component: transaction-processing
+        annotations:
+          summary: "Potential revenue impact from failed transactions"
+          description: "Estimated revenue impact from failed transactions is ${{ $value }} per hour"
+          runbook_url: "https://wiki.company.com/runbooks/transaction-service/revenue-impact"

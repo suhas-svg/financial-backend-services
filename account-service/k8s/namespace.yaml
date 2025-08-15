@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: finance-services
+  labels:
+    name: finance-services
+    environment: production
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: finance-services-staging
+  labels:
+    name: finance-services-staging
+    environment: staging

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: finance-services-dev
+  labels:
+    name: finance-services-dev
+    environment: development
+    managed-by: ci-cd-pipeline
+  annotations:
+    description: "Development environment for financial account service"
+    contact: "dev-team@company.com"

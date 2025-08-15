@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: account-service-config
+  namespace: finance-services-staging
+data:
+  application-staging.properties: |
+    # Application Configuration
+    spring.application.name=account-service
+    server.port=8080
+    management.server.port=9001
+    
+    # Database Configuration
+    spring.datasource.url=jdbc:postgresql://postgres:5432/myfirstdb_staging
+    spring.datasource.username=postgres
+    spring.datasource.password=${POSTGRES_PASSWORD}
+    spring.jpa.hibernate.ddl-auto=validate
+    spring.jpa.show-sql=false
+    spring.jpa.properties.hibernate.format_sql=false
+    
+    # Redis Configuration
+    spring.redis.host=redis
+    spring.redis.port=6379
+    spring.redis.password=${REDIS_PASSWORD}
+    
+    # Logging Configuration
+    logging.level.root=INFO
+    logging.level.com.suhasan.finance=INFO
+    logging.pattern.console=%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n
+    
+    # Metrics Configuration
+    management.endpoints.web.exposure.include=health,info,prometheus,metrics
+    management.endpoint.health.show-details=when_authorized
+    management.endpoint.health.probes.enabled=true
+    management.health.livenessState.enabled=true
+    management.health.readinessState.enabled=true
+    
+    # Security Configuration
+    jwt.secret=${JWT_SECRET}
+    jwt.expiration=86400
+    
+    # Feature Flags
+    feature.enhanced-security=true
+    feature.transaction-analytics=true
+    feature.account-notifications=true
+    
+    # Performance Tuning
+    spring.datasource.hikari.maximum-pool-size=10
+    spring.datasource.hikari.minimum-idle=5
+    spring.datasource.hikari.idle-timeout=30000
+    
+    # Cache Configuration
+    spring.cache.type=redis
+    spring.cache.redis.time-to-live=3600000
+    spring.cache.redis.cache-null-values=false
+    
+    # Resilience Configuration
+    resilience4j.circuitbreaker.instances.default.failure-rate-threshold=50
+    resilience4j.circuitbreaker.instances.default.wait-duration-in-open-state=10000
+    resilience4j.retry.instances.default.max-attempts=3
+    resilience4j.retry.instances.default.wait-duration=1000
+    
+    # Staging-specific settings
+    app.environment=staging
+    app.monitoring.enabled=true
+    app.security.enhanced-validation=true

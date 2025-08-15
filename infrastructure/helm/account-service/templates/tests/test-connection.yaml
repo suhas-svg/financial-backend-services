@@ -1,0 +1,38 @@
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "account-service.fullname" . }}-test-connection"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "account-service.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: wget
+      image: {{ .Values.tests.image.repository }}:{{ .Values.tests.image.tag }}
+      imagePullPolicy: {{ .Values.tests.image.pullPolicy }}
+      command: ['sh', '-c']
+      args:
+        - |
+          set -e
+          echo "Testing connection to {{ include "account-service.fullname" . }}:{{ .Values.service.port }}"
+          
+          # Test basic connectivity
+          curl -f http://{{ include "account-service.fullname" . }}:{{ .Values.service.port }}/actuator/health
+          
+          # Test readiness endpoint
+          curl -f http://{{ include "account-service.fullname" . }}:{{ .Values.service.port }}/actuator/health/readiness
+          
+          # Test liveness endpoint
+          curl -f http://{{ include "account-service.fullname" . }}:{{ .Values.service.port }}/actuator/health/liveness
+          
+          # Test metrics endpoint
+          curl -f http://{{ include "account-service.fullname" . }}:{{ .Values.service.port }}/actuator/prometheus
+          
+          echo "All health checks passed!"
+{{- end }}

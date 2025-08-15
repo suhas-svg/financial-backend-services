@@ -1,0 +1,38 @@
+# Development environment overrides
+version: '3.8'
+
+services:
+  app:
+    build:
+      dockerfile: Dockerfile.dev
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DEVTOOLS_RESTART_ENABLED: true
+      SPRING_JPA_SHOW_SQL: true
+      SPRING_JPA_PROPERTIES_HIBERNATE_FORMAT_SQL: true
+      LOGGING_LEVEL_COM_SUHASAN_FINANCE: DEBUG
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: DEBUG
+      JAVA_OPTS: >-
+        -XX:+UseContainerSupport
+        -XX:MaxRAMPercentage=75.0
+        -Xdebug
+        -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=*:5005
+        -Dspring.devtools.restart.enabled=true
+    volumes:
+      - ./src:/app/src:ro  # Mount source for hot reload
+      - ./target:/app/target
+    ports:
+      - "8080:8080"
+      - "9001:9001"
+      - "5005:5005"  # Debug port
+
+  postgres:
+    environment:
+      POSTGRES_DB: myfirstdb_dev
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_dev_data:

@@ -1,0 +1,280 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smoke-test-scripts
+  namespace: finance-services-dev
+  labels:
+    app: smoke-tests
+    environment: development
+data:
+  smoke-test.sh: |
+    #!/bin/bash
+    set -e
+    
+    echo "Starting smoke tests for development environment..."
+    
+    # Configuration
+    SERVICE_URL="http://account-service:8080"
+    ACTUATOR_URL="http://account-service:9001"
+    MAX_RETRIES=30
+    RETRY_INTERVAL=10
+    
+    # Colors for output
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    NC='\033[0m' # No Color
+    
+    # Function to print colored output
+    print_status() {
+        local status=$1
+        local message=$2
+        case $status in
+            "SUCCESS") echo -e "${GREEN}✓ $message${NC}" ;;
+            "ERROR") echo -e "${RED}✗ $message${NC}" ;;
+            "INFO") echo -e "${YELLOW}ℹ $message${NC}" ;;
+        esac
+    }
+    
+    # Function to wait for service to be ready
+    wait_for_service() {
+        local url=$1
+        local service_name=$2
+        local retries=0
+        
+        print_status "INFO" "Waiting for $service_name to be ready..."
+        
+        while [ $retries -lt $MAX_RETRIES ]; do
+            if curl -f -s "$url" > /dev/null 2>&1; then
+                print_status "SUCCESS" "$service_name is ready"
+                return 0
+            fi
+            
+            retries=$((retries + 1))
+            print_status "INFO" "Attempt $retries/$MAX_RETRIES - $service_name not ready yet, waiting ${RETRY_INTERVAL}s..."
+            sleep $RETRY_INTERVAL
+        done
+        
+        print_status "ERROR" "$service_name failed to become ready after $((MAX_RETRIES * RETRY_INTERVAL)) seconds"
+        return 1
+    }
+    
+    # Function to test HTTP endpoint
+    test_endpoint() {
+        local url=$1
+        local expected_status=$2
+        local description=$3
+        
+        print_status "INFO" "Testing: $description"
+        
+        response=$(curl -s -w "%{http_code}" -o /tmp/response.txt "$url")
+        
+        if [ "$response" = "$expected_status" ]; then
+            print_status "SUCCESS" "$description - HTTP $response"
+            return 0
+        else
+            print_status "ERROR" "$description - Expected HTTP $expected_status, got HTTP $response"
+            echo "Response body:"
+            cat /tmp/response.txt
+            return 1
+        fi
+    }
+    
+    # Function to test JSON endpoint
+    test_json_endpoint() {
+        local url=$1
+        local expected_status=$2
+        local description=$3
+        local json_path=$4
+        local expected_value=$5
+        
+        print_status "INFO" "Testing: $description"
+        
+        response=$(curl -s -w "%{http_code}" -H "Accept: application/json" "$url")
+        http_code="${response: -3}"
+        json_body="${response%???}"
+        
+        if [ "$http_code" = "$expected_status" ]; then
+            if [ -n "$json_path" ] && [ -n "$expected_value" ]; then
+                actual_value=$(echo "$json_body" | jq -r "$json_path")
+                if [ "$actual_value" = "$expected_value" ]; then
+                    print_status "SUCCESS" "$description - HTTP $http_code, $json_path=$actual_value"
+                    return 0
+                else
+                    print_status "ERROR" "$description - Expected $json_path=$expected_value, got $actual_value"
+                    return 1
+                fi
+            else
+                print_status "SUCCESS" "$description - HTTP $http_code"
+                return 0
+            fi
+        else
+            print_status "ERROR" "$description - Expected HTTP $expected_status, got HTTP $http_code"
+            echo "Response body: $json_body"
+            return 1
+        fi
+    }
+    
+    # Main smoke test execution
+    main() {
+        local failed_tests=0
+        
+        echo "========================================="
+        echo "Account Service Development Smoke Tests"
+        echo "========================================="
+        echo "Service URL: $SERVICE_URL"
+        echo "Actuator URL: $ACTUATOR_URL"
+        echo "Environment: Development"
+        echo "Timestamp: $(date)"
+        echo "========================================="
+        
+        # Test 1: Wait for main service to be ready
+        if ! wait_for_service "$SERVICE_URL/actuator/health" "Account Service"; then
+            failed_tests=$((failed_tests + 1))
+        fi
+        
+        # Test 2: Health check endpoints
+        if ! test_json_endpoint "$ACTUATOR_URL/actuator/health" "200" "Health Check" ".status" "UP"; then
+            failed_tests=$((failed_tests + 1))
+        fi
+        
+        if ! test_json_endpoint "$ACTUATOR_URL/actuator/health/liveness" "200" "Liveness Probe" ".status" "UP"; then
+            failed_tests=$((failed_tests + 1))
+        fi
+        
+        if ! test_json_endpoint "$ACTUATOR_URL/actuator/health/readiness" "200" "Readiness Probe" ".status" "UP"; then
+            failed_tests=$((failed_tests + 1))
+        fi
+        
+        # Test 3: Application info endpoint
+        if ! test_endpoint "$ACTUATOR_URL/actuator/info" "200" "Application Info"; then
+            failed_tests=$((failed_tests + 1))
+        fi
+        
+        # Test 4: Metrics endpoint
+        if ! test_endpoint "$ACTUATOR_URL/actuator/metrics" "200" "Metrics Endpoint"; then
+            failed_tests=$((failed_tests + 1))
+        fi
+        
+        # Test 5: Prometheus metrics
+        if ! test_endpoint "$ACTUATOR_URL/actuator/prometheus" "200" "Prometheus Metrics"; then
+            failed_tests=$((failed_tests + 1))
+        fi
+        
+        # Test 6: Database connectivity (through health check)
+        if ! test_json_endpoint "$ACTUATOR_URL/actuator/health" "200" "Database Health" ".components.db.status" "UP"; then
+            failed_tests=$((failed_tests + 1))
+        fi
+        
+        # Test 7: Basic API endpoints (if authentication is not required for health endpoints)
+        if ! test_endpoint "$SERVICE_URL/actuator/health" "200" "Main Service Health"; then
+            failed_tests=$((failed_tests + 1))
+        fi
+        
+        # Test 8: Environment-specific configuration
+        print_status "INFO" "Testing environment configuration..."
+        env_response=$(curl -s "$ACTUATOR_URL/actuator/env/spring.profiles.active" 2>/dev/null || echo "")
+        if echo "$env_response" | grep -q "dev"; then
+            print_status "SUCCESS" "Environment profile correctly set to development"
+        else
+            print_status "ERROR" "Environment profile not set correctly"
+            failed_tests=$((failed_tests + 1))
+        fi
+        
+        # Test 9: Memory and resource usage
+        print_status "INFO" "Checking resource usage..."
+        memory_response=$(curl -s "$ACTUATOR_URL/actuator/metrics/jvm.memory.used" 2>/dev/null || echo "")
+        if [ -n "$memory_response" ]; then
+            print_status "SUCCESS" "Memory metrics available"
+        else
+            print_status "ERROR" "Memory metrics not available"
+            failed_tests=$((failed_tests + 1))
+        fi
+        
+        # Test 10: Application startup time
+        print_status "INFO" "Checking application startup metrics..."
+        startup_response=$(curl -s "$ACTUATOR_URL/actuator/metrics/application.started.time" 2>/dev/null || echo "")
+        if [ -n "$startup_response" ]; then
+            print_status "SUCCESS" "Startup time metrics available"
+        else
+            print_status "ERROR" "Startup time metrics not available"
+            failed_tests=$((failed_tests + 1))
+        fi
+        
+        echo "========================================="
+        echo "Smoke Test Results"
+        echo "========================================="
+        
+        if [ $failed_tests -eq 0 ]; then
+            print_status "SUCCESS" "All smoke tests passed! ✨"
+            echo "Development environment is ready for use."
+            exit 0
+        else
+            print_status "ERROR" "$failed_tests test(s) failed"
+            echo "Development environment may have issues."
+            exit 1
+        fi
+    }
+    
+    # Execute main function
+    main "$@"
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: smoke-tests
+  namespace: finance-services-dev
+  labels:
+    app: smoke-tests
+    environment: development
+    test-type: smoke
+spec:
+  ttlSecondsAfterFinished: 300  # Clean up job after 5 minutes
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: smoke-tests
+        environment: development
+        test-type: smoke
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: smoke-tests
+        image: curlimages/curl:8.5.0
+        command: ["/bin/sh"]
+        args: ["/scripts/smoke-test.sh"]
+        env:
+        - name: SERVICE_URL
+          value: "http://account-service:8080"
+        - name: ACTUATOR_URL
+          value: "http://account-service:9001"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        volumeMounts:
+        - name: test-scripts
+          mountPath: /scripts
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65534
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: test-scripts
+        configMap:
+          name: smoke-test-scripts
+          defaultMode: 0755
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534

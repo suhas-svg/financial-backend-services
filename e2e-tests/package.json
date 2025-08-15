@@ -1,0 +1,51 @@
+{
+  "name": "comprehensive-e2e-tests",
+  "version": "1.0.0",
+  "description": "Comprehensive E2E testing suite for financial backend services",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:verbose": "jest --verbose",
+    "test:e2e": "cross-env NODE_ENV=e2e jest --testPathPattern=infrastructure-validation.test.ts",
+    "test:e2e:unit": "cross-env NODE_ENV=e2e jest --testPathPattern=infrastructure-validation-unit.test.ts",
+    "test:infrastructure": "cross-env NODE_ENV=e2e jest --testNamePattern=\"should validate entire infrastructure stack\"",
+    "build": "tsc",
+    "lint": "eslint src/**/*.ts",
+    "setup": "npm run build && npm run test:setup",
+    "test:setup": "node dist/setup/test-setup.js",
+    "e2e:start": "node scripts/run-e2e-infrastructure.js start",
+    "e2e:stop": "node scripts/run-e2e-infrastructure.js stop",
+    "e2e:status": "node scripts/run-e2e-infrastructure.js status",
+    "e2e:validate": "node scripts/run-e2e-infrastructure.js validate",
+    "e2e:clean": "node scripts/run-e2e-infrastructure.js clean"
+  },
+  "keywords": [
+    "e2e",
+    "testing",
+    "financial",
+    "microservices"
+  ],
+  "author": "Financial Backend Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jest": "^29.5.5",
+    "@types/node": "^20.6.0",
+    "@types/pg": "^8.10.7",
+    "@typescript-eslint/eslint-plugin": "^6.7.0",
+    "@typescript-eslint/parser": "^6.7.0",
+    "cross-env": "^7.0.3",
+    "eslint": "^8.49.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.2.2"
+  },
+  "dependencies": {
+    "axios": "^1.5.0",
+    "dotenv": "^16.3.1",
+    "pg": "^8.11.3",
+    "redis": "^4.6.10",
+    "winston": "^3.10.0"
+  }
+}

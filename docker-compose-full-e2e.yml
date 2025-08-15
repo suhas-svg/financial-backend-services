@@ -1,0 +1,200 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database - Shared by both services
+  postgres-e2e:
+    image: postgres:15-alpine
+    container_name: postgres-full-e2e
+    environment:
+      POSTGRES_DB: fullsystem_test
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpass
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_e2e_data:/var/lib/postgresql/data
+      - ./transaction-service/src/test/resources/full-system-init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U testuser -d fullsystem_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - e2e-network
+
+  # Redis Cache - Used by Transaction Service
+  redis-e2e:
+    image: redis:7-alpine
+    container_name: redis-full-e2e
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_e2e_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - e2e-network
+
+  # Account Service
+  account-service-e2e:
+    build:
+      context: ./account-service
+      dockerfile: Dockerfile
+    container_name: account-service-full-e2e
+    environment:
+      SPRING_PROFILES_ACTIVE: e2e
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-e2e:5432/fullsystem_test
+      SPRING_DATASOURCE_USERNAME: testuser
+      SPRING_DATASOURCE_PASSWORD: testpass
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_JPA_SHOW_SQL: true
+      SERVER_PORT: 8080
+      LOGGING_LEVEL_COM_SUHASAN_FINANCE: DEBUG
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: DEBUG
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+      # JWT Configuration
+      JWT_SECRET: AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14=
+      JWT_EXPIRATION: 3600000
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres-e2e:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - e2e-network
+    volumes:
+      - ./account-service/logs:/app/logs
+
+  # Transaction Service
+  transaction-service-e2e:
+    build:
+      context: ./transaction-service
+      dockerfile: Dockerfile
+    container_name: transaction-service-full-e2e
+    environment:
+      SPRING_PROFILES_ACTIVE: e2e
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-e2e:5432/fullsystem_test
+      SPRING_DATASOURCE_USERNAME: testuser
+      SPRING_DATASOURCE_PASSWORD: testpass
+      SPRING_DATA_REDIS_HOST: redis-e2e
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_JPA_SHOW_SQL: true
+      SERVER_PORT: 8080
+      ACCOUNT_SERVICE_BASE_URL: http://account-service-e2e:8080
+      LOGGING_LEVEL_COM_SUHASAN_FINANCE: DEBUG
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: DEBUG
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+      # JWT Configuration
+      JWT_SECRET: AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14=
+      JWT_EXPIRATION: 3600000
+      # Circuit Breaker Configuration
+      RESILIENCE4J_CIRCUITBREAKER_INSTANCES_ACCOUNT_SERVICE_SLIDING_WINDOW_SIZE: 10
+      RESILIENCE4J_CIRCUITBREAKER_INSTANCES_ACCOUNT_SERVICE_FAILURE_RATE_THRESHOLD: 50
+      RESILIENCE4J_CIRCUITBREAKER_INSTANCES_ACCOUNT_SERVICE_WAIT_DURATION_IN_OPEN_STATE: 30s
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres-e2e:
+        condition: service_healthy
+      redis-e2e:
+        condition: service_healthy
+      account-service-e2e:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - e2e-network
+    volumes:
+      - ./transaction-service/logs:/app/logs
+
+  # Monitoring Stack (Optional - for observability during testing)
+  prometheus-e2e:
+    image: prom/prometheus:latest
+    container_name: prometheus-full-e2e
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus-e2e.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - e2e-network
+    profiles:
+      - monitoring
+
+  grafana-e2e:
+    image: grafana/grafana:latest
+    container_name: grafana-full-e2e
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_e2e_data:/var/lib/grafana
+    networks:
+      - e2e-network
+    profiles:
+      - monitoring
+
+  # Test Runner Container
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test-runner
+    container_name: full-e2e-test-runner
+    environment:
+      ACCOUNT_SERVICE_URL: http://account-service-e2e:8080
+      TRANSACTION_SERVICE_URL: http://transaction-service-e2e:8080
+      POSTGRES_URL: jdbc:postgresql://postgres-e2e:5432/fullsystem_test
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpass
+      REDIS_HOST: redis-e2e
+      REDIS_PORT: 6379
+    depends_on:
+      account-service-e2e:
+        condition: service_healthy
+      transaction-service-e2e:
+        condition: service_healthy
+    networks:
+      - e2e-network
+    volumes:
+      - ./test-results:/app/test-results
+    profiles:
+      - test
+
+volumes:
+  postgres_e2e_data:
+    driver: local
+  redis_e2e_data:
+    driver: local
+  grafana_e2e_data:
+    driver: local
+
+networks:
+  e2e-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

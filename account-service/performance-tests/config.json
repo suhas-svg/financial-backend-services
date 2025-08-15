@@ -1,0 +1,55 @@
+{
+  "baseUrl": "http://localhost:8080",
+  "thresholds": {
+    "load_test": {
+      "response_time_p95": 500,
+      "error_rate": 0.01,
+      "min_throughput": 100
+    },
+    "stress_test": {
+      "response_time_p95": 1000,
+      "error_rate": 0.05,
+      "min_throughput": 50
+    },
+    "spike_test": {
+      "response_time_p95": 2000,
+      "error_rate": 0.1,
+      "min_throughput": 25
+    }
+  },
+  "test_data": {
+    "users": [
+      {
+        "username": "perfuser1",
+        "email": "perfuser1@example.com",
+        "password": "password123",
+        "firstName": "Performance",
+        "lastName": "User1"
+      },
+      {
+        "username": "perfuser2",
+        "email": "perfuser2@example.com",
+        "password": "password123",
+        "firstName": "Performance",
+        "lastName": "User2"
+      },
+      {
+        "username": "perfuser3",
+        "email": "perfuser3@example.com",
+        "password": "password123",
+        "firstName": "Performance",
+        "lastName": "User3"
+      }
+    ],
+    "accounts": [
+      {
+        "accountType": "CHECKING",
+        "balance": 1000
+      },
+      {
+        "accountType": "SAVINGS",
+        "balance": 5000
+      }
+    ]
+  }
+}
