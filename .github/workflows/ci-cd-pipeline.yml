@@ -24,24 +24,10 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
 
-      - name: Debug Environment
-        run: |
-          echo "=== Environment Debug ==="
-          java -version
-          mvn -version
-          pwd
-          ls -la
-          echo "=== Account Service Directory ==="
-          ls -la account-service/
-          
       - name: Build Account Service
         run: |
           cd account-service
-          echo "Current directory: $(pwd)"
-          echo "Files in directory:"
-          ls -la
           mvn clean compile -DskipTests
-        continue-on-error: false
 
       - name: Build Transaction Service  
         run: |
