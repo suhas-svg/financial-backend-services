@@ -36,12 +36,15 @@ jobs:
 
       - name: Compile and test
         run: |
+          chmod +x ./mvnw
           ./mvnw clean compile
           ./mvnw test
         working-directory: account-service
 
       - name: Generate test coverage
-        run: ./mvnw jacoco:report
+        run: |
+          chmod +x ./mvnw
+          ./mvnw jacoco:report
         working-directory: account-service
 
       - name: Comment PR with test results

@@ -36,11 +36,13 @@ jobs:
       - name: Compile Account Service
         run: |
           cd account-service
+          chmod +x ./mvnw
           ./mvnw clean compile -DskipTests
 
       - name: Run Account Service Tests
         run: |
           cd account-service
+          chmod +x ./mvnw
           ./mvnw test -DskipTests || echo "Tests skipped for now"
 
   # Build and Test Transaction Service
@@ -68,11 +70,13 @@ jobs:
       - name: Compile Transaction Service
         run: |
           cd transaction-service
+          chmod +x ./mvnw
           ./mvnw clean compile -DskipTests
 
       - name: Run Transaction Service Tests
         run: |
           cd transaction-service
+          chmod +x ./mvnw
           ./mvnw test -DskipTests || echo "Tests skipped for now"
 
   # Code Quality Check
