@@ -1,6 +1,7 @@
 package com.suhasan.finance.account_service.entity;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.NoArgsConstructor;
@@ -25,5 +26,15 @@ public class User {
   @JoinTable(name = "user_roles",
     joinColumns = @JoinColumn(name = "user_id"),
     inverseJoinColumns = @JoinColumn(name = "role_id"))
+  @Getter(AccessLevel.NONE)
+  @Setter(AccessLevel.NONE)
   private Set<Role> roles = new HashSet<>();
+
+  public Set<Role> getRoles() {
+    return new HashSet<>(roles);
+  }
+
+  public void setRoles(Set<Role> roles) {
+    this.roles = roles == null ? new HashSet<>() : new HashSet<>(roles);
+  }
 }

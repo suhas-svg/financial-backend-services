@@ -122,7 +122,8 @@ public class HealthMonitoringConfig {
     public HealthIndicator diskSpaceHealthIndicator() {
         return () -> {
             try {
-                java.io.File root = new java.io.File("/");
+                java.io.File[] roots = java.io.File.listRoots();
+                java.io.File root = roots.length > 0 ? roots[0] : new java.io.File(".");
                 long totalSpace = root.getTotalSpace();
                 long freeSpace = root.getFreeSpace();
                 long usedSpace = totalSpace - freeSpace;

@@ -12,7 +12,8 @@ import java.util.UUID;
     @Index(name = "idx_from_account", columnList = "fromAccountId"),
     @Index(name = "idx_to_account", columnList = "toAccountId"),
     @Index(name = "idx_created_at", columnList = "createdAt"),
-    @Index(name = "idx_status", columnList = "status")
+    @Index(name = "idx_status", columnList = "status"),
+    @Index(name = "idx_idempotency_scope", columnList = "createdBy,type,idempotencyKey")
 })
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor
 @Builder
@@ -46,12 +47,22 @@ public class Transaction {
     @Column(nullable = false)
     @Builder.Default
     private TransactionStatus status = TransactionStatus.PENDING;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 64)
+    @Builder.Default
+    private TransactionProcessingState processingState = TransactionProcessingState.INITIATED;
     
     @Size(max = 500)
+    @Column(columnDefinition = "VARCHAR(500)")
     private String description;
     
     @Size(max = 100)
     private String reference;
+
+    @Size(max = 128)
+    @Column(length = 128)
+    private String idempotencyKey;
     
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

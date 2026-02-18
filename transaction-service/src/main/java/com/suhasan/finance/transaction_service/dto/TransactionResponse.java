@@ -24,6 +24,8 @@ public class TransactionResponse {
     private LocalDateTime createdAt;
     private LocalDateTime processedAt;
     private String createdBy;
+    private String idempotencyKey;
+    private String processingState;
     
     // Reversal information
     private String originalTransactionId;  // For reversal transactions

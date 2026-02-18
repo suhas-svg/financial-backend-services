@@ -178,18 +178,14 @@ Validate required values
 Create environment variables
 */}}
 {{- define "account-service.env" -}}
-- name: DB_HOST
-  value: {{ include "account-service.databaseHost" . | quote }}
-- name: DB_PORT
-  value: {{ include "account-service.databasePort" . | quote }}
-- name: DB_NAME
-  value: {{ include "account-service.databaseName" . | quote }}
-- name: DB_USERNAME
+- name: SPRING_DATASOURCE_URL
+  value: {{ printf "jdbc:postgresql://%s:%s/%s" (include "account-service.databaseHost" .) (include "account-service.databasePort" .) (include "account-service.databaseName" .) | quote }}
+- name: SPRING_DATASOURCE_USERNAME
   valueFrom:
     secretKeyRef:
       name: {{ include "account-service.databaseSecretName" . }}
       key: {{ .Values.database.secretKeys.username | default "username" }}
-- name: DB_PASSWORD
+- name: SPRING_DATASOURCE_PASSWORD
   valueFrom:
     secretKeyRef:
       name: {{ include "account-service.databaseSecretName" . }}

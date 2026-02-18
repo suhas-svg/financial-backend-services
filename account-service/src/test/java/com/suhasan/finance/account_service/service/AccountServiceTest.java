@@ -3,6 +3,7 @@ package com.suhasan.finance.account_service.service;
 import com.suhasan.finance.account_service.entity.Account;
 import com.suhasan.finance.account_service.entity.CheckingAccount;
 import com.suhasan.finance.account_service.mapper.AccountMapper;
+import com.suhasan.finance.account_service.repository.AccountBalanceOperationRepository;
 import com.suhasan.finance.account_service.repository.AccountRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +33,9 @@ public class AccountServiceTest {
     private AccountMapper accountMapper;
 
     @Mock
+    private AccountBalanceOperationRepository balanceOperationRepository;
+
+    @Mock
     private MeterRegistry meterRegistry;
 
     private AccountService accountService;
@@ -45,12 +49,12 @@ public class AccountServiceTest {
         
         lenient().when(meterRegistry.counter(anyString())).thenReturn(counter);
         lenient().when(meterRegistry.timer(anyString())).thenReturn(timer);
-        lenient().when(timer.record(any(java.util.function.Supplier.class))).thenAnswer(invocation -> {
+        lenient().when(timer.record(org.mockito.ArgumentMatchers.<java.util.function.Supplier<Account>>any())).thenAnswer(invocation -> {
             java.util.function.Supplier<Account> supplier = invocation.getArgument(0);
             return supplier.get();
         });
         
-        accountService = new AccountService(accountRepository, accountMapper, meterRegistry);
+        accountService = new AccountService(accountRepository, balanceOperationRepository, accountMapper, meterRegistry);
 
         testAccount = new CheckingAccount();
         testAccount.setId(1L);

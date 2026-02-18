@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  mcp-financial-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: mcp-financial-server-dev
+    ports:
+      - "8082:8082"  # MCP server port
+      - "9090:9090"  # Metrics port
+    env_file:
+      - .env.dev
+    volumes:
+      - ./src:/app/src:ro  # Mount source for development
+      - ./logs:/app/logs   # Mount logs directory
+    depends_on:
+      - postgres-dev
+      - redis-dev
+    networks:
+      - financial-dev-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    command: ["python", "src/main.py", "--reload"]
+
+  # Development PostgreSQL
+  postgres-dev:
+    image: postgres:15-alpine
+    container_name: postgres-financial-dev
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./scripts/dev-seed-data.sql:/docker-entrypoint-initdb.d/99-seed-data.sql
+    networks:
+      - financial-dev-network
+    restart: unless-stopped
+
+  # Development Redis
+  redis-dev:
+    image: redis:7-alpine
+    container_name: redis-financial-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - financial-dev-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes --loglevel verbose
+
+  # Development Prometheus
+  prometheus-dev:
+    image: prom/prometheus:latest
+    container_name: prometheus-financial-dev
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus-dev.yml:/etc/prometheus/prometheus.yml
+      - prometheus_dev_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--log.level=debug'
+    networks:
+      - financial-dev-network
+    restart: unless-stopped
+
+  # Development Grafana
+  grafana-dev:
+    image: grafana/grafana:latest
+    container_name: grafana-financial-dev
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_LOG_LEVEL=debug
+    volumes:
+      - grafana_dev_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - financial-dev-network
+    restart: unless-stopped
+
+networks:
+  financial-dev-network:
+    driver: bridge
+    name: financial-dev-network
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+  prometheus_dev_data:
+  grafana_dev_data:

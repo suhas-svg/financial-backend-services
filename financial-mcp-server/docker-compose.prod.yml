@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  mcp-financial-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: mcp-financial-server:${VERSION:-latest}
+    container_name: mcp-financial-server-prod
+    ports:
+      - "8082:8082"
+      - "9090:9090"
+    env_file:
+      - .env.prod
+    environment:
+      # Production secrets (injected via orchestration platform)
+      - JWT_SECRET=${JWT_SECRET}
+      - DB_HOST=${DB_HOST}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_URL=${REDIS_URL}
+    volumes:
+      - ./logs:/app/logs
+      - /etc/ssl/certs:/etc/ssl/certs:ro
+      - /var/run/secrets:/var/run/secrets:ro  # Kubernetes secrets
+    networks:
+      - financial-prod-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '1.0'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 30s
+        failure_action: rollback
+        monitor: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        labels: "service=mcp-financial-server,environment=production"
+
+  # Production monitoring (external services in production)
+  # Prometheus and Grafana would typically be managed separately
+  # in production environments (e.g., via Kubernetes operators)
+
+networks:
+  financial-prod-network:
+    driver: overlay
+    name: financial-prod-network
+    external: true  # Managed by orchestration platform
+
+# Production volumes are typically managed externally
+# (e.g., persistent volumes in Kubernetes)

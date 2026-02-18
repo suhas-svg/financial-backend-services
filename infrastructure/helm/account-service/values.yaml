@@ -131,7 +131,7 @@ env:
   - name: SPRING_PROFILES_ACTIVE
     value: "kubernetes"
   - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
-    value: "health,info,metrics,prometheus"
+    value: "health,info,prometheus"
   - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS
     value: "always"
 
@@ -172,15 +172,15 @@ configMap:
       spring.datasource.driver-class-name=org.postgresql.Driver
       
       # JPA Configuration
-      spring.jpa.hibernate.ddl-auto=update
+      spring.jpa.hibernate.ddl-auto=validate
       spring.jpa.show-sql=false
       spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
       spring.jpa.properties.hibernate.format_sql=true
       
       # Actuator Configuration
       management.endpoints.web.base-path=/actuator
-      management.endpoints.web.exposure.include=health,info,metrics,prometheus
-      management.endpoint.health.show-details=always
+      management.endpoints.web.exposure.include=health,info,prometheus
+      management.endpoint.health.show-details=never
       management.endpoint.health.show-components=always
       management.health.probes.enabled=true
       

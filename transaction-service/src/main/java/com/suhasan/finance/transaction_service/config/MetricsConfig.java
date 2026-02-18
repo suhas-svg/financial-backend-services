@@ -1,6 +1,5 @@
 package com.suhasan.finance.transaction_service.config;
 
-import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.config.MeterFilter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;

@@ -28,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @ActiveProfiles("integration-test")
 @Transactional
 @DisplayName("Account Service Integration Tests")
+@SuppressWarnings("resource")
 public class AccountServiceIntegrationTest {
 
     @Container

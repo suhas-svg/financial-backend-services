@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "financial-mcp-server": {
+      "command": "python",
+      "args": ["financial-mcp-server/src/main.py"],
+      "cwd": ".",
+      "env": {
+        "ACCOUNT_SERVICE_URL": "http://localhost:8083",
+        "TRANSACTION_SERVICE_URL": "http://localhost:8082",
+        "JWT_SECRET": "AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14=",
+        "LOG_LEVEL": "INFO",
+        "METRICS_ENABLED": "true"
+      },
+      "disabled": false,
+      "autoApprove": [
+        "health_check",
+        "get_account",
+        "get_transaction_history",
+        "get_account_analytics"
+      ]
+    }
+  }
+}

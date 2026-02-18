@@ -1,0 +1,166 @@
+version: '3.8'
+
+services:
+  # Redis cache for transaction-service
+  redis:
+    image: redis:7-alpine
+    container_name: project3-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - financial-network
+
+  # Account Service Database
+  account-postgres:
+    image: postgres:15-alpine
+    container_name: account-postgres
+    environment:
+      POSTGRES_DB: myfirstdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    ports:
+      - "5432:5432"
+    volumes:
+      - account_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d myfirstdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - financial-network
+
+  # Transaction Service Database
+  transaction-postgres:
+    image: postgres:15-alpine
+    container_name: transaction-postgres
+    environment:
+      POSTGRES_DB: transactiondb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    ports:
+      - "5433:5432"
+    volumes:
+      - transaction_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d transactiondb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - financial-network
+
+  # Account Service
+  account-service:
+    build:
+      context: ./account-service
+      dockerfile: Dockerfile
+      args:
+        BUILD_ENV: prod
+        APP_VERSION: ${VERSION:-latest}
+        SKIP_TESTS: true
+    image: account-service:${VERSION:-latest}
+    container_name: account-service
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://account-postgres:5432/myfirstdb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      JAVA_OPTS: -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+UseStringDeduplication
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      LOGGING_LEVEL_ROOT: INFO
+      JWT_SECRET: ${JWT_SECRET:-DevJwtSecretKeyForLocalRuntimeValidation123456}
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:-DevInternalJwtSecretForLocalRuntimeValidation123456}
+    depends_on:
+      account-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - financial-network
+    volumes:
+      - account_logs:/app/logs
+
+  # Transaction Service
+  transaction-service:
+    build:
+      context: ./transaction-service
+      dockerfile: Dockerfile
+      args:
+        BUILD_ENV: prod
+        APP_VERSION: ${VERSION:-latest}
+    image: transaction-service:${VERSION:-latest}
+    container_name: transaction-service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://transaction-postgres:5432/transactiondb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      ACCOUNT_SERVICE_URL: http://account-service:8080
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      JAVA_OPTS: -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+UseStringDeduplication
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      LOGGING_LEVEL_ROOT: INFO
+      JWT_SECRET: ${JWT_SECRET:-DevJwtSecretKeyForLocalRuntimeValidation123456}
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:-DevInternalJwtSecretForLocalRuntimeValidation123456}
+    depends_on:
+      transaction-postgres:
+        condition: service_healthy
+      account-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - financial-network
+    volumes:
+      - transaction_logs:/app/logs
+
+volumes:
+  account_postgres_data:
+    name: account-postgres-data-check
+  transaction_postgres_data:
+    name: transaction-postgres-data-check
+  account_logs:
+    name: account-logs
+  transaction_logs:
+    name: transaction-logs
+  redis_data:
+    name: redis-data
+
+networks:
+  financial-network:
+    name: financial-network
+    driver: bridge

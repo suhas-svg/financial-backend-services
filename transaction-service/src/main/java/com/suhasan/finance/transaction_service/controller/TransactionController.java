@@ -41,13 +41,16 @@ public class TransactionController {
     @PostMapping("/transfer")
     public ResponseEntity<TransactionResponse> processTransfer(
             @Valid @RequestBody TransferRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             Authentication authentication) {
         
         log.info("Processing transfer request from {} to {} for amount {}", 
                 request.getFromAccountId(), request.getToAccountId(), request.getAmount());
         
         String userId = authentication.getName();
-        TransactionResponse response = transactionService.processTransfer(request, userId);
+        TransactionResponse response = idempotencyKey == null || idempotencyKey.isBlank()
+                ? transactionService.processTransfer(request, userId)
+                : transactionService.processTransfer(request, userId, idempotencyKey);
         
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -58,13 +61,17 @@ public class TransactionController {
     @PostMapping("/deposit")
     public ResponseEntity<TransactionResponse> processDeposit(
             @Valid @RequestBody DepositRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             Authentication authentication) {
         
         log.info("Processing deposit to account {} for amount {}", request.getAccountId(), request.getAmount());
         
         String userId = authentication.getName();
-        TransactionResponse response = transactionService.processDeposit(
-            request.getAccountId(), request.getAmount(), request.getDescription(), userId);
+        TransactionResponse response = idempotencyKey == null || idempotencyKey.isBlank()
+                ? transactionService.processDeposit(
+                    request.getAccountId(), request.getAmount(), request.getDescription(), userId)
+                : transactionService.processDeposit(
+                    request.getAccountId(), request.getAmount(), request.getDescription(), userId, idempotencyKey);
         
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -75,13 +82,17 @@ public class TransactionController {
     @PostMapping("/withdraw")
     public ResponseEntity<TransactionResponse> processWithdrawal(
             @Valid @RequestBody WithdrawalRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             Authentication authentication) {
         
         log.info("Processing withdrawal from account {} for amount {}", request.getAccountId(), request.getAmount());
         
         String userId = authentication.getName();
-        TransactionResponse response = transactionService.processWithdrawal(
-            request.getAccountId(), request.getAmount(), request.getDescription(), userId);
+        TransactionResponse response = idempotencyKey == null || idempotencyKey.isBlank()
+                ? transactionService.processWithdrawal(
+                    request.getAccountId(), request.getAmount(), request.getDescription(), userId)
+                : transactionService.processWithdrawal(
+                    request.getAccountId(), request.getAmount(), request.getDescription(), userId, idempotencyKey);
         
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -159,12 +170,15 @@ public class TransactionController {
     public ResponseEntity<TransactionResponse> reverseTransaction(
             @PathVariable String transactionId,
             @Valid @RequestBody ReversalRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             Authentication authentication) {
         
         log.info("Reversing transaction {} with reason: {}", transactionId, request.getReason());
         
         String userId = authentication.getName();
-        TransactionResponse response = transactionService.reverseTransaction(transactionId, request.getReason(), userId);
+        TransactionResponse response = idempotencyKey == null || idempotencyKey.isBlank()
+                ? transactionService.reverseTransaction(transactionId, request.getReason(), userId)
+                : transactionService.reverseTransaction(transactionId, request.getReason(), userId, idempotencyKey);
         
         return ResponseEntity.ok(response);
     }

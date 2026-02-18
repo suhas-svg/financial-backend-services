@@ -1,0 +1,36 @@
+{
+  "timestamp": "2025-08-19T17:20:36.087486",
+  "tests": [
+    {
+      "name": "Service Health Check",
+      "status": "PASSED",
+      "duration": 0.6519196033477783,
+      "timestamp": "2025-08-19T17:20:36.743005"
+    },
+    {
+      "name": "Account Service Operations",
+      "status": "PASSED",
+      "duration": 0.506969690322876,
+      "timestamp": "2025-08-19T17:20:37.252747"
+    },
+    {
+      "name": "Transaction Service Operations",
+      "status": "PASSED",
+      "duration": 0.4264376163482666,
+      "timestamp": "2025-08-19T17:20:37.680185"
+    },
+    {
+      "name": "MCP Server Basic Functionality",
+      "status": "PASSED",
+      "duration": 1.2918007373809814,
+      "timestamp": "2025-08-19T17:20:38.972986"
+    }
+  ],
+  "summary": {
+    "total_tests": 4,
+    "passed_tests": 4,
+    "failed_tests": 0,
+    "success_rate": 100.0,
+    "duration": 2.885500431060791
+  }
+}

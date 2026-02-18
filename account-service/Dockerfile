@@ -88,14 +88,14 @@ EXPOSE 8080 9001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:8080/actuator/health || exit 1
 
-# JVM optimization arguments
+# JVM optimization arguments for production
 ENV JAVA_OPTS="-XX:+UseContainerSupport \
                -XX:MaxRAMPercentage=75.0 \
                -XX:+UseG1GC \
                -XX:+UseStringDeduplication \
                -XX:+OptimizeStringConcat \
                -Djava.security.egd=file:/dev/./urandom \
-               -Dspring.profiles.active=${BUILD_ENV}"
+               -Dspring.profiles.active=prod"
 
 # Run the application
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher"]

@@ -4,7 +4,6 @@ import com.suhasan.finance.transaction_service.dto.TransferRequest;
 import com.suhasan.finance.transaction_service.dto.TransactionResponse;
 import com.suhasan.finance.transaction_service.dto.TransactionFilterRequest;
 import com.suhasan.finance.transaction_service.dto.TransactionStatsResponse;
-import com.suhasan.finance.transaction_service.entity.Transaction;
 import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
 import org.springframework.data.domain.Page;
@@ -19,19 +18,33 @@ public interface TransactionService {
     /**
      * Process a transfer between two accounts
      */
-    TransactionResponse processTransfer(TransferRequest request, String userId);
+    default TransactionResponse processTransfer(TransferRequest request, String userId) {
+        return processTransfer(request, userId, null);
+    }
+
+    TransactionResponse processTransfer(TransferRequest request, String userId, String idempotencyKey);
     
     /**
      * Process a deposit to an account
      */
-    TransactionResponse processDeposit(String accountId, BigDecimal amount, 
-                                     String description, String userId);
+    default TransactionResponse processDeposit(String accountId, BigDecimal amount,
+                                               String description, String userId) {
+        return processDeposit(accountId, amount, description, userId, null);
+    }
+
+    TransactionResponse processDeposit(String accountId, BigDecimal amount,
+                                       String description, String userId, String idempotencyKey);
     
     /**
      * Process a withdrawal from an account
      */
-    TransactionResponse processWithdrawal(String accountId, BigDecimal amount, 
-                                        String description, String userId);
+    default TransactionResponse processWithdrawal(String accountId, BigDecimal amount,
+                                                  String description, String userId) {
+        return processWithdrawal(accountId, amount, description, userId, null);
+    }
+
+    TransactionResponse processWithdrawal(String accountId, BigDecimal amount,
+                                          String description, String userId, String idempotencyKey);
     
     /**
      * Get transaction by ID
@@ -51,7 +64,11 @@ public interface TransactionService {
     /**
      * Reverse a transaction
      */
-    TransactionResponse reverseTransaction(String transactionId, String reason, String userId);
+    default TransactionResponse reverseTransaction(String transactionId, String reason, String userId) {
+        return reverseTransaction(transactionId, reason, userId, null);
+    }
+
+    TransactionResponse reverseTransaction(String transactionId, String reason, String userId, String idempotencyKey);
     
     /**
      * Check if a transaction has been reversed

@@ -1,0 +1,144 @@
+version: '3.8'
+
+services:
+  mcp-financial-server:
+    build: .
+    container_name: mcp-financial-server
+    ports:
+      - "8082:8082"  # MCP server port
+      - "9090:9090"  # Metrics port
+    environment:
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8082
+      - ACCOUNT_SERVICE_URL=http://account-service:8080
+      - TRANSACTION_SERVICE_URL=http://transaction-service:8081
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - METRICS_ENABLED=true
+      - METRICS_PORT=9090
+    depends_on:
+      - account-service
+      - transaction-service
+    networks:
+      - financial-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Account Service (external reference)
+  account-service:
+    image: account-service:latest
+    container_name: account-service
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - DB_HOST=postgres
+      - DB_NAME=myfirstdb
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key}
+    depends_on:
+      - postgres
+    networks:
+      - financial-network
+    restart: unless-stopped
+
+  # Transaction Service (external reference)
+  transaction-service:
+    image: transaction-service:latest
+    container_name: transaction-service
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - DB_HOST=postgres
+      - DB_NAME=transactiondb
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key}
+      - ACCOUNT_SERVICE_URL=http://account-service:8080
+    depends_on:
+      - postgres
+    networks:
+      - financial-network
+    restart: unless-stopped
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres-financial
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - financial-network
+    restart: unless-stopped
+
+  # Redis (optional for caching)
+  redis:
+    image: redis:7-alpine
+    container_name: redis-financial
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - financial-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus-financial
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - financial-network
+    restart: unless-stopped
+
+  # Grafana for metrics visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana-financial
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - financial-network
+    restart: unless-stopped
+
+networks:
+  financial-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:

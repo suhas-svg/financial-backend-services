@@ -290,7 +290,7 @@ export class ServiceValidator {
   /**
    * Test service endpoint availability
    */
-  async testEndpointAvailability(endpoint: string = '/'): Promise<{
+  async testEndpointAvailability(endpoint: string = this.config.healthEndpoint): Promise<{
     available: boolean;
     responseTime: number;
     httpStatus: number;
@@ -416,7 +416,11 @@ export class ServiceValidator {
     if (dependencies) {
       for (const [name, dep] of Object.entries(dependencies)) {
         const dependency = dep as any;
-        if (dependency.status !== 'UP') {
+        const dependencyStatus = String(dependency.status || '').toUpperCase();
+
+        // Spring Boot actuator reports some optional components (e.g. discovery/circuit-breakers)
+        // as UNKNOWN in local/dev runs. Treat UNKNOWN as non-blocking for service readiness.
+        if (dependencyStatus === 'DOWN' || dependencyStatus === 'OUT_OF_SERVICE') {
           logger.warn(`Service dependency not ready`, {
             service: this.serviceName,
             dependency: name,

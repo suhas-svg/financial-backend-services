@@ -63,7 +63,11 @@ class GlobalExceptionHandlerTest {
         // Assert
         assertNotNull(response);
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
-        assertNull(response.getBody()); // Returns notFound().build() which has no body
+        ErrorResponse errorResponse = response.getBody();
+        assertNotNull(errorResponse);
+        assertEquals(HttpStatus.NOT_FOUND.value(), errorResponse.getStatus());
+        assertEquals("Not Found", errorResponse.getError());
+        assertEquals(errorMessage, errorResponse.getMessage());
     }
 
     @Test

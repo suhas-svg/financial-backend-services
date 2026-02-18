@@ -1,11 +1,12 @@
 package com.suhasan.finance.account_service.controller;
 
 import com.suhasan.finance.account_service.service.DeploymentTrackingService;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.actuate.health.Health;
-import org.springframework.boot.actuate.health.HealthIndicator;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,6 +21,10 @@ import java.util.Map;
 @RequestMapping("/api/health")
 @RequiredArgsConstructor
 @Slf4j
+@SuppressFBWarnings(
+    value = "EI_EXPOSE_REP2",
+    justification = "Dependencies are injected and managed by Spring"
+)
 public class HealthController {
 
     private final DeploymentTrackingService deploymentTrackingService;
@@ -221,12 +226,12 @@ public class HealthController {
     }
 
     private double getCounterValue(String meterName) {
-        return meterRegistry.find(meterName).counter() != null ? 
-               meterRegistry.find(meterName).counter().count() : 0.0;
+        Counter counter = meterRegistry.find(meterName).counter();
+        return counter != null ? counter.count() : 0.0;
     }
 
     private double getGaugeValue(String meterName) {
-        return meterRegistry.find(meterName).gauge() != null ? 
-               meterRegistry.find(meterName).gauge().value() : 0.0;
+        Gauge gauge = meterRegistry.find(meterName).gauge();
+        return gauge != null ? gauge.value() : 0.0;
     }
 }

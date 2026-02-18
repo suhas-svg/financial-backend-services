@@ -31,6 +31,10 @@ public abstract class Account {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Version
+    @Column(nullable = false)
+    private Long version;
     
 
     @NotNull(message = "Owner ID cannot be null")

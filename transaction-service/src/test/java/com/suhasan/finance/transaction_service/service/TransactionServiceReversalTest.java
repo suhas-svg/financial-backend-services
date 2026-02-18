@@ -1,7 +1,6 @@
 package com.suhasan.finance.transaction_service.service;
 
-import com.suhasan.finance.transaction_service.client.AccountServiceClient;
-import com.suhasan.finance.transaction_service.dto.AccountDto;
+import com.suhasan.finance.transaction_service.client.ResilientAccountServiceClient;
 import com.suhasan.finance.transaction_service.dto.TransactionResponse;
 import com.suhasan.finance.transaction_service.entity.Transaction;
 import com.suhasan.finance.transaction_service.entity.TransactionStatus;
@@ -14,6 +13,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -24,20 +25,29 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
+@SuppressWarnings("null")
 class TransactionServiceReversalTest {
 
     @Mock
     private TransactionRepository transactionRepository;
 
     @Mock
-    private AccountServiceClient accountServiceClient;
+    private ResilientAccountServiceClient accountServiceClient;
+
+    @Mock
+    private AuditService auditService;
+
+    @Mock
+    private MetricsService metricsService;
+
+    @Mock
+    private TransactionLimitService transactionLimitService;
 
     @InjectMocks
     private TransactionServiceImpl transactionService;
 
     private Transaction originalTransaction;
-    private AccountDto fromAccount;
-    private AccountDto toAccount;
 
     @BeforeEach
     void setUp() {
@@ -54,19 +64,6 @@ class TransactionServiceReversalTest {
                 .createdBy("user-123")
                 .build();
 
-        fromAccount = AccountDto.builder()
-                .id(2L) // Note: reversed for reversal
-                .balance(new BigDecimal("500.00"))
-                .accountType("CHECKING")
-                .active(true)
-                .build();
-
-        toAccount = AccountDto.builder()
-                .id(1L) // Note: reversed for reversal
-                .balance(new BigDecimal("200.00"))
-                .accountType("CHECKING")
-                .active(true)
-                .build();
     }
 
     @Test
@@ -76,10 +73,14 @@ class TransactionServiceReversalTest {
                 .thenReturn(Optional.of(originalTransaction));
         when(transactionRepository.isTransactionReversed("original-tx-123"))
                 .thenReturn(false);
-        when(accountServiceClient.getAccount("account-2"))
-                .thenReturn(fromAccount);
-        when(accountServiceClient.getAccount("account-1"))
-                .thenReturn(toAccount);
+        when(accountServiceClient.applyBalanceOperation(eq("account-2"), anyString(), eq(new BigDecimal("-100.00")),
+                anyString(), eq("REVERSAL_DEBIT"), eq(false)))
+                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(
+                        2L, "rev-debit", true, new BigDecimal("400.00"), 1L, "APPLIED"));
+        when(accountServiceClient.applyBalanceOperation(eq("account-1"), anyString(), eq(new BigDecimal("100.00")),
+                anyString(), eq("REVERSAL_CREDIT"), eq(true)))
+                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(
+                        1L, "rev-credit", true, new BigDecimal("300.00"), 1L, "APPLIED"));
         when(transactionRepository.save(any(Transaction.class)))
                 .thenAnswer(invocation -> {
                     Transaction tx = invocation.getArgument(0);
@@ -103,9 +104,11 @@ class TransactionServiceReversalTest {
         assertEquals("account-2", result.getFromAccountId()); // Reversed
         assertEquals("account-1", result.getToAccountId()); // Reversed
 
-        // Verify account balance updates were called
-        verify(accountServiceClient).updateAccountBalance("account-2", new BigDecimal("400.00"));
-        verify(accountServiceClient).updateAccountBalance("account-1", new BigDecimal("300.00"));
+        // Verify account balance operations were called
+        verify(accountServiceClient).applyBalanceOperation(eq("account-2"), anyString(), eq(new BigDecimal("-100.00")),
+                anyString(), eq("REVERSAL_DEBIT"), eq(false));
+        verify(accountServiceClient).applyBalanceOperation(eq("account-1"), anyString(), eq(new BigDecimal("100.00")),
+                anyString(), eq("REVERSAL_CREDIT"), eq(true));
 
         // Verify transactions were saved
         verify(transactionRepository, times(3)).save(any(Transaction.class));
@@ -129,7 +132,8 @@ class TransactionServiceReversalTest {
         assertTrue(exception.getMessage().contains("already been reversed"));
 
         // Verify no account updates were attempted
-        verify(accountServiceClient, never()).updateAccountBalance(anyString(), any(BigDecimal.class));
+        verify(accountServiceClient, never()).applyBalanceOperation(anyString(), anyString(), any(BigDecimal.class),
+                anyString(), anyString(), anyBoolean());
     }
 
     @Test

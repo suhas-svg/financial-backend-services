@@ -1,7 +1,6 @@
 package com.suhasan.finance.transaction_service.aspect;
 
 import com.suhasan.finance.transaction_service.service.AuditService;
-import com.suhasan.finance.transaction_service.service.MetricsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.JoinPoint;
@@ -26,7 +25,6 @@ import java.util.UUID;
 public class AuditLoggingAspect {
     
     private final AuditService auditService;
-    private final MetricsService metricsService;
     
     /**
      * Pointcut for all controller methods

@@ -11,7 +11,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
-import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -19,11 +18,12 @@ import java.time.Duration;
 @Component
 @RequiredArgsConstructor
 @Slf4j
+@SuppressWarnings("null")
 public class AccountServiceClient {
     
     private final WebClient.Builder webClientBuilder;
     
-    @Value("${account-service.base-url}")
+    @Value("${account-service.base-url:http://localhost:8080}")
     private String accountServiceBaseUrl;
     
     @Value("${account-service.timeout:5000}")

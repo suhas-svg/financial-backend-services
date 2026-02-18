@@ -6,6 +6,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.lang.NonNull;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import jakarta.servlet.FilterChain;
@@ -45,9 +46,9 @@ public class PerformanceMonitoringConfig {
 
         return new OncePerRequestFilter() {
             @Override
-            protected void doFilterInternal(HttpServletRequest request, 
-                                          HttpServletResponse response, 
-                                          FilterChain filterChain) throws ServletException, IOException {
+            protected void doFilterInternal(@NonNull HttpServletRequest request,
+                                          @NonNull HttpServletResponse response,
+                                          @NonNull FilterChain filterChain) throws ServletException, IOException {
                 
                 Timer.Sample sample = Timer.start(meterRegistry);
                 
@@ -76,8 +77,8 @@ public class PerformanceMonitoringConfig {
      */
     @Bean
     public Timer deploymentDurationTimer(MeterRegistry meterRegistry) {
-        return Timer.builder("deployment_duration_seconds")
-                .description("Time taken for deployment operations")
+        return Timer.builder("deployment_operation_duration_seconds")
+                .description("Time taken for deployment-related operations")
                 .register(meterRegistry);
     }
 

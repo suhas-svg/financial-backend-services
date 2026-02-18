@@ -66,7 +66,7 @@ public class TransactionLimitService {
     /**
      * Get transaction limit for account type and transaction type
      */
-    @Cacheable(value = "transactionLimits", key = "#accountType + '_' + #transactionType")
+    @Cacheable(value = "transaction:limits", key = "#accountType + '_' + #transactionType")
     public TransactionLimit getTransactionLimit(String accountType, TransactionType transactionType) {
         Optional<TransactionLimit> limit = transactionLimitRepository
                 .findByAccountTypeAndTransactionTypeAndActiveTrue(accountType, transactionType);

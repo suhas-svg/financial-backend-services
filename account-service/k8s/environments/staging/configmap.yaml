@@ -29,15 +29,16 @@ data:
     logging.pattern.console=%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n
     
     # Metrics Configuration
-    management.endpoints.web.exposure.include=health,info,prometheus,metrics
-    management.endpoint.health.show-details=when_authorized
+    management.endpoints.web.exposure.include=health,info,prometheus
+    management.endpoint.health.show-details=never
     management.endpoint.health.probes.enabled=true
     management.health.livenessState.enabled=true
     management.health.readinessState.enabled=true
     
     # Security Configuration
-    jwt.secret=${JWT_SECRET}
-    jwt.expiration=86400
+    security.jwt.secret=${JWT_SECRET}
+    security.jwt.internal-secret=${INTERNAL_JWT_SECRET}
+    security.jwt.expiration-in-ms=3600000
     
     # Feature Flags
     feature.enhanced-security=true

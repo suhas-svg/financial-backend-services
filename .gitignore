@@ -131,3 +131,50 @@ k8s/secrets.yaml
 
 # Local development
 *.local
+
+# ── Terraform ────────────────────────────────────────────────────────────────
+# Local .terraform directories (provider binaries, modules cache)
+**/.terraform/*
+.terraform/
+
+# Terraform state files (contain sensitive data)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Terraform plan files
+*.tfplan
+*.plan
+
+# Terraform lock file (keep this — it pins provider versions)
+# .terraform.lock.hcl  ← intentionally NOT ignored
+
+# Terraform variable files with secrets
+*.tfvars
+*.tfvars.json
+!example.tfvars
+!*.tfvars.example
+
+# Terraform crash logs
+crash.log
+crash.*.log
+
+# ── Project-specific ignores ─────────────────────────────────────────────────
+
+# Temporary log dumps (e.g. tmp-tx-logs.txt, tmp-account-logs-latest-run.txt)
+tmp-*.txt
+
+# Auto-generated checkpoint/test result CSVs
+*-checkpoint-results.csv
+*-results.csv
+
+# Timestamped test/endpoint report files
+*-report-*.md
+*-report-*.json
+
+# One-off debug output files
+git_status_output.txt
+endpoint-test-results.md
+
+# Service log files captured at root level
+logs.txt

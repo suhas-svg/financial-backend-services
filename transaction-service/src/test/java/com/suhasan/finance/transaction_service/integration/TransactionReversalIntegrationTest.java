@@ -15,15 +15,18 @@ import org.springframework.test.context.ContextConfiguration;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Integration tests for transaction reversal functionality
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        classes = com.suhasan.finance.transaction_service.TransactionServiceApplication.class,
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
+)
 @ContextConfiguration(classes = {IntegrationTestConfiguration.class})
+@SuppressWarnings("null")
 class TransactionReversalIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
@@ -132,7 +135,7 @@ class TransactionReversalIntegrationTest extends BaseIntegrationTest {
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getType()).isEqualTo(TransactionType.REVERSAL);
         assertThat(response.getBody().getFromAccountId()).isEqualTo("account-001"); // Money taken from account
-        assertThat(response.getBody().getToAccountId()).isNull(); // No destination for deposit reversal
+        assertThat(response.getBody().getToAccountId()).isEqualTo("EXTERNAL"); // External destination for deposit reversal
 
         // Verify reversal transaction was created
         List<Transaction> allTransactions = transactionRepository.findAll();
@@ -172,7 +175,7 @@ class TransactionReversalIntegrationTest extends BaseIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getType()).isEqualTo(TransactionType.REVERSAL);
-        assertThat(response.getBody().getFromAccountId()).isNull(); // No source for withdrawal reversal
+        assertThat(response.getBody().getFromAccountId()).isEqualTo("EXTERNAL"); // External source for withdrawal reversal
         assertThat(response.getBody().getToAccountId()).isEqualTo("account-001"); // Money returned to account
 
         // Verify original transaction is marked as reversed
@@ -202,7 +205,7 @@ class TransactionReversalIntegrationTest extends BaseIntegrationTest {
         );
 
         // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         
         // Verify no reversal transaction was created
         List<Transaction> allTransactions = transactionRepository.findAll();
@@ -250,7 +253,7 @@ class TransactionReversalIntegrationTest extends BaseIntegrationTest {
         );
 
         // Then
-        assertThat(secondResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(secondResponse.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         
         // Verify only one reversal transaction exists
         List<Transaction> reversalTransactions = transactionRepository.findAll().stream()
@@ -290,11 +293,14 @@ class TransactionReversalIntegrationTest extends BaseIntegrationTest {
         Transaction originalTransaction = transactionRepository.findById(originalTransactionId).orElseThrow();
         assertThat(originalTransaction.getStatus()).isEqualTo(TransactionStatus.COMPLETED);
         
-        // Verify no reversal transaction was created
+        // Reversal intent is persisted and flagged for manual action on account-service outage.
         List<Transaction> reversalTransactions = transactionRepository.findAll().stream()
                 .filter(t -> t.getType() == TransactionType.REVERSAL)
                 .toList();
-        assertThat(reversalTransactions).isEmpty();
+        assertThat(reversalTransactions).isNotEmpty();
+        assertThat(reversalTransactions)
+                .extracting(Transaction::getStatus)
+                .contains(TransactionStatus.FAILED_REQUIRES_MANUAL_ACTION);
     }
 
     private String createOriginalTransferTransaction() {
@@ -318,7 +324,7 @@ class TransactionReversalIntegrationTest extends BaseIntegrationTest {
     private String createOriginalDepositTransaction() {
         Transaction transaction = Transaction.builder()
                 .transactionId(java.util.UUID.randomUUID().toString())
-                .fromAccountId(null)
+                .fromAccountId("EXTERNAL")
                 .toAccountId("account-001")
                 .amount(BigDecimal.valueOf(500.00))
                 .currency("USD")
@@ -337,7 +343,7 @@ class TransactionReversalIntegrationTest extends BaseIntegrationTest {
         Transaction transaction = Transaction.builder()
                 .transactionId(java.util.UUID.randomUUID().toString())
                 .fromAccountId("account-001")
-                .toAccountId(null)
+                .toAccountId("EXTERNAL")
                 .amount(BigDecimal.valueOf(300.00))
                 .currency("USD")
                 .type(TransactionType.WITHDRAWAL)

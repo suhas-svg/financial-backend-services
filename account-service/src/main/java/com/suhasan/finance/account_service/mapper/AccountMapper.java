@@ -54,8 +54,6 @@ import com.suhasan.finance.account_service.entity.SavingsAccount;
 import com.suhasan.finance.account_service.entity.CreditCardAccount;
 import com.suhasan.finance.account_service.dto.AccountRequest;
 import com.suhasan.finance.account_service.dto.AccountResponse;
-import com.suhasan.finance.account_service.entity.*;
-import com.suhasan.finance.account_service.dto.*;
 
 @Mapper(
     componentModel = "spring",
@@ -90,7 +88,7 @@ public interface AccountMapper {
     @Mappings({
       @Mapping(
         target = "accountType",
-        expression = "java(entity instanceof SavingsAccount ? \"SAVINGS\" : \"CREDIT\")"
+        expression = "java(entity.getAccountType())"
       ),
       @Mapping(
         target = "interestRate",

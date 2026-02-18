@@ -5,29 +5,39 @@ on:
     branches: [main, develop]
     types: [opened, synchronize, reopened]
 
-env:
-  JAVA_VERSION: '22'
-
 jobs:
-  # Simple PR validation
-  pr-build:
-    name: PR Build Check
+  pr-build-and-policy:
+    name: PR Build + Policy
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
+          java-version: '21'
+          distribution: temurin
+          cache: maven
 
-      - name: Build Account Service
+      - name: Enforce production config policies
+        shell: bash
         run: |
-          cd account-service
-          mvn clean compile -DskipTests
+          set -euo pipefail
+          for f in \
+            account-service/src/main/resources/application-prod.properties \
+            transaction-service/src/main/resources/application-prod.properties \
+            infrastructure/helm/account-service/values-prod.yaml; do
+            if [ -f "$f" ] && grep -E "ddl-auto=update" "$f" >/dev/null; then
+              echo "Found disallowed ddl-auto=update in $f"
+              exit 1
+            fi
+          done
 
-      - name: PR Success
-        run: |
-          echo "✅ PR validation passed - services compile successfully"
+      - name: Compile account-service
+        working-directory: account-service
+        run: ./mvnw -q -DskipTests compile
+
+      - name: Compile transaction-service
+        working-directory: transaction-service
+        run: ./mvnw -q -DskipTests compile

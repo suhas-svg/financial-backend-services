@@ -2,11 +2,12 @@ package com.suhasan.finance.transaction_service.config;
 
 import brave.sampler.Sampler;
 import brave.Tracing;
-import brave.propagation.TraceContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.lang.NonNull;
+import org.springframework.lang.Nullable;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -24,7 +25,7 @@ public class TracingConfig implements WebMvcConfigurer {
     @Value("${management.tracing.sampling.probability:1.0}")
     private float samplingProbability;
     
-    @Value("${spring.application.name}")
+    @Value("${spring.application.name:transaction-service}")
     private String serviceName;
     
     /**
@@ -54,7 +55,7 @@ public class TracingConfig implements WebMvcConfigurer {
      * Add correlation ID interceptor for request tracking
      */
     @Override
-    public void addInterceptors(InterceptorRegistry registry) {
+    public void addInterceptors(@NonNull InterceptorRegistry registry) {
         registry.addInterceptor(new CorrelationIdInterceptor());
     }
     
@@ -74,8 +75,8 @@ public class TracingConfig implements WebMvcConfigurer {
         private static final String BUSINESS_CONTEXT_HEADER = "X-Business-Context";
         
         @Override
-        public boolean preHandle(HttpServletRequest request, HttpServletResponse response, 
-                               Object handler) throws Exception {
+        public boolean preHandle(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
+                               @NonNull Object handler) throws Exception {
             
             // Get or generate correlation ID
             String correlationId = request.getHeader(CORRELATION_ID_HEADER);
@@ -89,8 +90,10 @@ public class TracingConfig implements WebMvcConfigurer {
             
             // Try to get trace context from Brave if not in MDC
             if (traceId == null) {
-                brave.propagation.TraceContext traceContext = brave.Tracing.current().tracer().currentSpan() != null ?
-                        brave.Tracing.current().tracer().currentSpan().context() : null;
+                Tracing currentTracing = Tracing.current();
+                brave.propagation.TraceContext traceContext = (currentTracing != null && currentTracing.tracer().currentSpan() != null)
+                        ? currentTracing.tracer().currentSpan().context()
+                        : null;
                 if (traceContext != null) {
                     traceId = traceContext.traceIdString();
                     spanId = traceContext.spanIdString();
@@ -190,8 +193,8 @@ public class TracingConfig implements WebMvcConfigurer {
         }
         
         @Override
-        public void afterCompletion(HttpServletRequest request, HttpServletResponse response, 
-                                  Object handler, Exception ex) throws Exception {
+        public void afterCompletion(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
+                                  @NonNull Object handler, @Nullable Exception ex) throws Exception {
             // Log request completion with timing
             long requestDuration = System.currentTimeMillis() - 
                     Long.parseLong(org.slf4j.MDC.get("requestStartTime") != null ? 

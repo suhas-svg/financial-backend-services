@@ -5,6 +5,7 @@ public enum TransactionStatus {
     PROCESSING("Transaction is being processed"),
     COMPLETED("Transaction completed successfully"),
     FAILED("Transaction failed"),
+    FAILED_REQUIRES_MANUAL_ACTION("Transaction failed and requires manual intervention"),
     REVERSED("Transaction has been reversed"),
     CANCELLED("Transaction was cancelled");
     

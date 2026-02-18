@@ -13,13 +13,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -35,12 +35,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(TransactionController.class)
 @Import(GlobalExceptionHandler.class)
+@SuppressWarnings("null")
 class TransactionControllerMockMvcTest {
 
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
+    @MockitoBean
     private TransactionService transactionService;
 
     @Autowired
@@ -48,7 +49,6 @@ class TransactionControllerMockMvcTest {
 
     private TransactionResponse transactionResponse;
     private TransferRequest transferRequest;
-    private DepositRequest depositRequest;
     private WithdrawalRequest withdrawalRequest;
 
     @BeforeEach
@@ -73,12 +73,6 @@ class TransactionControllerMockMvcTest {
                 .currency("USD")
                 .description("Test transfer")
                 .reference("REF123")
-                .build();
-
-        depositRequest = DepositRequest.builder()
-                .accountId("acc1")
-                .amount(BigDecimal.valueOf(200))
-                .description("Test deposit")
                 .build();
 
         withdrawalRequest = WithdrawalRequest.builder()
@@ -351,7 +345,8 @@ class TransactionControllerMockMvcTest {
     }
 
     @Test
-    void healthCheck_NoAuthentication_ReturnsOk() throws Exception {
+    @WithMockUser(username = "user123")
+    void healthCheck_WithAuthentication_ReturnsOk() throws Exception {
         // Act & Assert
         mockMvc.perform(get("/api/transactions/health"))
                 .andExpect(status().isOk())

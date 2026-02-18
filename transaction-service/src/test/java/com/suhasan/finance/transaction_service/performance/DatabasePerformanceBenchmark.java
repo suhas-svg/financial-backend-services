@@ -36,9 +36,10 @@ import java.util.concurrent.ThreadLocalRandom;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("test")
 @DisplayName("Database Performance Benchmark")
+@SuppressWarnings({"resource", "null"})
 public class DatabasePerformanceBenchmark {
 
     @Container
@@ -138,7 +139,7 @@ public class DatabasePerformanceBenchmark {
                 transactionRepository.findTransactionsWithFilters(
                         "account-1", null, null,
                         LocalDateTime.now().minusDays(7), LocalDateTime.now(),
-                        null, null, null, null,
+                        null, null, null, null, null,
                         org.springframework.data.domain.PageRequest.of(0, 10)));
             
             testQueryPattern("Count by Account", size, () -> 
@@ -364,19 +365,19 @@ public class DatabasePerformanceBenchmark {
             }
             
             long start = System.currentTimeMillis();
-            ResultSet rs = stmt.executeQuery();
-            long time = System.currentTimeMillis() - start;
-            
-            System.out.println("\n" + description + " (" + time + "ms):");
-            while (rs.next()) {
-                System.out.println("  " + rs.getString(1));
+            try (ResultSet rs = stmt.executeQuery()) {
+                long time = System.currentTimeMillis() - start;
+
+                System.out.println("\n" + description + " (" + time + "ms):");
+                while (rs.next()) {
+                    System.out.println("  " + rs.getString(1));
+                }
             }
         }
     }
 
     private List<Transaction> generateTransactions(int count) {
         List<Transaction> transactions = new ArrayList<>();
-        LocalDateTime baseTime = LocalDateTime.now().minusDays(30);
         
         for (int i = 0; i < count; i++) {
             transactions.add(generateTransaction("bulk-" + i));

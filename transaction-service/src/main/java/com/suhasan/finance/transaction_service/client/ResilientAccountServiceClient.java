@@ -8,9 +8,16 @@ import io.github.resilience4j.reactor.retry.RetryOperator;
 import io.github.resilience4j.reactor.timelimiter.TimeLimiterOperator;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.timelimiter.TimeLimiter;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -21,236 +28,191 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
+import java.time.Instant;
+import java.util.Date;
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
 @Slf4j
+@SuppressWarnings("null")
 public class ResilientAccountServiceClient {
-    
+
     private final WebClient.Builder webClientBuilder;
     private final Retry accountServiceRetry;
     private final CircuitBreaker accountServiceCircuitBreaker;
     private final TimeLimiter accountServiceTimeLimiter;
-    
-    @Value("${account-service.base-url}")
+
+    @Value("${account-service.base-url:http://localhost:8080}")
     private String accountServiceBaseUrl;
-    
+
     @Value("${account-service.timeout:5000}")
     private int timeout;
 
+    @Value("${security.jwt.internal-secret}")
+    private String internalJwtSecret;
+
     /**
-     * Get account information by ID with resilience patterns
+     * Get account information by ID with resilience patterns.
+     * Uses the end-user JWT from security context for ownership-aware access.
      */
+    @Cacheable(value = "account:validation", key = "#accountId")
     public AccountDto getAccount(String accountId) {
-        log.debug("Fetching account information for ID: {} with resilience patterns", accountId);
-        
+        log.debug("Fetching account information for ID: {}", accountId);
         try {
             return getAccountAsync(accountId).block();
-            
         } catch (Exception e) {
-            log.error("Failed to get account {} after applying resilience patterns: {}", accountId, e.getMessage());
-            
-            // Check if circuit breaker is open
+            log.error("Failed to get account {}: {}", accountId, e.getMessage());
             if (accountServiceCircuitBreaker.getState() == CircuitBreaker.State.OPEN) {
                 throw new AccountServiceUnavailableException(
-                    "Account Service is currently unavailable (circuit breaker open). Please try again later.");
+                        "Account Service is currently unavailable (circuit breaker open).");
             }
-            
-            // Handle different types of exceptions
-            if (e instanceof WebClientResponseException webClientException) {
-                if (webClientException.getStatusCode() == HttpStatus.NOT_FOUND) {
-                    log.warn("Account not found: {}", accountId);
-                    return null;
-                }
-                if (webClientException.getStatusCode().is4xxClientError()) {
-                    log.warn("Client error for account {}: {}", accountId, webClientException.getMessage());
-                    return null;
-                }
+            if (e instanceof WebClientResponseException webClientException
+                    && webClientException.getStatusCode() == HttpStatus.NOT_FOUND) {
+                return null;
             }
-            
+            if (e instanceof WebClientResponseException webClientException
+                    && webClientException.getStatusCode().is4xxClientError()) {
+                return null;
+            }
             throw new AccountServiceUnavailableException("Account service unavailable: " + e.getMessage());
         }
     }
 
-    /**
-     * Async method to get account with reactive resilience patterns
-     */
     private Mono<AccountDto> getAccountAsync(String accountId) {
-        WebClient webClient = webClientBuilder
-                .baseUrl(accountServiceBaseUrl)
-                .build();
-        
-        return webClient
-                .get()
+        WebClient webClient = webClientBuilder.baseUrl(accountServiceBaseUrl).build();
+        String jwtToken = getCurrentJwtToken();
+        WebClient.RequestHeadersSpec<?> requestSpec = webClient.get()
                 .uri("/api/accounts/{id}", accountId)
-                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                .retrieve()
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
+
+        if (jwtToken != null) {
+            requestSpec = requestSpec.header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtToken);
+        }
+
+        return requestSpec.retrieve()
                 .bodyToMono(AccountDto.class)
                 .timeout(Duration.ofMillis(timeout))
                 .transformDeferred(RetryOperator.of(accountServiceRetry))
                 .transformDeferred(CircuitBreakerOperator.of(accountServiceCircuitBreaker))
-                .transformDeferred(TimeLimiterOperator.of(accountServiceTimeLimiter))
-                .doOnSuccess(account -> log.debug("Successfully retrieved account: {}", accountId))
-                .doOnError(error -> log.error("Error retrieving account {}: {}", accountId, error.getMessage()))
-                .onErrorMap(throwable -> {
-                    if (throwable instanceof WebClientResponseException webClientException) {
-                        return webClientException;
-                    }
-                    return new RuntimeException("Account service call failed: " + throwable.getMessage(), throwable);
-                });
+                .transformDeferred(TimeLimiterOperator.of(accountServiceTimeLimiter));
     }
 
-    /**
-     * Update account balance with resilience patterns
-     */
+    @CacheEvict(value = "account:validation", key = "#accountId")
     public void updateAccountBalance(String accountId, BigDecimal newBalance) {
-        log.debug("Updating balance for account {} to {} with resilience patterns", accountId, newBalance);
-        
         try {
             updateAccountBalanceAsync(accountId, newBalance).block();
-            
         } catch (Exception e) {
-            log.error("Failed to update account balance for {} after applying resilience patterns: {}", 
-                    accountId, e.getMessage());
-            
-            if (accountServiceCircuitBreaker.getState() == CircuitBreaker.State.OPEN) {
-                throw new AccountServiceUnavailableException(
-                    "Account Service is currently unavailable (circuit breaker open). Balance update failed.");
-            }
-            
-            throw new AccountServiceUnavailableException("Account service unavailable for balance update: " + e.getMessage());
+            throw mapServiceException("balance update", e);
         }
     }
 
-    /**
-     * Async method to update account balance
-     */
     private Mono<Void> updateAccountBalanceAsync(String accountId, BigDecimal newBalance) {
-        // For now, we'll simulate the balance update
-        // In a real implementation, this would call a dedicated endpoint
-        return Mono.fromRunnable(() -> {
-            log.info("Balance updated for account {}: new balance = {}", accountId, newBalance);
-        })
-        .then()
-        .transformDeferred(RetryOperator.of(accountServiceRetry))
-        .transformDeferred(CircuitBreakerOperator.of(accountServiceCircuitBreaker))
-        .transformDeferred(TimeLimiterOperator.of(accountServiceTimeLimiter))
-        .doOnSuccess(result -> log.debug("Successfully updated balance for account: {}", accountId))
-        .doOnError(error -> log.error("Error updating balance for account {}: {}", accountId, error.getMessage()));
+        String serviceToken = generateInternalServiceToken();
+        return Mono.fromCallable(() -> {
+                    WebClient webClient = webClientBuilder.baseUrl(accountServiceBaseUrl).build();
+                    webClient.put()
+                            .uri("/api/internal/accounts/{id}/balance", accountId)
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceToken)
+                            .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                            .bodyValue(new BalanceUpdateRequest(newBalance))
+                            .retrieve()
+                            .bodyToMono(Void.class)
+                            .timeout(Duration.ofMillis(timeout))
+                            .block();
+                    return null;
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .then()
+                .transformDeferred(RetryOperator.of(accountServiceRetry))
+                .transformDeferred(CircuitBreakerOperator.of(accountServiceCircuitBreaker))
+                .transformDeferred(TimeLimiterOperator.of(accountServiceTimeLimiter));
     }
 
-    /**
-     * Validate account exists and is active with resilience patterns
-     */
+    @CacheEvict(value = "account:validation", key = "#accountId")
+    public BalanceOperationResponse applyBalanceOperation(String accountId,
+                                                          String operationId,
+                                                          BigDecimal delta,
+                                                          String transactionId,
+                                                          String reason,
+                                                          boolean allowNegative) {
+        try {
+            return applyBalanceOperationAsync(accountId, operationId, delta, transactionId, reason, allowNegative).block();
+        } catch (Exception e) {
+            throw mapServiceException("balance operation", e);
+        }
+    }
+
+    private Mono<BalanceOperationResponse> applyBalanceOperationAsync(String accountId,
+                                                                      String operationId,
+                                                                      BigDecimal delta,
+                                                                      String transactionId,
+                                                                      String reason,
+                                                                      boolean allowNegative) {
+        String serviceToken = generateInternalServiceToken();
+        BalanceOperationRequest request = new BalanceOperationRequest(
+                operationId, delta, transactionId, reason, allowNegative);
+
+        return Mono.fromCallable(() -> {
+                    WebClient webClient = webClientBuilder.baseUrl(accountServiceBaseUrl).build();
+                    return webClient.post()
+                            .uri("/api/internal/accounts/{id}/balance-ops", accountId)
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceToken)
+                            .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                            .bodyValue(request)
+                            .retrieve()
+                            .bodyToMono(BalanceOperationResponse.class)
+                            .timeout(Duration.ofMillis(timeout))
+                            .block();
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .transformDeferred(RetryOperator.of(accountServiceRetry))
+                .transformDeferred(CircuitBreakerOperator.of(accountServiceCircuitBreaker))
+                .transformDeferred(TimeLimiterOperator.of(accountServiceTimeLimiter));
+    }
+
     public boolean validateAccount(String accountId) {
         try {
             AccountDto account = getAccount(accountId);
-            boolean isValid = account != null && (account.getActive() == null || account.getActive());
-            log.debug("Account validation for {}: {}", accountId, isValid);
-            return isValid;
+            return account != null && (account.getActive() == null || account.getActive());
         } catch (Exception e) {
-            log.warn("Account validation failed for {} due to service issues: {}", accountId, e.getMessage());
-            
-            // In case of service unavailability, we might want to fail fast
-            // or implement a fallback mechanism depending on business requirements
             if (e instanceof AccountServiceUnavailableException) {
-                throw e; // Re-throw to let caller handle service unavailability
+                throw e;
             }
-            
             return false;
         }
     }
 
-    /**
-     * Get account balance with resilience patterns
-     */
     public BigDecimal getAccountBalance(String accountId) {
-        try {
-            AccountDto account = getAccount(accountId);
-            BigDecimal balance = account != null ? account.getBalance() : BigDecimal.ZERO;
-            log.debug("Retrieved balance for account {}: {}", accountId, balance);
-            return balance;
-        } catch (Exception e) {
-            log.error("Failed to get balance for account {}: {}", accountId, e.getMessage());
-            
-            if (e instanceof AccountServiceUnavailableException) {
-                throw e;
-            }
-            
-            // Return zero balance as fallback, but log the issue
-            log.warn("Returning zero balance as fallback for account {} due to service issues", accountId);
-            return BigDecimal.ZERO;
-        }
+        AccountDto account = getAccount(accountId);
+        return account != null ? account.getBalance() : BigDecimal.ZERO;
     }
 
-    /**
-     * Check if account has sufficient balance with resilience patterns
-     */
     public boolean hasSufficientBalance(String accountId, BigDecimal amount) {
-        try {
-            AccountDto account = getAccount(accountId);
-            if (account == null) {
-                log.warn("Account {} not found for balance check", accountId);
-                return false;
-            }
-            
-            boolean hasSufficientBalance;
-            
-            // For credit accounts, check available credit
-            if ("CREDIT".equals(account.getAccountType())) {
-                BigDecimal availableCredit = account.getAvailableCredit();
-                hasSufficientBalance = availableCredit != null && availableCredit.compareTo(amount) >= 0;
-                log.debug("Credit account {} available credit: {}, required: {}, sufficient: {}", 
-                        accountId, availableCredit, amount, hasSufficientBalance);
-            } else {
-                // For other accounts, check balance
-                hasSufficientBalance = account.getBalance().compareTo(amount) >= 0;
-                log.debug("Account {} balance: {}, required: {}, sufficient: {}", 
-                        accountId, account.getBalance(), amount, hasSufficientBalance);
-            }
-            
-            return hasSufficientBalance;
-            
-        } catch (Exception e) {
-            log.error("Error checking balance for account {}: {}", accountId, e.getMessage());
-            
-            if (e instanceof AccountServiceUnavailableException) {
-                throw e;
-            }
-            
-            // Conservative approach: assume insufficient balance if we can't verify
-            log.warn("Assuming insufficient balance for account {} due to service issues", accountId);
+        AccountDto account = getAccount(accountId);
+        if (account == null) {
             return false;
         }
+        if ("CREDIT".equals(account.getAccountType())) {
+            BigDecimal availableCredit = account.getAvailableCredit();
+            return availableCredit != null && availableCredit.compareTo(amount) >= 0;
+        }
+        return account.getBalance().compareTo(amount) >= 0;
     }
 
-    /**
-     * Check Account Service health with resilience patterns
-     */
     public boolean checkHealth() {
-        log.debug("Checking Account Service health with resilience patterns");
-        
         try {
             return checkHealthAsync().block();
-            
         } catch (Exception e) {
-            log.warn("Account Service health check failed: {}", e.getMessage());
             return false;
         }
     }
 
-    /**
-     * Async method to check health
-     */
     private Mono<Boolean> checkHealthAsync() {
-        WebClient webClient = webClientBuilder
-                .baseUrl(accountServiceBaseUrl)
-                .build();
-        
-        return webClient
-                .get()
+        WebClient webClient = webClientBuilder.baseUrl(accountServiceBaseUrl).build();
+        return webClient.get()
                 .uri("/actuator/health")
                 .retrieve()
                 .bodyToMono(String.class)
@@ -258,36 +220,89 @@ public class ResilientAccountServiceClient {
                 .map(response -> response != null && response.contains("UP"))
                 .transformDeferred(RetryOperator.of(accountServiceRetry))
                 .transformDeferred(CircuitBreakerOperator.of(accountServiceCircuitBreaker))
-                .doOnSuccess(isHealthy -> log.debug("Account Service health check result: {}", isHealthy))
-                .doOnError(error -> log.warn("Account Service health check error: {}", error.getMessage()))
-                .onErrorReturn(false); // Return false on any error
+                .onErrorReturn(false);
     }
 
-    /**
-     * Get circuit breaker state for monitoring
-     */
     public CircuitBreaker.State getCircuitBreakerState() {
         return accountServiceCircuitBreaker.getState();
     }
 
-    /**
-     * Get circuit breaker metrics for monitoring
-     */
     public CircuitBreaker.Metrics getCircuitBreakerMetrics() {
         return accountServiceCircuitBreaker.getMetrics();
     }
 
-    /**
-     * Get retry metrics for monitoring
-     */
     public Retry.Metrics getRetryMetrics() {
         return accountServiceRetry.getMetrics();
     }
 
-    /**
-     * Get the base URL for the Account Service
-     */
     public String getBaseUrl() {
         return accountServiceBaseUrl;
+    }
+
+    private String getCurrentJwtToken() {
+        try {
+            org.springframework.security.core.Authentication authentication =
+                    org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null && authentication.getCredentials() instanceof String) {
+                return (String) authentication.getCredentials();
+            }
+        } catch (Exception ignored) {
+            // no-op
+        }
+        return null;
+    }
+
+    private RuntimeException mapServiceException(String operation, Exception e) {
+        log.error("Failed to execute {} via account-service: {}", operation, e.getMessage());
+        if (accountServiceCircuitBreaker.getState() == CircuitBreaker.State.OPEN) {
+            return new AccountServiceUnavailableException(
+                    "Account Service is currently unavailable (circuit breaker open).");
+        }
+        return new AccountServiceUnavailableException("Account service unavailable for " + operation + ": " + e.getMessage());
+    }
+
+    private String generateInternalServiceToken() {
+        Instant now = Instant.now();
+        Instant exp = now.plusSeconds(60);
+        return Jwts.builder()
+                .subject("transaction-service")
+                // Keep aud as a plain string for compatibility with account-service JWT parser.
+                .claim("aud", "account-service")
+                .claim("roles", List.of("ROLE_INTERNAL_SERVICE"))
+                .claim("token_type", "service")
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(exp))
+                .signWith(Keys.hmacShaKeyFor(internalJwtSecret.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class BalanceUpdateRequest {
+        private BigDecimal balance;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class BalanceOperationRequest {
+        private String operationId;
+        private BigDecimal delta;
+        private String transactionId;
+        private String reason;
+        private boolean allowNegative;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class BalanceOperationResponse {
+        private Long accountId;
+        private String operationId;
+        private boolean applied;
+        private BigDecimal newBalance;
+        private Long version;
+        private String status;
     }
 }

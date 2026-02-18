@@ -1,0 +1,60 @@
+{
+  "timestamp": "2025-08-19T17:16:08.639588",
+  "tests": [
+    {
+      "name": "Service Health Check",
+      "status": "PASSED",
+      "duration": 0.056343793869018555,
+      "timestamp": "2025-08-19T17:16:08.695932"
+    },
+    {
+      "name": "JWT Authentication System",
+      "status": "FAILED",
+      "duration": 0.0010116100311279297,
+      "timestamp": "2025-08-19T17:16:08.698899"
+    },
+    {
+      "name": "Account Service Operations",
+      "status": "PASSED",
+      "duration": 0.7251682281494141,
+      "timestamp": "2025-08-19T17:16:09.425319"
+    },
+    {
+      "name": "MCP Server Initialization",
+      "status": "FAILED",
+      "duration": 1.6509714126586914,
+      "timestamp": "2025-08-19T17:16:11.076291"
+    },
+    {
+      "name": "MCP Account Tools",
+      "status": "FAILED",
+      "duration": 0.0,
+      "timestamp": "2025-08-19T17:16:11.076291"
+    },
+    {
+      "name": "Permission System",
+      "status": "PASSED",
+      "duration": 0.0,
+      "timestamp": "2025-08-19T17:16:11.076291"
+    },
+    {
+      "name": "Error Handling",
+      "status": "PASSED",
+      "duration": 0.07681441307067871,
+      "timestamp": "2025-08-19T17:16:11.163833"
+    },
+    {
+      "name": "Integration Completeness",
+      "status": "FAILED",
+      "duration": 0.03723001480102539,
+      "timestamp": "2025-08-19T17:16:11.201063"
+    }
+  ],
+  "summary": {
+    "total_tests": 8,
+    "passed_tests": 4,
+    "failed_tests": 4,
+    "success_rate": 50.0,
+    "duration": 2.561474561691284
+  }
+}

@@ -1,26 +1,29 @@
 package com.suhasan.finance.account_service.security;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
+@SuppressFBWarnings(
+    value = "EI_EXPOSE_REP2",
+    justification = "Dependencies are injected and managed by Spring"
+)
 public class SecurityConfig {
 
-    private final JwtTokenProvider tokenProvider;
-    private final CustomUserDetailsService userDetailsService;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
@@ -35,15 +38,18 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-          // disable CSRF since we're using JWTs
           .csrf(csrf -> csrf.disable())
-          // make it stateless; no sessions
           .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-          
-          // TEMPORARY: Allow all requests for testing
           .authorizeHttpRequests(auth -> auth
-              .anyRequest().permitAll()
-          );
+              .requestMatchers("/api/auth/**").permitAll()
+              .requestMatchers("/api/health/**").permitAll()
+              .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+              .requestMatchers("/actuator/prometheus", "/actuator/metrics", "/actuator/metrics/**")
+                  .hasAnyRole("ADMIN", "INTERNAL_SERVICE")
+              .requestMatchers("/api/internal/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
+              .anyRequest().authenticated()
+          )
+          .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

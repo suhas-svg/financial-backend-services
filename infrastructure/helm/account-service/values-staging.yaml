@@ -151,7 +151,7 @@ configMap:
       
       # Actuator Configuration
       management.endpoints.web.base-path=/actuator
-      management.endpoints.web.exposure.include=health,info,metrics,prometheus
+      management.endpoints.web.exposure.include=health,info,prometheus
       management.endpoint.health.show-details=when-authorized
       management.endpoint.health.show-components=always
       management.health.probes.enabled=true

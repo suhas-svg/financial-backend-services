@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -32,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Testcontainers
 @ActiveProfiles("test")
 @DisplayName("Cache Performance Benchmark")
+@SuppressWarnings({"resource", "null"})
 public class CachePerformanceBenchmark {
 
     @Container
@@ -61,7 +63,7 @@ public class CachePerformanceBenchmark {
     @BeforeEach
     void setUp() {
         // Clear Redis cache
-        redisTemplate.getConnectionFactory().getConnection().flushAll();
+        clearRedisCache();
     }
 
     @Test
@@ -436,5 +438,14 @@ public class CachePerformanceBenchmark {
         assertEquals(expirationTestSize, immediateFound, "All keys should be found immediately");
         assertTrue(afterTwoSeconds < immediateFound, "Some keys should expire after 2 seconds");
         assertTrue(afterSixSeconds < afterTwoSeconds, "More keys should expire after 6 seconds");
+    }
+
+    private void clearRedisCache() {
+        if (redisTemplate.getConnectionFactory() == null) {
+            return;
+        }
+        try (RedisConnection connection = redisTemplate.getConnectionFactory().getConnection()) {
+            connection.serverCommands().flushDb();
+        }
     }
 }

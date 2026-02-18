@@ -1,17 +1,13 @@
 package com.suhasan.finance.transaction_service.service;
 
-import com.suhasan.finance.transaction_service.entity.TransactionStatus;
-import com.suhasan.finance.transaction_service.entity.TransactionType;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -24,7 +20,6 @@ import java.util.concurrent.atomic.AtomicLong;
 @Slf4j
 public class AlertingService {
     
-    private final MeterRegistry meterRegistry;
     private final MetricsService metricsService;
     private final AuditService auditService;
     
@@ -39,6 +34,9 @@ public class AlertingService {
     
     @Value("${alerting.daily-volume.threshold:10000}") // 10,000 transactions per day
     private long dailyVolumeThreshold;
+
+    @Value("${app.scheduling.enabled:true}")
+    private boolean schedulingEnabled;
     
     // Alert counters and gauges
     private final Counter criticalAlertsCounter;
@@ -55,7 +53,6 @@ public class AlertingService {
     private final long alertSuppressionMinutes = 15; // Suppress duplicate alerts for 15 minutes
     
     public AlertingService(MeterRegistry meterRegistry, MetricsService metricsService, AuditService auditService) {
-        this.meterRegistry = meterRegistry;
         this.metricsService = metricsService;
         this.auditService = auditService;
         
@@ -94,6 +91,9 @@ public class AlertingService {
      */
     @Scheduled(fixedRate = 60000) // Every minute
     public void checkCriticalTransactionFailures() {
+        if (!schedulingEnabled) {
+            return;
+        }
         try {
             // Check error rate
             double currentErrorRate = 1.0 - metricsService.getTransactionSuccessRate();
@@ -148,6 +148,9 @@ public class AlertingService {
      */
     @Scheduled(fixedRate = 30000) // Every 30 seconds
     public void checkAccountServiceHealth() {
+        if (!schedulingEnabled) {
+            return;
+        }
         try {
             // This would typically check the last Account Service call metrics
             // For now, we'll check if there have been recent errors

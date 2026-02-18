@@ -251,8 +251,8 @@
 				<artifactId>maven-compiler-plugin</artifactId>
 				<version>3.13.0</version>
 				<configuration>
-					<source>22</source>
-					<target>22</target>
+					<source>${java.version}</source>
+					<target>${java.version}</target>
 					<annotationProcessorPaths>
 						<path>
 							<groupId>org.projectlombok</groupId>
@@ -379,7 +379,7 @@
 				<spring.profiles.active>dev</spring.profiles.active>
 				<flyway.url>jdbc:postgresql://localhost:5433/transactiondb_dev</flyway.url>
 				<flyway.user>postgres</flyway.user>
-				<flyway.password>postgres</flyway.password>
+				<flyway.password>${env.FLYWAY_PASSWORD_DEV}</flyway.password>
 			</properties>
 			<build>
 				<plugins>
@@ -409,7 +409,7 @@
 				<spring.profiles.active>staging</spring.profiles.active>
 				<flyway.url>jdbc:postgresql://staging-db:5432/transactiondb_staging</flyway.url>
 				<flyway.user>transaction_staging_user</flyway.user>
-				<flyway.password>staging_secure_password</flyway.password>
+				<flyway.password>${env.FLYWAY_PASSWORD_STAGING}</flyway.password>
 			</properties>
 			<build>
 				<plugins>

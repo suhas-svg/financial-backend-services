@@ -1,312 +1,174 @@
-// package com.suhasan.finance.account_service.service;
-
-// import com.suhasan.finance.account_service.entity.Account;
-// import com.suhasan.finance.account_service.repository.AccountRepository;
-// import org.springframework.stereotype.Service;
-// import org.springframework.transaction.annotation.Transactional;
-// import java.util.List;
-
-// @Service
-// @Transactional
-// public class AccountService {
-//     private final AccountRepository repo;
-//     public AccountService(AccountRepository repo) {
-//         this.repo = repo;
-//     }
-
-//     public Account create(Account account) {
-//         return repo.save(account);
-//     }
-
-//     public Account findById(Long id) {
-//         return repo.findById(id)
-//                    .orElseThrow(() -> new IllegalArgumentException("Account not found: " + id));
-//     }
-
-//     public List<Account> findAll() {
-//         return repo.findAll();
-//     }
-
-//     public Account update(Long id, Account updated) {
-//         Account existing = findById(id);
-//         existing.setBalance(updated.getBalance());
-//         // if Savings/Credit, copy interestRate or creditLimit/dueDate as needed
-//         return repo.save(existing);
-//     }
-
-//     public void delete(Long id) {
-//         repo.deleteById(id);
-//     }
-// }
-// package com.suhasan.finance.account_service.service;
-
-// import com.suhasan.finance.account_service.dto.AccountResponse;
-// import com.suhasan.finance.account_service.entity.Account;
-// import com.suhasan.finance.account_service.mapper.AccountMapper;
-// import com.suhasan.finance.account_service.repository.AccountRepository;
-// import lombok.RequiredArgsConstructor;
-// import org.springframework.data.domain.Page;
-// import org.springframework.data.domain.Pageable;
-// import org.springframework.stereotype.Service;
-// import org.springframework.transaction.annotation.Transactional;
-
-// import java.util.List;
-
-// @Service
-// @Transactional
-// @RequiredArgsConstructor
-// public class AccountService {
-//     private final AccountRepository repo;
-//     private final AccountMapper mapper;
-
-//     public Account create(Account account) {
-//         return repo.save(account);
-//     }
-
-//     public Account findById(Long id) {
-//         return repo.findById(id)
-//                    .orElseThrow(() -> new IllegalArgumentException("Account not found: " + id));
-//     }
-
-//     public List<Account> findAll() {
-//         return repo.findAll();
-//     }
-
-//     public Account update(Long id, Account updated) {
-//         Account existing = findById(id);
-//         existing.setBalance(updated.getBalance());
-//         // if Savings/Credit, copy interestRate or creditLimit/dueDate as needed
-//         return repo.save(existing);
-//     }
-
-//     public void delete(Long id) {
-//         repo.deleteById(id);
-//     }
-
-//     /**
-//      * Step 5: Pagination & Filtering
-//      *
-//      * Returns a page of AccountResponse, optionally filtering by ownerId or accountType,
-//      * and always applying the provided Pageable for paging & sorting.
-//      */
-//     public Page<AccountResponse> listAccounts(
-//         String ownerId,
-//         String accountType,
-//         Pageable pageable
-//     ) {
-//         Page<Account> page;
-//         if (ownerId != null) {
-//             page = repo.findByOwnerId(ownerId, pageable);
-//         } else if (accountType != null) {
-//             page = repo.findByAccountType(accountType, pageable);
-//         } else {
-//             page = repo.findAll(pageable);
-//         }
-//         return page.map(mapper::toDto);
-//     }
-// }
-
-// package com.suhasan.finance.account_service.service;
-
-// import org.springframework.data.domain.Page;
-// import org.springframework.data.domain.Pageable;
-// import com.suhasan.finance.account_service.dto.AccountResponse;
-// import com.suhasan.finance.account_service.entity.Account;
-// import com.suhasan.finance.account_service.mapper.AccountMapper;
-// import com.suhasan.finance.account_service.repository.AccountRepository;
-// import io.micrometer.core.instrument.Counter;
-// import io.micrometer.core.instrument.Gauge;
-// import io.micrometer.core.instrument.MeterRegistry;
-// import io.micrometer.core.instrument.Timer;
-// import org.springframework.stereotype.Service;
-// import org.springframework.transaction.annotation.Transactional;
-
-// import java.util.List;
-
-// @Service
-// @Transactional
-// public class AccountService {
-
-//     private final AccountRepository repo;
-//     private final AccountMapper    mapper;
-
-//     // Micrometer metrics
-//     private final Counter createdCounter;
-//     private final Timer   creationTimer;
-//     private final Gauge   openAccountsGauge;
-
-//     public AccountService(AccountRepository repo,
-//                           AccountMapper mapper,
-//                           MeterRegistry registry) {
-//         this.repo = repo;
-//         this.mapper = mapper;
-
-//         // initialize custom business metrics
-//         this.createdCounter = registry.counter("account_created_count");
-//         this.creationTimer  = registry.timer("account_creation_latency");
-//         this.openAccountsGauge = Gauge.builder(
-//                 "account_open_total",
-//                 this,
-//                 svc -> svc.countOpenAccounts()
-//             )
-//             .description("Total number of open accounts")
-//             .register(registry);
-//     }
-
-//     public Account create(Account account) {
-//         // record timing and increment counter
-//         return creationTimer.record(() -> {
-//             Account saved = repo.save(account);
-//             createdCounter.increment();
-//             return saved;
-//         });
-//     }
-
-//     public Account findById(Long id) {
-//         return repo.findById(id)
-//                    .orElseThrow(() -> new IllegalArgumentException("Account not found: " + id));
-//     }
-
-//     public List<Account> findAll() {
-//         return repo.findAll();
-//     }
-
-//     public Account update(Long id, Account updated) {
-//         Account existing = findById(id);
-//         existing.setBalance(updated.getBalance());
-//         // if Savings/Credit, copy interestRate or creditLimit/dueDate as needed
-//         return repo.save(existing);
-//     }
-
-//     public void delete(Long id) {
-//         repo.deleteById(id);
-//     }
-
-//     public Page<AccountResponse> listAccounts(
-//         String ownerId,
-//         String accountType,
-//         Pageable pageable
-//     ) {
-//         Page<Account> page;
-//         if (ownerId != null) {
-//             page = repo.findByOwnerId(ownerId, pageable);
-//         } else if (accountType != null) {
-//             page = repo.findByAccountType(accountType, pageable);
-//         } else {
-//             page = repo.findAll(pageable);
-//         }
-//         return page.map(mapper::toDto);
-//     }
-
-//     /**
-//      * Counts open accounts for usage by gauge metric
-//      */
-//     private int countOpenAccounts() {
-//         // implement repository method countByStatus or similar to fetch open accounts count
-//         return (int) repo.countByStatus("OPEN");
-//     }
-// }
-
-
 package com.suhasan.finance.account_service.service;
 
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import com.suhasan.finance.account_service.dto.AccountResponse;
+import com.suhasan.finance.account_service.dto.BalanceOperationRequest;
+import com.suhasan.finance.account_service.dto.BalanceOperationResponse;
 import com.suhasan.finance.account_service.entity.Account;
+import com.suhasan.finance.account_service.entity.AccountBalanceOperation;
+import com.suhasan.finance.account_service.entity.AccountBalanceOperationId;
+import com.suhasan.finance.account_service.entity.BalanceOperationStatus;
 import com.suhasan.finance.account_service.mapper.AccountMapper;
+import com.suhasan.finance.account_service.repository.AccountBalanceOperationRepository;
 import com.suhasan.finance.account_service.repository.AccountRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Service
 @Transactional
 public class AccountService {
 
-    private final AccountRepository repo;
-    private final AccountMapper    mapper;
+    private final AccountRepository accountRepository;
+    private final AccountBalanceOperationRepository balanceOperationRepository;
+    private final AccountMapper accountMapper;
+    private final MeterRegistry meterRegistry;
 
-    // Micrometer metrics
-    private final Counter createdCounter;
-    private final Timer   creationTimer;
-    private final Gauge   totalAccountsGauge;
+    private Counter createdCounter;
+    private Timer creationTimer;
 
-    public AccountService(AccountRepository repo,
-                          AccountMapper mapper,
-                          MeterRegistry registry) {
-        this.repo   = repo;
-        this.mapper = mapper;
+    public AccountService(AccountRepository accountRepository,
+                          AccountBalanceOperationRepository balanceOperationRepository,
+                          AccountMapper accountMapper,
+                          MeterRegistry meterRegistry) {
+        this.accountRepository = accountRepository;
+        this.balanceOperationRepository = balanceOperationRepository;
+        this.accountMapper = accountMapper;
+        this.meterRegistry = meterRegistry;
+        initMetrics();
+    }
 
-        // initialize custom business metrics
-        this.createdCounter     = registry.counter("account_created_count");
-        this.creationTimer      = registry.timer("account_creation_latency");
-        // Gauge for total number of accounts
-        this.totalAccountsGauge = Gauge.builder(
-                "account_total_count",  // metric name
-                repo,                     // call repo.count()
-                AccountRepository::count
-            )
-            .description("Total number of accounts")
-            .register(registry);
+    private void initMetrics() {
+        this.createdCounter = meterRegistry.counter("account_created_count");
+        this.creationTimer = meterRegistry.timer("account_creation_latency");
+        Gauge.builder("account_total_count", accountRepository, AccountRepository::count)
+                .description("Total number of accounts")
+                .register(meterRegistry);
     }
 
     public Account create(Account account) {
-        // record timing and increment counter
         return creationTimer.record(() -> {
-            Account saved = repo.save(account);
+            Account saved = accountRepository.save(account);
             createdCounter.increment();
             return saved;
         });
     }
 
+    @Transactional(readOnly = true)
     public Account findById(Long id) {
-        return repo.findById(id)
-                   .orElseThrow(() -> new IllegalArgumentException("Account not found: " + id));
+        return accountRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found: " + id));
     }
 
+    @Transactional(readOnly = true)
     public List<Account> findAll() {
-        return repo.findAll();
+        return accountRepository.findAll();
     }
 
     public Account update(Long id, Account updated) {
         Account existing = findById(id);
         existing.setBalance(updated.getBalance());
-        // if Savings/Credit, copy interestRate or creditLimit/dueDate as needed
-        return repo.save(existing);
+        return accountRepository.save(existing);
     }
 
     public void delete(Long id) {
-        repo.deleteById(id);
+        accountRepository.deleteById(id);
     }
 
-    public Page<AccountResponse> listAccounts(
-        String ownerId,
-        String accountType,
-        Pageable pageable
-    ) {
+    @Transactional(readOnly = true)
+    public Page<AccountResponse> listAccounts(String ownerId, String accountType, Pageable pageable) {
         Page<Account> page;
-        if (ownerId != null) {
-            page = repo.findByOwnerId(ownerId, pageable);
+        if (ownerId != null && accountType != null) {
+            page = accountRepository.findByOwnerIdAndAccountType(ownerId, accountType, pageable);
+        } else if (ownerId != null) {
+            page = accountRepository.findByOwnerId(ownerId, pageable);
         } else if (accountType != null) {
-            page = repo.findByAccountType(accountType, pageable);
+            page = accountRepository.findByAccountType(accountType, pageable);
         } else {
-            page = repo.findAll(pageable);
+            page = accountRepository.findAll(pageable);
         }
-        return page.map(mapper::toDto);
+        return page.map(accountMapper::toDto);
     }
 
-    /**
-     * Update account balance (for Transaction Service integration)
-     */
-    public void updateBalance(Long id, java.math.BigDecimal newBalance) {
+    public void updateBalance(Long id, BigDecimal newBalance) {
         Account existing = findById(id);
         existing.setBalance(newBalance);
-        repo.save(existing);
+        accountRepository.save(existing);
+    }
+
+    public BalanceOperationResponse applyBalanceOperation(Long accountId, BalanceOperationRequest request) {
+        AccountBalanceOperationId operationId = new AccountBalanceOperationId(request.getOperationId(), accountId);
+        AccountBalanceOperation existingOperation = balanceOperationRepository.findById(operationId).orElse(null);
+        if (existingOperation != null) {
+            Account account = findById(accountId);
+            return BalanceOperationResponse.builder()
+                    .accountId(accountId)
+                    .operationId(request.getOperationId())
+                    .applied(existingOperation.isApplied())
+                    .newBalance(existingOperation.getResultingBalance())
+                    .version(account.getVersion())
+                    .status(BalanceOperationStatus.REPLAYED)
+                    .build();
+        }
+
+        Account account = accountRepository.findByIdForUpdate(accountId)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found: " + accountId));
+
+        BigDecimal currentBalance = account.getBalance();
+        BigDecimal newBalance = currentBalance.add(request.getDelta());
+        boolean allowNegative = Boolean.TRUE.equals(request.getAllowNegative());
+
+        if (!allowNegative && newBalance.compareTo(BigDecimal.ZERO) < 0) {
+            AccountBalanceOperation rejectedOperation = AccountBalanceOperation.builder()
+                    .id(operationId)
+                    .transactionId(request.getTransactionId())
+                    .delta(request.getDelta())
+                    .reason(request.getReason())
+                    .allowNegative(false)
+                    .applied(false)
+                    .resultingBalance(currentBalance)
+                    .status(BalanceOperationStatus.REJECTED)
+                    .build();
+            balanceOperationRepository.save(rejectedOperation);
+
+            return BalanceOperationResponse.builder()
+                    .accountId(accountId)
+                    .operationId(request.getOperationId())
+                    .applied(false)
+                    .newBalance(currentBalance)
+                    .version(account.getVersion())
+                    .status(BalanceOperationStatus.REJECTED)
+                    .build();
+        }
+
+        account.setBalance(newBalance);
+        Account savedAccount = accountRepository.save(account);
+        AccountBalanceOperation appliedOperation = AccountBalanceOperation.builder()
+                .id(operationId)
+                .transactionId(request.getTransactionId())
+                .delta(request.getDelta())
+                .reason(request.getReason())
+                .allowNegative(allowNegative)
+                .applied(true)
+                .resultingBalance(newBalance)
+                .status(BalanceOperationStatus.APPLIED)
+                .build();
+        balanceOperationRepository.save(appliedOperation);
+
+        return BalanceOperationResponse.builder()
+                .accountId(accountId)
+                .operationId(request.getOperationId())
+                .applied(true)
+                .newBalance(newBalance)
+                .version(savedAccount.getVersion())
+                .status(BalanceOperationStatus.APPLIED)
+                .build();
     }
 }

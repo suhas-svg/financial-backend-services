@@ -10,7 +10,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -18,7 +20,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import javax.crypto.SecretKey;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Component
@@ -30,24 +35,41 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private String jwtSecret;
     
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, 
-                                  FilterChain filterChain) throws ServletException, IOException {
-        
-        String token = getTokenFromRequest(request);
+    protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
+                                  @NonNull FilterChain filterChain) throws ServletException, IOException {
+        String requestUri = request.getRequestURI();
+        String token = extractTokenFromHeader(request.getHeader("Authorization"));
+        Authentication existingAuthentication = SecurityContextHolder.getContext().getAuthentication();
+        if (existingAuthentication != null && existingAuthentication.isAuthenticated()) {
+            log.debug("Authentication already present for request URI: {}", requestUri);
+            filterChain.doFilter(request, response);
+            return;
+        }
         
         if (token != null && validateToken(token)) {
-            String username = getUsernameFromToken(token);
-            List<String> roles = getRolesFromToken(token);
-            
-            List<SimpleGrantedAuthority> authorities = roles.stream()
-                    .map(SimpleGrantedAuthority::new)
-                    .collect(Collectors.toList());
-            
-            UsernamePasswordAuthenticationToken authentication = 
-                    new UsernamePasswordAuthenticationToken(username, null, authorities);
-            
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-            log.debug("Set authentication for user: {} with roles: {}", username, roles);
+            Claims claims = extractClaims(token);
+
+            if (claims != null) {
+                String username = claims.getSubject();
+                if (username == null || username.isBlank()) {
+                    Object usernameClaim = claims.get("username");
+                    username = usernameClaim != null ? usernameClaim.toString() : null;
+                }
+
+                if (username != null && !username.isBlank()) {
+                    List<SimpleGrantedAuthority> authorities = extractRolesFromClaims(claims).stream()
+                            .map(SimpleGrantedAuthority::new)
+                            .collect(Collectors.toList());
+
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(username, token, authorities);
+
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                    log.debug("Set authentication for user: {} with roles: {}", username, authorities);
+                } else {
+                    log.debug("JWT token does not contain a usable username for URI: {}", requestUri);
+                }
+            }
         } else {
             log.debug("No valid JWT token found in request");
         }
@@ -55,58 +77,85 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
     
-    private String getTokenFromRequest(HttpServletRequest request) {
-        String bearerToken = request.getHeader("Authorization");
-        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
-            return bearerToken.substring(7);
+    private String extractTokenFromHeader(String authHeader) {
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7);
+            return token.isBlank() ? null : token;
         }
         return null;
     }
     
     private boolean validateToken(String token) {
-        try {
-            SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
-            Jwts.parser()
-                    .verifyWith(key)
-                    .build()
-                    .parseSignedClaims(token);
-            return true;
-        } catch (Exception e) {
-            log.debug("Invalid JWT token: {}", e.getMessage());
-            return false;
+        return extractClaims(token) != null;
+    }
+
+    private Claims extractClaims(String token) {
+        if (token == null || token.isBlank()) {
+            return null;
         }
-    }
-    
-    private String getUsernameFromToken(String token) {
-        SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
-        Claims claims = Jwts.parser()
-                .verifyWith(key)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-        return claims.getSubject();
-    }
-    
-    @SuppressWarnings("unchecked")
-    private List<String> getRolesFromToken(String token) {
         try {
-            SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
-            Claims claims = Jwts.parser()
-                    .verifyWith(key)
+            return Jwts.parser()
+                    .verifyWith(resolveSigningKey())
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
-            
-            Object rolesObj = claims.get("roles");
-            if (rolesObj instanceof List) {
-                return (List<String>) rolesObj;
+        } catch (Exception e) {
+            log.debug("Invalid JWT token: {}", e.getMessage());
+            return null;
+        }
+    }
+    
+    private SecretKey resolveSigningKey() {
+        byte[] keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
+    
+    private List<String> extractRolesFromClaims(Claims claims) {
+        try {
+            Set<String> normalizedRoles = new LinkedHashSet<>();
+            collectRoles(normalizedRoles, claims.get("roles"));
+            collectRoles(normalizedRoles, claims.get("authorities"));
+            collectRoles(normalizedRoles, claims.get("role"));
+
+            if (!normalizedRoles.isEmpty()) {
+                return normalizedRoles.stream().collect(Collectors.toList());
             }
-            // If no roles in token, return default role
+
             log.debug("No roles found in token, assigning default ROLE_USER");
             return List.of("ROLE_USER");
         } catch (Exception e) {
             log.debug("Error extracting roles from token: {}", e.getMessage());
             return List.of("ROLE_USER");
         }
+    }
+
+    private void collectRoles(Set<String> roleStore, Object claimValue) {
+        if (claimValue instanceof List<?> roleList) {
+            roleList.forEach(role -> addRole(roleStore, role != null ? role.toString() : null));
+            return;
+        }
+
+        if (claimValue instanceof String roleText) {
+            for (String role : roleText.split(",")) {
+                addRole(roleStore, role);
+            }
+        }
+    }
+
+    private void addRole(Set<String> roleStore, String rawRole) {
+        if (rawRole == null) {
+            return;
+        }
+
+        String normalizedRole = rawRole.trim();
+        if (normalizedRole.isBlank()) {
+            return;
+        }
+
+        if (!normalizedRole.startsWith("ROLE_")) {
+            normalizedRole = "ROLE_" + normalizedRole;
+        }
+
+        roleStore.add(normalizedRole);
     }
 }

@@ -1,0 +1,42 @@
+{
+  "timestamp": "2025-08-19T17:13:05.491236",
+  "demos": [
+    {
+      "name": "Service Health Check",
+      "status": "SUCCESS",
+      "duration": 0.05553388595581055,
+      "timestamp": "2025-08-19T17:13:05.546770"
+    },
+    {
+      "name": "Account Operations",
+      "status": "SUCCESS",
+      "duration": 0.5859832763671875,
+      "timestamp": "2025-08-19T17:13:06.134240"
+    },
+    {
+      "name": "MCP Tools Functionality",
+      "status": "FAILED",
+      "duration": 2.1864330768585205,
+      "timestamp": "2025-08-19T17:13:08.320673"
+    },
+    {
+      "name": "Integration Scenarios",
+      "status": "SUCCESS",
+      "duration": 0.0865788459777832,
+      "timestamp": "2025-08-19T17:13:08.407853"
+    },
+    {
+      "name": "MCP Protocol Compliance",
+      "status": "SUCCESS",
+      "duration": 0.004340410232543945,
+      "timestamp": "2025-08-19T17:13:08.416188"
+    }
+  ],
+  "summary": {
+    "total_demos": 5,
+    "successful_demos": 4,
+    "failed_demos": 1,
+    "success_rate": 80.0,
+    "duration": 2.924952745437622
+  }
+}

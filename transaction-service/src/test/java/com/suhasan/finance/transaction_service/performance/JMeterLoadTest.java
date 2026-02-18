@@ -22,7 +22,10 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
+@SpringBootTest(
+        classes = com.suhasan.finance.transaction_service.TransactionServiceApplication.class,
+        webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT
+)
 @ActiveProfiles("test")
 @DisplayName("JMeter Load Tests")
 public class JMeterLoadTest {

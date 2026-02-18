@@ -2,7 +2,6 @@ package com.suhasan.finance.transaction_service.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -21,13 +20,14 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import javax.crypto.SecretKey;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@SuppressWarnings("null")
 class JwtAuthenticationFilterTest {
 
     @Mock
@@ -52,30 +52,29 @@ class JwtAuthenticationFilterTest {
 
     @BeforeEach
     void setUp() {
-        // Create a test secret key
-        secretKey = Keys.secretKeyFor(SignatureAlgorithm.HS256);
-        String secretKeyString = java.util.Base64.getEncoder().encodeToString(secretKey.getEncoded());
+        String secretKeyString = "AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14=";
+        secretKey = Keys.hmacShaKeyFor(secretKeyString.getBytes(StandardCharsets.UTF_8));
         
         // Set the secret key in the filter using reflection
         ReflectionTestUtils.setField(jwtAuthenticationFilter, "jwtSecret", secretKeyString);
         
         // Create valid token
         validToken = Jwts.builder()
-                .setSubject("user123")
+                .subject("user123")
                 .claim("userId", "user123")
                 .claim("username", "testuser")
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + 86400000)) // 24 hours
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 86400000)) // 24 hours
                 .signWith(secretKey)
                 .compact();
         
         // Create expired token
         expiredToken = Jwts.builder()
-                .setSubject("user123")
+                .subject("user123")
                 .claim("userId", "user123")
                 .claim("username", "testuser")
-                .setIssuedAt(new Date(System.currentTimeMillis() - 86400000)) // 24 hours ago
-                .setExpiration(new Date(System.currentTimeMillis() - 3600000)) // 1 hour ago
+                .issuedAt(new Date(System.currentTimeMillis() - 86400000)) // 24 hours ago
+                .expiration(new Date(System.currentTimeMillis() - 3600000)) // 1 hour ago
                 .signWith(secretKey)
                 .compact();
         
@@ -214,14 +213,14 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    void doFilterInternal_TokenWithoutUserId_ContinuesFilterChain() throws ServletException, IOException {
+    void doFilterInternal_TokenWithoutUserId_AuthenticatesUsingSubject() throws ServletException, IOException {
         // Arrange
         String tokenWithoutUserId = Jwts.builder()
-                .setSubject("user123")
+                .subject("user123")
                 .claim("username", "testuser")
                 // Missing userId claim
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + 86400000))
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 86400000))
                 .signWith(secretKey)
                 .compact();
         
@@ -232,7 +231,9 @@ class JwtAuthenticationFilterTest {
 
         // Assert
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        assertNull(authentication);
+        assertNotNull(authentication);
+        assertEquals("user123", authentication.getName());
+        assertTrue(authentication.isAuthenticated());
         
         verify(filterChain).doFilter(request, response);
     }

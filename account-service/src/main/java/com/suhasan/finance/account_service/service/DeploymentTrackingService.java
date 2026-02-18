@@ -1,5 +1,6 @@
 package com.suhasan.finance.account_service.service;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -19,6 +20,10 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 @Service
 @Slf4j
+@SuppressFBWarnings(
+    value = "EI_EXPOSE_REP2",
+    justification = "Dependencies are injected and managed by Spring"
+)
 public class DeploymentTrackingService {
 
     private final MeterRegistry meterRegistry;
@@ -98,7 +103,19 @@ public class DeploymentTrackingService {
         healthCheckDurationTimer = Timer.builder("health_check_duration_seconds")
                 .description("Time taken to perform health checks")
                 .register(meterRegistry);
-        
+
+        Gauge.builder("application_uptime_seconds", this, DeploymentTrackingService::getUptimeSeconds)
+                .description("Application uptime in seconds")
+                .register(meterRegistry);
+
+        Gauge.builder("deployment_last_timestamp_seconds", this, DeploymentTrackingService::getLastDeploymentTimestamp)
+                .description("Timestamp of last deployment in epoch seconds")
+                .register(meterRegistry);
+
+        Gauge.builder("application_health_score", this, DeploymentTrackingService::getCurrentHealthScore)
+                .description("Current application health score")
+                .register(meterRegistry);
+
         // Record successful deployment on startup
         recordDeploymentSuccess();
         

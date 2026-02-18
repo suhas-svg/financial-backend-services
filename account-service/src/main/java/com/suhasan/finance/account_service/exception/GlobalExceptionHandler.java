@@ -131,6 +131,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -145,9 +146,10 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ErrorResponse handleJsonParse(HttpMessageNotReadableException ex,
                                          HttpServletRequest req) {
-        String msg = ex.getMostSpecificCause() != null
-            ? ex.getMostSpecificCause().getMessage()
-            : ex.getMessage();
+        String msg = ex.getMostSpecificCause().getMessage();
+        if (msg == null || msg.isBlank()) {
+            msg = ex.getMessage();
+        }
         return new ErrorResponse(
             "Malformed JSON",
             msg,
@@ -182,6 +184,18 @@ public class GlobalExceptionHandler {
             HttpStatus.NOT_FOUND.value()
         );
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(err);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex,
+                                                            HttpServletRequest req) {
+        ErrorResponse err = new ErrorResponse(
+            "Forbidden",
+            ex.getMessage(),
+            req.getRequestURI(),
+            HttpStatus.FORBIDDEN.value()
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(err);
     }
 
     // 3) Catch-all for any uncaught exceptions

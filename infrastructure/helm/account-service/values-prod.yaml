@@ -68,7 +68,7 @@ env:
   - name: LOGGING_LEVEL_COM_SUHASAN_FINANCE_ACCOUNT_SERVICE
     value: "WARN"
   - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
-    value: "health,info,metrics,prometheus"
+    value: "health,info,prometheus"
   - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS
     value: "never"
 
@@ -176,7 +176,7 @@ configMap:
       
       # Actuator Configuration
       management.endpoints.web.base-path=/actuator
-      management.endpoints.web.exposure.include=health,info,metrics,prometheus
+      management.endpoints.web.exposure.include=health,info,prometheus
       management.endpoint.health.show-details=never
       management.endpoint.health.show-components=never
       management.health.probes.enabled=true

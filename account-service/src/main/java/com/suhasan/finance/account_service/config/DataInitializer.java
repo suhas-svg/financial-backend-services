@@ -37,5 +37,14 @@ public class DataInitializer implements CommandLineRunner {
         } else {
             log.info("ROLE_ADMIN already exists");
         }
+
+        if (roleRepository.findByName("ROLE_INTERNAL_SERVICE").isEmpty()) {
+            Role internalRole = new Role();
+            internalRole.setName("ROLE_INTERNAL_SERVICE");
+            roleRepository.save(internalRole);
+            log.info("Created default ROLE_INTERNAL_SERVICE");
+        } else {
+            log.info("ROLE_INTERNAL_SERVICE already exists");
+        }
     }
 }

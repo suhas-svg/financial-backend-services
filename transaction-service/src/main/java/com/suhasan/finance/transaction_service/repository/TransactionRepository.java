@@ -13,6 +13,7 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface TransactionRepository extends JpaRepository<Transaction, String> {
@@ -24,6 +25,9 @@ public interface TransactionRepository extends JpaRepository<Transaction, String
     // Find transactions by user (through account ownership)
     @Query("SELECT t FROM Transaction t WHERE t.createdBy = :userId ORDER BY t.createdAt DESC")
     Page<Transaction> findByCreatedByOrderByCreatedAtDesc(@Param("userId") String userId, Pageable pageable);
+
+    Optional<Transaction> findFirstByCreatedByAndTypeAndIdempotencyKey(
+        String createdBy, TransactionType type, String idempotencyKey);
     
     // Find transactions by status
     List<Transaction> findByStatusOrderByCreatedAtDesc(TransactionStatus status);

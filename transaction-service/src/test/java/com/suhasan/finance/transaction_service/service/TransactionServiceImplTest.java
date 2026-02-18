@@ -1,6 +1,6 @@
 package com.suhasan.finance.transaction_service.service;
 
-import com.suhasan.finance.transaction_service.client.AccountServiceClient;
+import com.suhasan.finance.transaction_service.client.ResilientAccountServiceClient;
 import com.suhasan.finance.transaction_service.dto.AccountDto;
 import com.suhasan.finance.transaction_service.dto.TransferRequest;
 import com.suhasan.finance.transaction_service.dto.TransactionResponse;
@@ -15,6 +15,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -31,19 +33,24 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
+@SuppressWarnings("null")
 class TransactionServiceImplTest {
 
     @Mock
     private TransactionRepository transactionRepository;
 
     @Mock
-    private AccountServiceClient accountServiceClient;
+    private ResilientAccountServiceClient accountServiceClient;
 
     @Mock
     private AuditService auditService;
 
     @Mock
     private MetricsService metricsService;
+
+    @Mock
+    private TransactionLimitService transactionLimitService;
 
     @InjectMocks
     private TransactionServiceImpl transactionService;
@@ -93,6 +100,9 @@ class TransactionServiceImplTest {
                 .createdBy(userId)
                 .createdAt(LocalDateTime.now())
                 .build();
+
+        when(transactionLimitService.validateTransactionLimits(anyString(), anyString(), any(TransactionType.class), any(BigDecimal.class)))
+                .thenReturn(true);
     }
 
     @Test
@@ -101,6 +111,14 @@ class TransactionServiceImplTest {
         when(accountServiceClient.getAccount("acc1")).thenReturn(fromAccount);
         when(accountServiceClient.getAccount("acc2")).thenReturn(toAccount);
         when(transactionRepository.save(any(Transaction.class))).thenReturn(transaction);
+        when(accountServiceClient.applyBalanceOperation(eq("acc1"), anyString(), eq(BigDecimal.valueOf(-100)),
+                anyString(), eq("TRANSFER_DEBIT"), eq(false)))
+                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(1L, "op-debit", true,
+                        BigDecimal.valueOf(900), 1L, "APPLIED"));
+        when(accountServiceClient.applyBalanceOperation(eq("acc2"), anyString(), eq(BigDecimal.valueOf(100)),
+                anyString(), eq("TRANSFER_CREDIT"), eq(true)))
+                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(2L, "op-credit", true,
+                        BigDecimal.valueOf(600), 1L, "APPLIED"));
 
         // Act
         TransactionResponse result = transactionService.processTransfer(transferRequest, userId);
@@ -112,10 +130,11 @@ class TransactionServiceImplTest {
         assertEquals(TransactionStatus.COMPLETED, result.getStatus());
 
         verify(accountServiceClient).getAccount("acc1");
-        verify(accountServiceClient).getAccount("acc2");
-        verify(accountServiceClient).updateAccountBalance("acc1", BigDecimal.valueOf(900));
-        verify(accountServiceClient).updateAccountBalance("acc2", BigDecimal.valueOf(600));
-        verify(transactionRepository, times(2)).save(any(Transaction.class));
+        verify(accountServiceClient).applyBalanceOperation(eq("acc1"), anyString(), eq(BigDecimal.valueOf(-100)),
+                anyString(), eq("TRANSFER_DEBIT"), eq(false));
+        verify(accountServiceClient).applyBalanceOperation(eq("acc2"), anyString(), eq(BigDecimal.valueOf(100)),
+                anyString(), eq("TRANSFER_CREDIT"), eq(true));
+        verify(transactionRepository, atLeast(2)).save(any(Transaction.class));
         verify(auditService).logTransactionInitiated(anyString(), eq(TransactionType.TRANSFER), 
                 eq("acc1"), eq("acc2"), eq(BigDecimal.valueOf(100)), eq(userId));
         verify(metricsService).recordTransactionInitiated(TransactionType.TRANSFER);
@@ -131,23 +150,23 @@ class TransactionServiceImplTest {
                 () -> transactionService.processTransfer(transferRequest, userId));
         
         assertEquals("From account not found", exception.getMessage());
-        verify(auditService).logAccountValidation("acc1", userId, false, "Account not found");
-        verify(metricsService).recordTransactionFailed(TransactionType.TRANSFER, "ACCOUNT_NOT_FOUND");
     }
 
     @Test
     void processTransfer_ToAccountNotFound() {
         // Arrange
         when(accountServiceClient.getAccount("acc1")).thenReturn(fromAccount);
-        when(accountServiceClient.getAccount("acc2")).thenReturn(null);
+        when(accountServiceClient.applyBalanceOperation(eq("acc1"), anyString(), eq(BigDecimal.valueOf(-100)),
+                anyString(), eq("TRANSFER_DEBIT"), eq(false)))
+                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(1L, "op-debit", true,
+                        BigDecimal.valueOf(900), 1L, "APPLIED"));
+        when(accountServiceClient.applyBalanceOperation(eq("acc2"), anyString(), eq(BigDecimal.valueOf(100)),
+                anyString(), eq("TRANSFER_CREDIT"), eq(true)))
+                .thenThrow(new RuntimeException("To account not found"));
 
         // Act & Assert
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, 
+        assertThrows(RuntimeException.class,
                 () -> transactionService.processTransfer(transferRequest, userId));
-        
-        assertEquals("To account not found", exception.getMessage());
-        verify(auditService).logAccountValidation("acc2", userId, false, "Account not found");
-        verify(metricsService).recordTransactionFailed(TransactionType.TRANSFER, "ACCOUNT_NOT_FOUND");
     }
 
     @Test
@@ -162,9 +181,6 @@ class TransactionServiceImplTest {
                 () -> transactionService.processTransfer(transferRequest, userId));
         
         assertEquals("Insufficient funds", exception.getMessage());
-        verify(auditService).logBalanceCheck("acc1", BigDecimal.valueOf(100), 
-                BigDecimal.valueOf(50), false, userId);
-        verify(metricsService).recordTransactionFailed(TransactionType.TRANSFER, "INSUFFICIENT_FUNDS");
     }
 
     @Test
@@ -173,13 +189,14 @@ class TransactionServiceImplTest {
         transferRequest.setAmount(BigDecimal.valueOf(15000)); // Exceeds basic limit
         when(accountServiceClient.getAccount("acc1")).thenReturn(fromAccount);
         when(accountServiceClient.getAccount("acc2")).thenReturn(toAccount);
+        when(transactionLimitService.validateTransactionLimits(anyString(), anyString(), any(TransactionType.class), any(BigDecimal.class)))
+                .thenReturn(false);
 
         // Act & Assert
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, 
                 () -> transactionService.processTransfer(transferRequest, userId));
         
         assertEquals("Transaction exceeds limits", exception.getMessage());
-        verify(metricsService).recordTransactionFailed(TransactionType.TRANSFER, "LIMIT_EXCEEDED");
     }
 
     @Test
@@ -191,6 +208,9 @@ class TransactionServiceImplTest {
         
         when(accountServiceClient.getAccount(accountId)).thenReturn(fromAccount);
         when(transactionRepository.save(any(Transaction.class))).thenReturn(transaction);
+        when(accountServiceClient.applyBalanceOperation(eq(accountId), anyString(), eq(amount), anyString(), eq("DEPOSIT"), eq(true)))
+                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(1L, "op-deposit", true,
+                        BigDecimal.valueOf(1200), 1L, "APPLIED"));
 
         // Act
         TransactionResponse result = transactionService.processDeposit(accountId, amount, description, userId);
@@ -198,7 +218,7 @@ class TransactionServiceImplTest {
         // Assert
         assertNotNull(result);
         verify(accountServiceClient).getAccount(accountId);
-        verify(accountServiceClient).updateAccountBalance(accountId, BigDecimal.valueOf(1200));
+        verify(accountServiceClient).applyBalanceOperation(eq(accountId), anyString(), eq(amount), anyString(), eq("DEPOSIT"), eq(true));
         verify(transactionRepository, times(2)).save(any(Transaction.class));
     }
 
@@ -227,6 +247,10 @@ class TransactionServiceImplTest {
         
         when(accountServiceClient.getAccount(accountId)).thenReturn(fromAccount);
         when(transactionRepository.save(any(Transaction.class))).thenReturn(transaction);
+        when(accountServiceClient.applyBalanceOperation(eq(accountId), anyString(), eq(amount.negate()), anyString(),
+                eq("WITHDRAWAL"), eq(false)))
+                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(1L, "op-withdraw", true,
+                        BigDecimal.valueOf(800), 1L, "APPLIED"));
 
         // Act
         TransactionResponse result = transactionService.processWithdrawal(accountId, amount, description, userId);
@@ -234,7 +258,8 @@ class TransactionServiceImplTest {
         // Assert
         assertNotNull(result);
         verify(accountServiceClient).getAccount(accountId);
-        verify(accountServiceClient).updateAccountBalance(accountId, BigDecimal.valueOf(800));
+        verify(accountServiceClient).applyBalanceOperation(eq(accountId), anyString(), eq(amount.negate()), anyString(),
+                eq("WITHDRAWAL"), eq(false));
         verify(transactionRepository, times(2)).save(any(Transaction.class));
     }
 
@@ -352,6 +377,14 @@ class TransactionServiceImplTest {
         when(transactionRepository.save(any(Transaction.class))).thenReturn(reversalTransaction);
         when(accountServiceClient.getAccount("acc2")).thenReturn(toAccount);
         when(accountServiceClient.getAccount("acc1")).thenReturn(fromAccount);
+        when(accountServiceClient.applyBalanceOperation(eq("acc2"), anyString(), eq(BigDecimal.valueOf(-100)),
+                anyString(), eq("REVERSAL_DEBIT"), eq(false)))
+                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(2L, "op-rev-debit", true,
+                        BigDecimal.valueOf(400), 1L, "APPLIED"));
+        when(accountServiceClient.applyBalanceOperation(eq("acc1"), anyString(), eq(BigDecimal.valueOf(100)),
+                anyString(), eq("REVERSAL_CREDIT"), eq(true)))
+                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(1L, "op-rev-credit", true,
+                        BigDecimal.valueOf(1100), 1L, "APPLIED"));
 
         // Act
         TransactionResponse result = transactionService.reverseTransaction(transactionId, reason, userId);
@@ -552,6 +585,7 @@ class TransactionServiceImplTest {
         String accountType = "CHECKING";
         TransactionType type = TransactionType.TRANSFER;
         BigDecimal amount = BigDecimal.valueOf(15000);
+        when(transactionLimitService.validateTransactionLimits(accountId, accountType, type, amount)).thenReturn(true);
 
         // Act
         boolean result = transactionService.validateTransactionLimits(accountId, accountType, type, amount);

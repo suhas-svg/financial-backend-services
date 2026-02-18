@@ -3,20 +3,18 @@ package com.suhasan.finance.transaction_service.performance;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.suhasan.finance.transaction_service.dto.TransferRequest;
 import com.suhasan.finance.transaction_service.dto.DepositRequest;
-import com.suhasan.finance.transaction_service.dto.WithdrawalRequest;
 import com.suhasan.finance.transaction_service.entity.Transaction;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
 import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.repository.TransactionRepository;
-import com.suhasan.finance.transaction_service.service.TransactionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureWebMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
@@ -42,14 +40,16 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        classes = com.suhasan.finance.transaction_service.TransactionServiceApplication.class,
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
+)
 @AutoConfigureWebMvc
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("test")
 @DisplayName("Transaction Performance Tests")
+@SuppressWarnings({"resource", "null"})
 public class TransactionPerformanceTest {
 
     @Container
@@ -81,9 +81,6 @@ public class TransactionPerformanceTest {
     private TransactionRepository transactionRepository;
 
     @Autowired
-    private TransactionService transactionService;
-
-    @Autowired
     private RedisTemplate<String, Object> redisTemplate;
 
     private static final int CONCURRENT_USERS = 50;
@@ -95,7 +92,7 @@ public class TransactionPerformanceTest {
     void setUp() {
         // Clear existing data
         transactionRepository.deleteAll();
-        redisTemplate.getConnectionFactory().getConnection().flushAll();
+        clearRedisCache();
     }
 
     @Test
@@ -239,7 +236,7 @@ public class TransactionPerformanceTest {
                         "account-1", null, null,
                         LocalDateTime.now().minusDays(7), 
                         LocalDateTime.now(),
-                        null, null, null, null,
+                        null, null, null, null, null,
                         org.springframework.data.domain.PageRequest.of(0, 10)));
 
         testQueryPerformance("Find by Status", () -> 
@@ -254,6 +251,8 @@ public class TransactionPerformanceTest {
         var page = transactionRepository.findAll(
                 org.springframework.data.domain.PageRequest.of(0, 100));
         long paginationTime = System.currentTimeMillis() - paginationStart;
+        assertNotNull(page);
+        assertFalse(page.getContent().isEmpty());
         
         System.out.println("Pagination query (100 records): " + paginationTime + "ms");
         assertTrue(paginationTime < 500, "Pagination should be fast even with large dataset");
@@ -424,5 +423,14 @@ public class TransactionPerformanceTest {
         if (sortedList.isEmpty()) return 0;
         int index = (int) Math.ceil(percentile * sortedList.size()) - 1;
         return sortedList.get(Math.max(0, Math.min(index, sortedList.size() - 1)));
+    }
+
+    private void clearRedisCache() {
+        if (redisTemplate.getConnectionFactory() == null) {
+            return;
+        }
+        try (RedisConnection connection = redisTemplate.getConnectionFactory().getConnection()) {
+            connection.serverCommands().flushDb();
+        }
     }
 }
