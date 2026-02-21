@@ -1,0 +1,211 @@
+# Production values for transaction-service
+# Inherits from values.yaml — override production-specific settings here.
+
+replicaCount: 3
+
+image:
+  registry: ghcr.io
+  repository: your-org/transaction-service
+  tag: "latest"
+  pullPolicy: Always
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2 # Keep at least 2 pods up during rolling updates
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 15
+  targetCPUUtilizationPercentage: 65
+  targetMemoryUtilizationPercentage: 75
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+  requests:
+    cpu: 1000m
+    memory: 2Gi
+
+# Stricter health check thresholds for production
+healthChecks:
+  liveness:
+    enabled: true
+    path: /actuator/health/liveness
+    initialDelaySeconds: 90
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    path: /actuator/health/readiness
+    initialDelaySeconds: 60
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  startup:
+    enabled: true
+    path: /actuator/health
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+
+# Security — hardened for production
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+podSecurityContext:
+  fsGroup: 1001
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+
+# Topology spread for HA across zones
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: transaction-service
+        topologyKey: kubernetes.io/hostname
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 50
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: transaction-service
+          topologyKey: topology.kubernetes.io/zone
+
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: "prod"
+  - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+    value: "health,info,prometheus"
+  - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS
+    value: "never"
+  - name: JAVA_OPTS
+    value: >-
+      -XX:+UseContainerSupport
+      -XX:MaxRAMPercentage=75.0
+      -XX:+UseG1GC
+      -XX:+UseStringDeduplication
+      -Djava.security.egd=file:/dev/./urandom
+
+envFrom:
+  - secretRef:
+      name: transaction-service-db-credentials
+  - secretRef:
+      name: transaction-service-jwt-secrets
+  - configMapRef:
+      name: transaction-service-config
+
+# Database (production — external PostgreSQL via Terraform)
+database:
+  enabled: false
+  host: transaction-postgres-prod.internal
+  port: 5432
+  name: transactiondb
+  username: txapp
+  existingSecret: transaction-service-db-credentials
+
+postgresql:
+  enabled: false
+
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring-prod
+      ports:
+        - protocol: TCP
+          port: 8081
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8081
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: account-service
+      ports:
+        - protocol: TCP
+          port: 8081
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: transaction-service-postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: account-service
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to: {}
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+
+monitoring:
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring-prod
+    interval: 15s
+    scrapeTimeout: 10s
+    path: /actuator/prometheus
+    labels:
+      app: transaction-service
+      env: production
+    # H3 fix: provide Prometheus scrape credentials so /actuator/prometheus
+    # can be role-gated (ADMIN/INTERNAL_SERVICE) without breaking Prometheus.
+    # Configure the secret 'transaction-service-prometheus-token' with a valid
+    # internal service JWT before enabling.
+    # authorization:
+    #   type: Bearer
+    #   credentials:
+    #     name: transaction-service-prometheus-token
+    #     key: token
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: api.yourcompany.com
+      paths:
+        - path: /api/transactions
+          pathType: Prefix
+  tls:
+    - secretName: transaction-service-tls
+      hosts:
+        - api.yourcompany.com

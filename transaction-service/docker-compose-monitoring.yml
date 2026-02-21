@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # Transaction Service
@@ -15,7 +15,9 @@ services:
       - REDIS_PORT=6379
       - ACCOUNT_SERVICE_URL=http://account-service:8080
       - ZIPKIN_URL=http://zipkin:9411/api/v2/spans
-      - JWT_SECRET=AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14=
+      # C2 fix: hardcoded literal JWT secret removed.
+      # CRITICAL: rotate AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14= immediately \u2014 it was committed to git.
+      - JWT_SECRET=${JWT_SECRET:?Env var JWT_SECRET must be set}
     depends_on:
       - postgres
       - redis
@@ -64,13 +66,13 @@ services:
       - ./src/main/resources/transaction_service_alerts.yml:/etc/prometheus/transaction_service_alerts.yml
       - prometheus_data:/prometheus
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=30d'
-      - '--web.enable-lifecycle'
-      - '--web.enable-admin-api'
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
     networks:
       - monitoring-network
     depends_on:
@@ -113,9 +115,9 @@ services:
       - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
       - alertmanager_data:/alertmanager
     command:
-      - '--config.file=/etc/alertmanager/alertmanager.yml'
-      - '--storage.path=/alertmanager'
-      - '--web.external-url=http://localhost:9093'
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+      - "--web.external-url=http://localhost:9093"
     networks:
       - monitoring-network
 
@@ -129,10 +131,10 @@ services:
       - /sys:/host/sys:ro
       - /:/rootfs:ro
     command:
-      - '--path.procfs=/host/proc'
-      - '--path.rootfs=/rootfs'
-      - '--path.sysfs=/host/sys'
-      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - "--path.procfs=/host/proc"
+      - "--path.rootfs=/rootfs"
+      - "--path.sysfs=/host/sys"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
     networks:
       - monitoring-network
 

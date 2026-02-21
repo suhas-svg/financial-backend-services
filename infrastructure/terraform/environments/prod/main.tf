@@ -14,9 +14,23 @@ terraform {
     }
   }
 
-  # Remote state configuration for production
-  backend "local" {
-    path = "terraform.tfstate"
+  # H6 fix: remote backend for production state.
+  # Local state (terraform.tfstate) has no locking, no DR backup, and is
+  # inaccessible to other team members or CI runners. Use S3 + DynamoDB
+  # for concurrent-safe, durable state in production.
+  #
+  # Required one-time bootstrap (before first apply):
+  #   aws s3api create-bucket --bucket <TF_STATE_BUCKET> --region <AWS_REGION>
+  #   aws dynamodb create-table --table-name <TF_LOCK_TABLE> \
+  #     --attribute-definitions AttributeName=LockID,AttributeType=S \
+  #     --key-schema AttributeName=LockID,KeyType=HASH \
+  #     --billing-mode PAY_PER_REQUEST
+  backend "s3" {
+    bucket         = var.tf_state_bucket          # e.g. "my-company-tf-state-prod"
+    key            = "financial-services/prod/terraform.tfstate"
+    region         = var.aws_region
+    encrypt        = true
+    dynamodb_table = var.tf_lock_table            # e.g. "terraform-lock-prod"
   }
 }
 

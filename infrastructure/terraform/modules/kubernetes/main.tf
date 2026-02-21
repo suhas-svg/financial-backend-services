@@ -115,7 +115,11 @@ resource "kubernetes_network_policy" "app_network_policy" {
       from {
         namespace_selector {
           match_labels = {
-            name = kubernetes_namespace.app_namespace.metadata[0].name
+            # M3 fix: Kubernetes automatically labels namespaces with
+            # 'kubernetes.io/metadata.name'. The previous label 'name' is
+            # NOT applied automatically and matched nothing — the policy
+            # was silently open to all namespaces.
+            "kubernetes.io/metadata.name" = kubernetes_namespace.app_namespace.metadata[0].name
           }
         }
       }
@@ -130,7 +134,8 @@ resource "kubernetes_network_policy" "app_network_policy" {
       to {
         namespace_selector {
           match_labels = {
-            name = "kube-system"
+            # M3 fix: same correction for kube-system egress rule
+            "kubernetes.io/metadata.name" = "kube-system"
           }
         }
       }

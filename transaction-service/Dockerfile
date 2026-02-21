@@ -39,12 +39,12 @@ COPY --from=builder --chown=appuser:appgroup /app/target/*.jar app.jar
 # Switch to app user
 USER appuser
 
-# Expose ports
-EXPOSE 8081 9002
+# Expose application port only
+EXPOSE 8081
 
-# Health check
+# Health check — uses the actual application port (H4 fix: was incorrectly 9002)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:9002/actuator/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8081/actuator/health || exit 1
 
 # JVM optimization arguments for production
 ENV JAVA_OPTS="-XX:+UseContainerSupport \

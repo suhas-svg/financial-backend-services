@@ -29,184 +29,193 @@ import static org.mockito.Mockito.*;
 @SuppressWarnings("null")
 class TransactionServiceReversalTest {
 
-    @Mock
-    private TransactionRepository transactionRepository;
+        @Mock
+        private TransactionRepository transactionRepository;
 
-    @Mock
-    private ResilientAccountServiceClient accountServiceClient;
+        @Mock
+        private ResilientAccountServiceClient accountServiceClient;
 
-    @Mock
-    private AuditService auditService;
+        @Mock
+        private AuditService auditService;
 
-    @Mock
-    private MetricsService metricsService;
+        @Mock
+        private MetricsService metricsService;
 
-    @Mock
-    private TransactionLimitService transactionLimitService;
+        @Mock
+        private TransactionLimitService transactionLimitService;
 
-    @InjectMocks
-    private TransactionServiceImpl transactionService;
+        @InjectMocks
+        private TransactionServiceImpl transactionService;
 
-    private Transaction originalTransaction;
+        private Transaction originalTransaction;
 
-    @BeforeEach
-    void setUp() {
-        originalTransaction = Transaction.builder()
-                .transactionId("original-tx-123")
-                .fromAccountId("account-1")
-                .toAccountId("account-2")
-                .amount(new BigDecimal("100.00"))
-                .currency("USD")
-                .type(TransactionType.TRANSFER)
-                .status(TransactionStatus.COMPLETED)
-                .description("Test transfer")
-                .createdAt(LocalDateTime.now().minusHours(1))
-                .createdBy("user-123")
-                .build();
+        @BeforeEach
+        void setUp() {
+                originalTransaction = Transaction.builder()
+                                .transactionId("original-tx-123")
+                                .fromAccountId("account-1")
+                                .toAccountId("account-2")
+                                .amount(new BigDecimal("100.00"))
+                                .currency("USD")
+                                .type(TransactionType.TRANSFER)
+                                .status(TransactionStatus.COMPLETED)
+                                .description("Test transfer")
+                                .createdAt(LocalDateTime.now().minusHours(1))
+                                .createdBy("user-123")
+                                .build();
+        }
 
-    }
+        @Test
+        void testReverseTransaction_Success() {
+                // Arrange — C1b fix: reversal now uses findByIdWithLock (pessimistic SELECT FOR
+                // UPDATE)
+                when(transactionRepository.findByIdWithLock("original-tx-123"))
+                                .thenReturn(Optional.of(originalTransaction));
+                when(transactionRepository.isTransactionReversed("original-tx-123"))
+                                .thenReturn(false);
+                when(accountServiceClient.applyBalanceOperation(eq("account-2"), anyString(),
+                                eq(new BigDecimal("-100.00")),
+                                anyString(), eq("REVERSAL_DEBIT"), eq(false)))
+                                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(
+                                                2L, "rev-debit", true, new BigDecimal("400.00"), 1L, "APPLIED"));
+                when(accountServiceClient.applyBalanceOperation(eq("account-1"), anyString(),
+                                eq(new BigDecimal("100.00")),
+                                anyString(), eq("REVERSAL_CREDIT"), eq(true)))
+                                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(
+                                                1L, "rev-credit", true, new BigDecimal("300.00"), 1L, "APPLIED"));
+                when(transactionRepository.save(any(Transaction.class)))
+                                .thenAnswer(invocation -> {
+                                        Transaction tx = invocation.getArgument(0);
+                                        if (tx.getTransactionId() == null) {
+                                                tx.setTransactionId("reversal-tx-456");
+                                        }
+                                        return tx;
+                                });
 
-    @Test
-    void testReverseTransaction_Success() {
-        // Arrange
-        when(transactionRepository.findById("original-tx-123"))
-                .thenReturn(Optional.of(originalTransaction));
-        when(transactionRepository.isTransactionReversed("original-tx-123"))
-                .thenReturn(false);
-        when(accountServiceClient.applyBalanceOperation(eq("account-2"), anyString(), eq(new BigDecimal("-100.00")),
-                anyString(), eq("REVERSAL_DEBIT"), eq(false)))
-                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(
-                        2L, "rev-debit", true, new BigDecimal("400.00"), 1L, "APPLIED"));
-        when(accountServiceClient.applyBalanceOperation(eq("account-1"), anyString(), eq(new BigDecimal("100.00")),
-                anyString(), eq("REVERSAL_CREDIT"), eq(true)))
-                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(
-                        1L, "rev-credit", true, new BigDecimal("300.00"), 1L, "APPLIED"));
-        when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction tx = invocation.getArgument(0);
-                    if (tx.getTransactionId() == null) {
-                        tx.setTransactionId("reversal-tx-456");
-                    }
-                    return tx;
-                });
+                // Act — C1b fix: now includes idempotencyKey parameter
+                TransactionResponse result = transactionService.reverseTransaction(
+                                "original-tx-123", "Customer request", "admin-user", null);
 
-        // Act
-        TransactionResponse result = transactionService.reverseTransaction(
-                "original-tx-123", "Customer request", "admin-user");
+                // Assert
+                assertNotNull(result);
+                assertEquals(TransactionType.REVERSAL, result.getType());
+                assertEquals("original-tx-123", result.getOriginalTransactionId());
+                assertEquals("Customer request", result.getReversalReason());
+                assertEquals("admin-user", result.getCreatedBy());
+                assertEquals(new BigDecimal("100.00"), result.getAmount());
+                assertEquals("account-2", result.getFromAccountId()); // Reversed
+                assertEquals("account-1", result.getToAccountId()); // Reversed
 
-        // Assert
-        assertNotNull(result);
-        assertEquals(TransactionType.REVERSAL, result.getType());
-        assertEquals("original-tx-123", result.getOriginalTransactionId());
-        assertEquals("Customer request", result.getReversalReason());
-        assertEquals("admin-user", result.getCreatedBy());
-        assertEquals(new BigDecimal("100.00"), result.getAmount());
-        assertEquals("account-2", result.getFromAccountId()); // Reversed
-        assertEquals("account-1", result.getToAccountId()); // Reversed
+                // Verify account balance operations were called
+                verify(accountServiceClient).applyBalanceOperation(eq("account-2"), anyString(),
+                                eq(new BigDecimal("-100.00")),
+                                anyString(), eq("REVERSAL_DEBIT"), eq(false));
+                verify(accountServiceClient).applyBalanceOperation(eq("account-1"), anyString(),
+                                eq(new BigDecimal("100.00")),
+                                anyString(), eq("REVERSAL_CREDIT"), eq(true));
 
-        // Verify account balance operations were called
-        verify(accountServiceClient).applyBalanceOperation(eq("account-2"), anyString(), eq(new BigDecimal("-100.00")),
-                anyString(), eq("REVERSAL_DEBIT"), eq(false));
-        verify(accountServiceClient).applyBalanceOperation(eq("account-1"), anyString(), eq(new BigDecimal("100.00")),
-                anyString(), eq("REVERSAL_CREDIT"), eq(true));
+                // Verify transactions were saved
+                verify(transactionRepository, times(3)).save(any(Transaction.class));
 
-        // Verify transactions were saved
-        verify(transactionRepository, times(3)).save(any(Transaction.class));
-    }
+                // C1b fix: locking overload was used, NOT plain findById
+                verify(transactionRepository).findByIdWithLock("original-tx-123");
+                verify(transactionRepository, never()).findById("original-tx-123");
+        }
 
-    @Test
-    void testReverseTransaction_AlreadyReversed() {
-        // Arrange
-        when(transactionRepository.findById("original-tx-123"))
-                .thenReturn(Optional.of(originalTransaction));
-        when(transactionRepository.isTransactionReversed("original-tx-123"))
-                .thenReturn(true);
+        @Test
+        void testReverseTransaction_AlreadyReversed() {
+                // Arrange — C1b fix: uses findByIdWithLock
+                when(transactionRepository.findByIdWithLock("original-tx-123"))
+                                .thenReturn(Optional.of(originalTransaction));
+                when(transactionRepository.isTransactionReversed("original-tx-123"))
+                                .thenReturn(true);
 
-        // Act & Assert
-        TransactionAlreadyReversedException exception = assertThrows(
-                TransactionAlreadyReversedException.class,
-                () -> transactionService.reverseTransaction("original-tx-123", "Test reason", "admin-user")
-        );
+                // Act & Assert
+                TransactionAlreadyReversedException exception = assertThrows(
+                                TransactionAlreadyReversedException.class,
+                                () -> transactionService.reverseTransaction("original-tx-123", "Test reason",
+                                                "admin-user", null));
 
-        assertEquals("original-tx-123", exception.getTransactionId());
-        assertTrue(exception.getMessage().contains("already been reversed"));
+                assertEquals("original-tx-123", exception.getTransactionId());
+                assertTrue(exception.getMessage().contains("already been reversed"));
 
-        // Verify no account updates were attempted
-        verify(accountServiceClient, never()).applyBalanceOperation(anyString(), anyString(), any(BigDecimal.class),
-                anyString(), anyString(), anyBoolean());
-    }
+                // Verify no account updates were attempted
+                verify(accountServiceClient, never()).applyBalanceOperation(anyString(), anyString(),
+                                any(BigDecimal.class),
+                                anyString(), anyString(), anyBoolean());
+        }
 
-    @Test
-    void testReverseTransaction_TransactionNotFound() {
-        // Arrange
-        when(transactionRepository.findById("non-existent-tx"))
-                .thenReturn(Optional.empty());
+        @Test
+        void testReverseTransaction_TransactionNotFound() {
+                // Arrange — C1b fix: uses findByIdWithLock, so we mock that overload
+                when(transactionRepository.findByIdWithLock("non-existent-tx"))
+                                .thenReturn(Optional.empty());
 
-        // Act & Assert
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> transactionService.reverseTransaction("non-existent-tx", "Test reason", "admin-user")
-        );
+                // Act & Assert
+                IllegalArgumentException exception = assertThrows(
+                                IllegalArgumentException.class,
+                                () -> transactionService.reverseTransaction("non-existent-tx", "Test reason",
+                                                "admin-user", null));
 
-        assertTrue(exception.getMessage().contains("Transaction not found"));
-    }
+                assertTrue(exception.getMessage().contains("Transaction not found"));
+        }
 
-    @Test
-    void testReverseTransaction_CannotReverseNonCompletedTransaction() {
-        // Arrange
-        originalTransaction.setStatus(TransactionStatus.PENDING);
-        when(transactionRepository.findById("original-tx-123"))
-                .thenReturn(Optional.of(originalTransaction));
+        @Test
+        void testReverseTransaction_CannotReverseNonCompletedTransaction() {
+                // Arrange
+                originalTransaction.setStatus(TransactionStatus.PENDING);
+                when(transactionRepository.findByIdWithLock("original-tx-123"))
+                                .thenReturn(Optional.of(originalTransaction));
 
-        // Act & Assert
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> transactionService.reverseTransaction("original-tx-123", "Test reason", "admin-user")
-        );
+                // Act & Assert
+                IllegalArgumentException exception = assertThrows(
+                                IllegalArgumentException.class,
+                                () -> transactionService.reverseTransaction("original-tx-123", "Test reason",
+                                                "admin-user", null));
 
-        assertTrue(exception.getMessage().contains("Can only reverse completed transactions"));
-    }
+                assertTrue(exception.getMessage().contains("Can only reverse completed transactions"));
+        }
 
-    @Test
-    void testReverseTransaction_CannotReverseReversalTransaction() {
-        // Arrange
-        originalTransaction.setType(TransactionType.REVERSAL);
-        when(transactionRepository.findById("original-tx-123"))
-                .thenReturn(Optional.of(originalTransaction));
+        @Test
+        void testReverseTransaction_CannotReverseReversalTransaction() {
+                // Arrange
+                originalTransaction.setType(TransactionType.REVERSAL);
+                when(transactionRepository.findByIdWithLock("original-tx-123"))
+                                .thenReturn(Optional.of(originalTransaction));
 
-        // Act & Assert
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> transactionService.reverseTransaction("original-tx-123", "Test reason", "admin-user")
-        );
+                // Act & Assert
+                IllegalArgumentException exception = assertThrows(
+                                IllegalArgumentException.class,
+                                () -> transactionService.reverseTransaction("original-tx-123", "Test reason",
+                                                "admin-user", null));
 
-        assertTrue(exception.getMessage().contains("Cannot reverse a reversal transaction"));
-    }
+                assertTrue(exception.getMessage().contains("Cannot reverse a reversal transaction"));
+        }
 
-    @Test
-    void testReverseTransaction_TooOldTransaction() {
-        // Arrange
-        originalTransaction.setCreatedAt(LocalDateTime.now().minusDays(35)); // Older than 30 days
-        when(transactionRepository.findById("original-tx-123"))
-                .thenReturn(Optional.of(originalTransaction));
+        @Test
+        void testReverseTransaction_TooOldTransaction() {
+                // Arrange
+                originalTransaction.setCreatedAt(LocalDateTime.now().minusDays(35)); // Older than 30 days
+                when(transactionRepository.findByIdWithLock("original-tx-123"))
+                                .thenReturn(Optional.of(originalTransaction));
 
-        // Act & Assert
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> transactionService.reverseTransaction("original-tx-123", "Test reason", "admin-user")
-        );
+                // Act & Assert
+                IllegalArgumentException exception = assertThrows(
+                                IllegalArgumentException.class,
+                                () -> transactionService.reverseTransaction("original-tx-123", "Test reason",
+                                                "admin-user", null));
 
-        assertTrue(exception.getMessage().contains("Cannot reverse transactions older than 30 days"));
-    }
+                assertTrue(exception.getMessage().contains("Cannot reverse transactions older than 30 days"));
+        }
 
-    @Test
-    void testIsTransactionReversed() {
-        // Arrange
-        when(transactionRepository.isTransactionReversed("tx-123")).thenReturn(true);
-        when(transactionRepository.isTransactionReversed("tx-456")).thenReturn(false);
+        @Test
+        void testIsTransactionReversed() {
+                // Arrange
+                when(transactionRepository.isTransactionReversed("tx-123")).thenReturn(true);
+                when(transactionRepository.isTransactionReversed("tx-456")).thenReturn(false);
 
-        // Act & Assert
-        assertTrue(transactionService.isTransactionReversed("tx-123"));
-        assertFalse(transactionService.isTransactionReversed("tx-456"));
-    }
+                // Act & Assert
+                assertTrue(transactionService.isTransactionReversed("tx-123"));
+                assertFalse(transactionService.isTransactionReversed("tx-456"));
+        }
 }

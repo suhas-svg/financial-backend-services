@@ -30,7 +30,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
     ports:
-      - "5432:5432"
+      # M1 fix: bind only to localhost — DB must NOT be reachable from outside the host
+      - "127.0.0.1:5432:5432"
     volumes:
       - account_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -53,7 +54,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
     ports:
-      - "5433:5432"
+      # M1 fix: bind only to localhost — DB must NOT be reachable from outside the host
+      - "127.0.0.1:5433:5432"
     volumes:
       - transaction_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -87,8 +89,10 @@ services:
       JAVA_OPTS: -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+UseStringDeduplication
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
       LOGGING_LEVEL_ROOT: INFO
-      JWT_SECRET: ${JWT_SECRET:-DevJwtSecretKeyForLocalRuntimeValidation123456}
-      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:-DevInternalJwtSecretForLocalRuntimeValidation123456}
+      # C2 fix: removed :-fallback defaults. Services MUST fail loudly at startup
+      # if secrets are not injected. Use a secrets manager or .env file in CI/CD.
+      JWT_SECRET: ${JWT_SECRET:?Env var JWT_SECRET must be set — no default allowed in production}
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?Env var INTERNAL_JWT_SECRET must be set — no default allowed in production}
     depends_on:
       account-postgres:
         condition: service_healthy
@@ -127,8 +131,10 @@ services:
       JAVA_OPTS: -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+UseStringDeduplication
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
       LOGGING_LEVEL_ROOT: INFO
-      JWT_SECRET: ${JWT_SECRET:-DevJwtSecretKeyForLocalRuntimeValidation123456}
-      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:-DevInternalJwtSecretForLocalRuntimeValidation123456}
+      # C2 fix: removed :-fallback defaults. Services MUST fail loudly at startup
+      # if secrets are not injected. Use a secrets manager or .env file in CI/CD.
+      JWT_SECRET: ${JWT_SECRET:?Env var JWT_SECRET must be set — no default allowed in production}
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?Env var INTERNAL_JWT_SECRET must be set — no default allowed in production}
     depends_on:
       transaction-postgres:
         condition: service_healthy

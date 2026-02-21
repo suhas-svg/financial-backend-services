@@ -1,0 +1,69 @@
+﻿FullSystemIntegrationE2ETest::
+org.testcontainers.containers.ContainerLaunchException: Container startup failed for image account-service:latest
+	at org.testcontainers.containers.GenericContainer.doStart(GenericContainer.java:351)
+	at org.testcontainers.containers.GenericContainer.start(GenericContainer.java:322)
+	at org.testcontainers.junit.jupiter.TestcontainersExtension$StoreAdapter.start(TestcontainersExtension.java:276)
+	at org.testcontainers.junit.jupiter.TestcontainersExtension$StoreAdapter.access$200(TestcontainersExtension.java:263)
+	at org.testcontainers.junit.jupiter.TestcontainersExtension.lambda$null$4(Testcont
+TransactionWorkflowE2ETest::shouldHandleTransactionReversalWorkflow
+org.springframework.web.client.RestClientException: Error while extracting response for type [class com.suhasan.finance.transaction_service.dto.TransactionResponse] and content type [application/json]
+	at org.springframework.web.client.HttpMessageConverterExtractor.extractData(HttpMessageConverterExtractor.java:127)
+	at org.springframework.web.client.RestTemplate$ResponseEntityResponseExtractor.extractData(RestTemplate.java:1183)
+	at org.springframework.web.client.RestTemplate$ResponseEntityResponseExtractor.extractData(RestTemplate.java:1166)
+	at org.springframework.web.client.RestTemplate.do
+TransactionReversalIntegrationTest::shouldRejectReversalWhenAccountServiceUnavailable
+org.opentest4j.AssertionFailedError: 
+
+expected: 503 SERVICE_UNAVAILABLE
+ but was: 500 INTERNAL_SERVER_ERROR
+	at com.suhasan.finance.transaction_service.integration.TransactionReversalIntegrationTest.shouldRejectReversalWhenAccountServiceUnavailable(TransactionReversalIntegrationTest.java:290)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+
+TransactionReversalIntegrationTest::shouldReverseDepositTransactionSuccessfully
+org.springframework.web.client.RestClientException: Error while extracting response for type [class com.suhasan.finance.transaction_service.dto.TransactionResponse] and content type [application/json]
+	at org.springframework.web.client.HttpMessageConverterExtractor.extractData(HttpMessageConverterExtractor.java:127)
+	at org.springframework.web.client.RestTemplate$ResponseEntityResponseExtractor.extractData(RestTemplate.java:1183)
+	at org.springframework.web.client.RestTemplate$ResponseEntityResponseExtractor.extractData(RestTemplate.java:1166)
+	at org.springframework.web.client.RestTemplate.do
+TransactionReversalIntegrationTest::shouldRejectDuplicateReversal
+org.springframework.web.client.RestClientException: Error while extracting response for type [class com.suhasan.finance.transaction_service.dto.TransactionResponse] and content type [application/json]
+	at org.springframework.web.client.HttpMessageConverterExtractor.extractData(HttpMessageConverterExtractor.java:127)
+	at org.springframework.web.client.RestTemplate$ResponseEntityResponseExtractor.extractData(RestTemplate.java:1183)
+	at org.springframework.web.client.RestTemplate$ResponseEntityResponseExtractor.extractData(RestTemplate.java:1166)
+	at org.springframework.web.client.RestTemplate.do
+TransactionReversalIntegrationTest::shouldReverseWithdrawalTransactionSuccessfully
+org.springframework.web.client.RestClientException: Error while extracting response for type [class com.suhasan.finance.transaction_service.dto.TransactionResponse] and content type [application/json]
+	at org.springframework.web.client.HttpMessageConverterExtractor.extractData(HttpMessageConverterExtractor.java:127)
+	at org.springframework.web.client.RestTemplate$ResponseEntityResponseExtractor.extractData(RestTemplate.java:1183)
+	at org.springframework.web.client.RestTemplate$ResponseEntityResponseExtractor.extractData(RestTemplate.java:1166)
+	at org.springframework.web.client.RestTemplate.do
+TransactionReversalIntegrationTest::shouldReverseTransferTransactionSuccessfully
+org.springframework.web.client.RestClientException: Error while extracting response for type [class com.suhasan.finance.transaction_service.dto.TransactionResponse] and content type [application/json]
+	at org.springframework.web.client.HttpMessageConverterExtractor.extractData(HttpMessageConverterExtractor.java:127)
+	at org.springframework.web.client.RestTemplate$ResponseEntityResponseExtractor.extractData(RestTemplate.java:1183)
+	at org.springframework.web.client.RestTemplate$ResponseEntityResponseExtractor.extractData(RestTemplate.java:1166)
+	at org.springframework.web.client.RestTemplate.do
+TransactionReversalIntegrationTest::shouldRejectReversalOfNonexistentTransaction
+org.opentest4j.AssertionFailedError: 
+
+expected: 400 BAD_REQUEST
+ but was: 500 INTERNAL_SERVER_ERROR
+	at com.suhasan.finance.transaction_service.integration.TransactionReversalIntegrationTest.shouldRejectReversalOfNonexistentTransaction(TransactionReversalIntegrationTest.java:208)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1597)
+
+IdempotencyAndReversalTest$DepositIdempotency::deposit_DataIntegrityViolation_ReturnsExistingTransaction
+java.lang.RuntimeException: Deposit failed: Cannot invoke "com.suhasan.finance.transaction_service.client.ResilientAccountServiceClient$BalanceOperationResponse.getNewBalance()" because "response" is null
+	at com.suhasan.finance.transaction_service.service.TransactionServiceImpl.processDeposit(TransactionServiceImpl.java:250)
+	at com.suhasan.finance.transaction_service.service.IdempotencyAndReversalTest$DepositIdempotency.deposit_DataIntegrityViolation_ReturnsExistingTransaction(IdempotencyAndReversalTest.java:266)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/ja
+IdempotencyAndReversalTest$TransferIdempotency::transfer_DataIntegrityViolation_ReturnsExistingTransaction
+java.lang.RuntimeException: Transfer failed: Cannot invoke "com.suhasan.finance.transaction_service.client.ResilientAccountServiceClient$BalanceOperationResponse.getNewBalance()" because "creditResult" is null
+	at com.suhasan.finance.transaction_service.service.TransactionServiceImpl.processTransfer(TransactionServiceImpl.java:180)
+	at com.suhasan.finance.transaction_service.service.IdempotencyAndReversalTest$TransferIdempotency.transfer_DataIntegrityViolation_ReturnsExistingTransaction(IdempotencyAndReversalTest.java:160)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java

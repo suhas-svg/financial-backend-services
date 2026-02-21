@@ -1,0 +1,59 @@
+﻿=== com.suhasan.finance.transaction_service.e2e.FullSystemIntegrationE2ETest ===
+FAIL: 
+org.testcontainers.containers.ContainerLaunchException: Container startup failed for image account-service:latest
+	at org.testcontainers.containers.GenericContainer.doStart(GenericContainer.java:351)
+	at org.testcontainers.containers.GenericContainer.start(GenericContainer.java:322)
+	at org.testcontainers.junit.jupiter.TestcontainersExtension$StoreAdapter.start(TestcontainersExtension.java:276)
+	a
+=== com.suhasan.finance.transaction_service.e2e.TransactionWorkflowE2ETest ===
+FAIL: shouldHandleTransactionReversalWorkflow
+org.springframework.web.client.RestClientException: Error while extracting response for type [class com.suhasan.finance.transaction_service.dto.TransactionResponse] and content type [application/json]
+	at org.springframework.web.client.HttpMessageConverterExtractor.extractData(HttpMessageConverterExtractor.java:127)
+	at org.springframework.web.client.RestTemplate$ResponseEntityResponseExtractor.ex
+=== com.suhasan.finance.transaction_service.integration.TransactionReversalIntegrationTest ===
+FAIL: shouldRejectReversalWhenAccountServiceUnavailable
+org.opentest4j.AssertionFailedError: 
+
+expected: 503 SERVICE_UNAVAILABLE
+ but was: 500 INTERNAL_SERVER_ERROR
+	at com.suhasan.finance.transaction_service.integration.TransactionReversalIntegrationTest.shouldRejectReversalWhenAccountServiceUnavailable(TransactionReversalIntegrationTest.java:290)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(
+FAIL: shouldReverseDepositTransactionSuccessfully
+org.springframework.web.client.RestClientException: Error while extracting response for type [class com.suhasan.finance.transaction_service.dto.TransactionResponse] and content type [application/json]
+	at org.springframework.web.client.HttpMessageConverterExtractor.extractData(HttpMessageConverterExtractor.java:127)
+	at org.springframework.web.client.RestTemplate$ResponseEntityResponseExtractor.ex
+FAIL: shouldRejectDuplicateReversal
+org.springframework.web.client.RestClientException: Error while extracting response for type [class com.suhasan.finance.transaction_service.dto.TransactionResponse] and content type [application/json]
+	at org.springframework.web.client.HttpMessageConverterExtractor.extractData(HttpMessageConverterExtractor.java:127)
+	at org.springframework.web.client.RestTemplate$ResponseEntityResponseExtractor.ex
+FAIL: shouldReverseWithdrawalTransactionSuccessfully
+org.springframework.web.client.RestClientException: Error while extracting response for type [class com.suhasan.finance.transaction_service.dto.TransactionResponse] and content type [application/json]
+	at org.springframework.web.client.HttpMessageConverterExtractor.extractData(HttpMessageConverterExtractor.java:127)
+	at org.springframework.web.client.RestTemplate$ResponseEntityResponseExtractor.ex
+FAIL: shouldReverseTransferTransactionSuccessfully
+org.springframework.web.client.RestClientException: Error while extracting response for type [class com.suhasan.finance.transaction_service.dto.TransactionResponse] and content type [application/json]
+	at org.springframework.web.client.HttpMessageConverterExtractor.extractData(HttpMessageConverterExtractor.java:127)
+	at org.springframework.web.client.RestTemplate$ResponseEntityResponseExtractor.ex
+FAIL: shouldRejectReversalOfNonexistentTransaction
+org.opentest4j.AssertionFailedError: 
+
+expected: 400 BAD_REQUEST
+ but was: 500 INTERNAL_SERVER_ERROR
+	at com.suhasan.finance.transaction_service.integration.TransactionReversalIntegrationTest.shouldRejectReversalOfNonexistentTransaction(TransactionReversalIntegrationTest.java:208)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.jav
+=== com.suhasan.finance.transaction_service.service.IdempotencyAndReversalTest$DepositIdempotency ===
+FAIL: deposit_DataIntegrityViolation_ReturnsExistingTransaction
+org.springframework.dao.DataIntegrityViolationException: uk_transaction_idempotency_key violation
+	at com.suhasan.finance.transaction_service.service.IdempotencyAndReversalTest$DepositIdempotency.lambda$deposit_DataIntegrityViolation_ReturnsExistingTransaction$0(IdempotencyAndReversalTest.java:247)
+	at org.mockito.internal.stubbing.StubbedInvocationMatcher.answer(StubbedInvocationMatcher.java:42)
+
+=== com.suhasan.finance.transaction_service.service.IdempotencyAndReversalTest$TransferIdempotency ===
+FAIL: transfer_DataIntegrityViolation_ReturnsExistingTransaction
+org.springframework.dao.DataIntegrityViolationException: duplicate key value violates unique constraint uk_transaction_idempotency_key
+	at com.suhasan.finance.transaction_service.service.IdempotencyAndReversalTest$TransferIdempotency.lambda$transfer_DataIntegrityViolation_ReturnsExistingTransaction$0(IdempotencyAndReversalTest.java:147)
+	at org.mockito.internal.stubbing.StubbedInvocationMatcher.an
+=== com.suhasan.finance.transaction_service.service.TransactionHistoryServiceTest ===
+FAIL: testSearchTransactions
+java.lang.NullPointerException: Cannot invoke "org.springframework.data.domain.Page.map(java.util.function.Function)" because the return value of "com.suhasan.finance.transaction_service.repository.TransactionRepository.findTransactionsWithFilters(String, com.suhasan.finance.transaction_service.entity.TransactionType, com.suhasan.finance.transaction_service.entity.TransactionStatus, java.time.Loca

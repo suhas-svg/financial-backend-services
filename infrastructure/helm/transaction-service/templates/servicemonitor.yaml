@@ -1,0 +1,32 @@
+{{- if .Values.monitoring.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "transaction-service.fullname" . }}
+  namespace: {{ .Values.monitoring.serviceMonitor.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "transaction-service.labels" . | nindent 4 }}
+    {{- with .Values.monitoring.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "transaction-service.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: {{ .Values.monitoring.serviceMonitor.path }}
+      interval: {{ .Values.monitoring.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.monitoring.serviceMonitor.scrapeTimeout }}
+      # H3 note: Prometheus scrape auth should be configured via basicAuth or
+      # bearerTokenSecret when the /actuator/prometheus endpoint requires
+      # ADMIN/INTERNAL_SERVICE role. Configure via values.yaml:
+      #   monitoring.serviceMonitor.authorization.credentials.key
+      {{- if .Values.monitoring.serviceMonitor.authorization }}
+      authorization:
+        {{- toYaml .Values.monitoring.serviceMonitor.authorization | nindent 8 }}
+      {{- end }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+{{- end }}

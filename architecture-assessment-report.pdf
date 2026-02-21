@@ -1,0 +1,558 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 5 /Kids [5 0 R 7 0 R 9 0 R 11 0 R 13 0 R] >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Length 2601 >>
+stream
+BT
+/F1 11 Tf
+14 TL
+50 742 Td
+(Financial Backend Microservices Architecture Assessment) Tj
+T*
+(Date: February 19, 2026) Tj
+T*
+(Project Path: C:\\Users\\super\\Desktop\\project3) Tj
+T*
+() Tj
+T*
+(Executive Summary) Tj
+T*
+(The project is partially production-ready, but it is not intact yet for a payment-grade) Tj
+T*
+(microservice architecture.) Tj
+T*
+(The main blockers are financial consistency under concurrency, secret management, and) Tj
+T*
+(release/infrastructure consistency.) Tj
+T*
+() Tj
+T*
+(Review Scope) Tj
+T*
+(- Account service, transaction service, shared deployment assets) Tj
+T*
+(- Security model, DB migrations, transactional behavior) Tj
+T*
+(- Docker and docker-compose production paths) Tj
+T*
+(- CI workflows, Helm, and Terraform) Tj
+T*
+(- Build and test execution validation) Tj
+T*
+() Tj
+T*
+(Validation Run Results) Tj
+T*
+(1. account-service compile: PASSED) Tj
+T*
+(2. transaction-service compile: PASSED) Tj
+T*
+(3. account-service tests \(-DskipITs\): PASSED) Tj
+T*
+(4. transaction-service tests \(full suite\): PASSED) Tj
+T*
+(5. CI-referenced transaction hardening target: FAILED \(missing class\)) Tj
+T*
+() Tj
+T*
+(Critical Findings) Tj
+T*
+(1. Idempotency is not atomic for payment operations.) Tj
+T*
+(   - Evidence:) Tj
+T*
+(     -) Tj
+T*
+(       transaction-service/src/main/java/com/suhasan/finance/transaction_service/service/TransactionServiceImpl.java:59) Tj
+T*
+(     -) Tj
+T*
+(       transaction-service/src/main/java/com/suhasan/finance/transaction_service/service/TransactionServiceImpl.java:98) Tj
+T*
+(     -) Tj
+T*
+(       transaction-service/src/main/java/com/suhasan/finance/transaction_service/repository/TransactionRepository.java:29) Tj
+T*
+(     -) Tj
+T*
+(       transaction-service/src/main/resources/db/migration/V6__add_idempotency_and_processing_state.sql:67) Tj
+T*
+(   - Impact:) Tj
+T*
+(     - Concurrent duplicates can both pass check-then-insert and double-apply funds.) Tj
+T*
+(   - Recommendation:) Tj
+T*
+(     - Enforce DB unique constraint for idempotency scope and treat duplicate-key as) Tj
+T*
+(       idempotent replay.) Tj
+T*
+() Tj
+T*
+(2. Reversal flow can race and allow duplicate reversals.) Tj
+T*
+(   - Evidence:) Tj
+T*
+(     -) Tj
+T*
+(       transaction-service/src/main/java/com/suhasan/finance/transaction_service/service/TransactionServiceImpl.java:351) Tj
+T*
+(     -) Tj
+T*
+(       transaction-service/src/main/java/com/suhasan/finance/transaction_service/service/TransactionServiceImpl.java:362) Tj
+T*
+(     -) Tj
+T*
+(       transaction-service/src/main/java/com/suhasan/finance/transaction_service/repository/TransactionRepository.java:90) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Length 2201 >>
+stream
+BT
+/F1 11 Tf
+14 TL
+50 742 Td
+(   - Impact:) Tj
+T*
+(     - Multiple reversal transactions may be created for the same original transaction.) Tj
+T*
+(   - Recommendation:) Tj
+T*
+(     - Add DB uniqueness on original_transaction_id for reversal type and lock original) Tj
+T*
+(       row in reversal flow.) Tj
+T*
+() Tj
+T*
+(3. Secret handling is unsafe in active runtime configs.) Tj
+T*
+(   - Evidence:) Tj
+T*
+(     - docker-compose.yml:90) Tj
+T*
+(     - docker-compose.yml:91) Tj
+T*
+(     - docker-compose.yml:130) Tj
+T*
+(     - docker-compose.yml:131) Tj
+T*
+(     - transaction-service/docker-compose-monitoring.yml:18) Tj
+T*
+(   - Impact:) Tj
+T*
+(     - Default/fallback secrets and committed secret values violate payment-system) Tj
+T*
+(       security requirements.) Tj
+T*
+(   - Recommendation:) Tj
+T*
+(     - Remove fallbacks, require injected secrets, and rotate exposed values immediately.) Tj
+T*
+() Tj
+T*
+(High Findings) Tj
+T*
+(4. CI gate references a missing test and fails.) Tj
+T*
+(   - Evidence:) Tj
+T*
+(     - .github/workflows/ci-cd-pipeline.yml:94) Tj
+T*
+(   - Impact:) Tj
+T*
+(     - Pipeline quality gate is unreliable.) Tj
+T*
+(   - Recommendation:) Tj
+T*
+(     - Update workflow target to an existing test class or add missing class.) Tj
+T*
+() Tj
+T*
+(5. CI policy scan conflicts with committed config.) Tj
+T*
+(   - Evidence:) Tj
+T*
+(     - .github/workflows/ci-cd-pipeline.yml:41) Tj
+T*
+(     - transaction-service/docker-compose-monitoring.yml:18) Tj
+T*
+(   - Impact:) Tj
+T*
+(     - Security policy consistency is broken.) Tj
+T*
+(   - Recommendation:) Tj
+T*
+(     - Remove hardcoded secret and align scanning scope with active deployment files.) Tj
+T*
+() Tj
+T*
+(6. Transaction service Docker healthcheck uses wrong port.) Tj
+T*
+(   - Evidence:) Tj
+T*
+(     - transaction-service/Dockerfile:47 \(checks 9002\)) Tj
+T*
+(     - transaction-service/src/main/resources/application.properties:3 \(service on 8081\)) Tj
+T*
+(   - Impact:) Tj
+T*
+(     - Container may appear unhealthy despite healthy app.) Tj
+T*
+(   - Recommendation:) Tj
+T*
+(     - Point healthcheck to actual management/app port.) Tj
+T*
+() Tj
+T*
+(7. Transaction search is not scalable.) Tj
+T*
+(   - Evidence:) Tj
+T*
+(     -) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<< /Length 2682 >>
+stream
+BT
+/F1 11 Tf
+14 TL
+50 742 Td
+(       transaction-service/src/main/java/com/suhasan/finance/transaction_service/service/TransactionServiceImpl.java:583) Tj
+T*
+(   - Impact:) Tj
+T*
+(     - In-memory filtering/sorting of large data can cause latency and memory pressure.) Tj
+T*
+(   - Recommendation:) Tj
+T*
+(     - Push filtering, sorting, and paging into repository/database queries.) Tj
+T*
+() Tj
+T*
+(8. Monitoring auth model is inconsistent with scraping model.) Tj
+T*
+(   - Evidence:) Tj
+T*
+(     -) Tj
+T*
+(       account-service/src/main/java/com/suhasan/finance/account_service/security/SecurityConfig.java:47) Tj
+T*
+(     -) Tj
+T*
+(       transaction-service/src/main/java/com/suhasan/finance/transaction_service/security/SecurityConfig.java:35) Tj
+T*
+(     - infrastructure/helm/account-service/templates/servicemonitor.yaml:20) Tj
+T*
+(   - Impact:) Tj
+T*
+(     - Scrapes may fail, or endpoints may be weakened unsafely.) Tj
+T*
+(   - Recommendation:) Tj
+T*
+(     - Implement explicit scrape auth strategy \(service account, mTLS, or tightly scoped) Tj
+T*
+(       network controls\).) Tj
+T*
+() Tj
+T*
+(9. Transaction monitoring API is too broadly accessible.) Tj
+T*
+(   - Evidence:) Tj
+T*
+(     -) Tj
+T*
+(       transaction-service/src/main/java/com/suhasan/finance/transaction_service/security/SecurityConfig.java:40) Tj
+T*
+(   - Impact:) Tj
+T*
+(     - Internal operational metrics can be exposed to regular authenticated users.) Tj
+T*
+(   - Recommendation:) Tj
+T*
+(     - Restrict monitoring endpoints to admin/internal roles.) Tj
+T*
+() Tj
+T*
+(10. Transaction Prometheus config has structural issues.) Tj
+T*
+(   - Evidence:) Tj
+T*
+(     - transaction-service/src/main/resources/prometheus.yml:2) Tj
+T*
+(     - transaction-service/src/main/resources/prometheus.yml:121) Tj
+T*
+(     - transaction-service/src/main/resources/prometheus.yml:183) Tj
+T*
+(   - Impact:) Tj
+T*
+(     - Prometheus config may parse incorrectly or behave unexpectedly.) Tj
+T*
+(   - Recommendation:) Tj
+T*
+(     - Normalize to valid Prometheus schema \(single global block, proper rule_files use\).) Tj
+T*
+() Tj
+T*
+(11. Monitoring aspect targets legacy client, not active resilient client.) Tj
+T*
+(   - Evidence:) Tj
+T*
+(     -) Tj
+T*
+(       transaction-service/src/main/java/com/suhasan/finance/transaction_service/aspect/MonitoringAspect.java:33) Tj
+T*
+(     -) Tj
+T*
+(       transaction-service/src/main/java/com/suhasan/finance/transaction_service/service/TransactionServiceImpl.java:50) Tj
+T*
+(   - Impact:) Tj
+T*
+(     - Missing metrics and alerts for actual account-service calls.) Tj
+T*
+(   - Recommendation:) Tj
+T*
+(     - Update pointcuts to include ResilientAccountServiceClient.) Tj
+T*
+() Tj
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 8 0 R >>
+endobj
+10 0 obj
+<< /Length 2612 >>
+stream
+BT
+/F1 11 Tf
+14 TL
+50 742 Td
+(12. Terraform prod backend/state and network policy labeling are weak.) Tj
+T*
+(   - Evidence:) Tj
+T*
+(     - infrastructure/terraform/environments/prod/main.tf:18 \(local backend\)) Tj
+T*
+(     - infrastructure/terraform/modules/kubernetes/main.tf:118 \(namespace selector) Tj
+T*
+(       expects label 'name'\)) Tj
+T*
+(     - infrastructure/terraform/modules/kubernetes/main.tf:27 \(namespace labels do not) Tj
+T*
+(       include 'name'\)) Tj
+T*
+(   - Impact:) Tj
+T*
+(     - Risky state management and potentially ineffective policy behavior.) Tj
+T*
+(   - Recommendation:) Tj
+T*
+(     - Use remote backend for prod and align namespace labels/selectors.) Tj
+T*
+() Tj
+T*
+(13. Infrastructure is asymmetric across services.) Tj
+T*
+(   - Evidence:) Tj
+T*
+(     - infrastructure/helm/account-service/Chart.yaml:1 exists) Tj
+T*
+(     - infrastructure/helm/transaction-service not present) Tj
+T*
+(   - Impact:) Tj
+T*
+(     - Incomplete production IaC path for full microservice architecture.) Tj
+T*
+(   - Recommendation:) Tj
+T*
+(     - Add transaction-service Helm/Terraform parity for deploy, policy, and monitoring.) Tj
+T*
+() Tj
+T*
+(Medium Findings) Tj
+T*
+(14. Public health route includes mutable deployment endpoints.) Tj
+T*
+(   - Evidence:) Tj
+T*
+(     -) Tj
+T*
+(       account-service/src/main/java/com/suhasan/finance/account_service/security/SecurityConfig.java:45) Tj
+T*
+(     -) Tj
+T*
+(       account-service/src/main/java/com/suhasan/finance/account_service/controller/HealthController.java:94) Tj
+T*
+(     -) Tj
+T*
+(       account-service/src/main/java/com/suhasan/finance/account_service/controller/HealthController.java:122) Tj
+T*
+(   - Impact:) Tj
+T*
+(     - Unnecessary exposed operational surface.) Tj
+T*
+(   - Recommendation:) Tj
+T*
+(     - Split public liveness from privileged operations.) Tj
+T*
+() Tj
+T*
+(15. Health checks include placeholders that always report healthy.) Tj
+T*
+(   - Evidence:) Tj
+T*
+(     -) Tj
+T*
+(       account-service/src/main/java/com/suhasan/finance/account_service/service/DeploymentTrackingService.java:235) Tj
+T*
+(     -) Tj
+T*
+(       account-service/src/main/java/com/suhasan/finance/account_service/service/DeploymentTrackingService.java:252) Tj
+T*
+(     -) Tj
+T*
+(       account-service/src/main/java/com/suhasan/finance/account_service/service/DeploymentTrackingService.java:257) Tj
+T*
+(   - Impact:) Tj
+T*
+(     - False-positive health and delayed incident detection.) Tj
+T*
+(   - Recommendation:) Tj
+T*
+(     - Implement real dependency checks.) Tj
+T*
+() Tj
+T*
+(16. Top-level production compose still exposes DB ports publicly.) Tj
+ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 10 0 R >>
+endobj
+12 0 obj
+<< /Length 1752 >>
+stream
+BT
+/F1 11 Tf
+14 TL
+50 742 Td
+(   - Evidence:) Tj
+T*
+(     - docker-compose.yml:33) Tj
+T*
+(     - docker-compose.yml:56) Tj
+T*
+(   - Impact:) Tj
+T*
+(     - Larger attack surface.) Tj
+T*
+(   - Recommendation:) Tj
+T*
+(     - Keep databases internal unless explicit external access is required.) Tj
+T*
+() Tj
+T*
+(What Is Intact / Strong) Tj
+T*
+(1. Clear service boundaries between account and transaction domains.) Tj
+T*
+(2. Flyway migrations and schema versioning are implemented.) Tj
+T*
+(3. Account balance operations use idempotent operation table and row-level locking.) Tj
+T*
+(4. Both services compile and core tests pass locally.) Tj
+T*
+(5. Container non-root runtime is configured.) Tj
+T*
+() Tj
+T*
+(Overall Production Readiness) Tj
+T*
+(Current state: NOT READY for payment-grade production.) Tj
+T*
+(Primary blockers: atomic transactional guarantees, secret hygiene, and CI/IaC) Tj
+T*
+(consistency.) Tj
+T*
+() Tj
+T*
+(Prioritized Remediation Plan) Tj
+T*
+(1. Transactional correctness:) Tj
+T*
+(   - Atomic idempotency and reversal uniqueness/locking.) Tj
+T*
+(2. Security hardening:) Tj
+T*
+(   - Remove fallback/committed secrets and rotate all exposed credentials.) Tj
+T*
+(3. Pipeline integrity:) Tj
+T*
+(   - Fix CI test references and enforce consistent policy checks.) Tj
+T*
+(4. Runtime reliability:) Tj
+T*
+(   - Correct healthcheck ports and reconcile monitoring auth/scraping.) Tj
+T*
+(5. Architecture completeness:) Tj
+T*
+(   - Add transaction-service IaC parity \(Helm/Terraform\).) Tj
+T*
+() Tj
+T*
+(Conclusion) Tj
+T*
+(The platform has a strong foundation, but payment-grade resilience and security) Tj
+T*
+(guarantees are incomplete.) Tj
+T*
+(Addressing the critical items above should be treated as mandatory before production) Tj
+T*
+(go-live.) Tj
+ET
+endstream
+endobj
+13 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 12 0 R >>
+endobj
+xref
+0 14
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000147 00000 n 
+0000000217 00000 n 
+0000002870 00000 n 
+0000002996 00000 n 
+0000005249 00000 n 
+0000005375 00000 n 
+0000008109 00000 n 
+0000008235 00000 n 
+0000010900 00000 n 
+0000011028 00000 n 
+0000012833 00000 n 
+trailer
+<< /Size 14 /Root 1 0 R >>
+startxref
+12961
+%%EOF

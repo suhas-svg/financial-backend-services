@@ -9,6 +9,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import javax.sql.DataSource;
+import java.io.File;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.sql.Connection;
+
 import jakarta.annotation.PostConstruct;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -20,86 +28,88 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 @Service
 @Slf4j
-@SuppressFBWarnings(
-    value = "EI_EXPOSE_REP2",
-    justification = "Dependencies are injected and managed by Spring"
-)
+@SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "Dependencies are injected and managed by Spring")
 public class DeploymentTrackingService {
 
     private final MeterRegistry meterRegistry;
-    
+    private final DataSource dataSource;
+
+    @Value("${account-service.base-url:http://localhost:8080}")
+    private String accountServiceBaseUrl;
+
     @Value("${app.version:unknown}")
     private String applicationVersion;
-    
+
     @Value("${app.build-time:unknown}")
     private String buildTime;
-    
+
     @Value("${app.git-commit:unknown}")
     private String gitCommit;
-    
+
     // Deployment tracking metrics
     private Counter deploymentCounter;
     private Counter deploymentSuccessCounter;
     private Counter deploymentFailureCounter;
     private Timer deploymentDurationTimer;
-    
+
     // Health monitoring metrics
     private Counter healthCheckCounter;
     private Counter healthCheckFailureCounter;
     private Timer healthCheckDurationTimer;
-    
+
     // Internal state
     private final AtomicLong applicationStartTime = new AtomicLong();
     private final AtomicLong lastDeploymentTime = new AtomicLong();
     private final AtomicLong lastHealthCheckTime = new AtomicLong();
     private volatile double currentHealthScore = 100.0;
 
-    public DeploymentTrackingService(MeterRegistry meterRegistry) {
+    public DeploymentTrackingService(MeterRegistry meterRegistry, DataSource dataSource) {
         this.meterRegistry = meterRegistry;
+        this.dataSource = dataSource;
     }
 
     @PostConstruct
     public void initializeMetrics() {
         log.info("Initializing deployment tracking metrics...");
-        
+
         // Record application start time
         applicationStartTime.set(Instant.now().toEpochMilli());
         lastDeploymentTime.set(Instant.now().toEpochMilli());
-        
+
         // Initialize deployment tracking metrics
         deploymentCounter = Counter.builder("deployment_total")
                 .description("Total number of deployments")
                 .tag("version", applicationVersion)
                 .tag("environment", getEnvironment())
                 .register(meterRegistry);
-                
+
         deploymentSuccessCounter = Counter.builder("deployment_success_total")
                 .description("Total number of successful deployments")
                 .tag("version", applicationVersion)
                 .tag("environment", getEnvironment())
                 .register(meterRegistry);
-                
+
         deploymentFailureCounter = Counter.builder("deployment_failure_total")
                 .description("Total number of failed deployments")
                 .tag("version", applicationVersion)
                 .tag("environment", getEnvironment())
                 .register(meterRegistry);
-                
+
         deploymentDurationTimer = Timer.builder("deployment_duration_seconds")
                 .description("Time taken for deployment to complete")
                 .tag("version", applicationVersion)
                 .tag("environment", getEnvironment())
                 .register(meterRegistry);
-                
+
         // Initialize health monitoring metrics
         healthCheckCounter = Counter.builder("health_check_total")
                 .description("Total number of health checks performed")
                 .register(meterRegistry);
-                
+
         healthCheckFailureCounter = Counter.builder("health_check_failure_total")
                 .description("Total number of failed health checks")
                 .register(meterRegistry);
-                
+
         healthCheckDurationTimer = Timer.builder("health_check_duration_seconds")
                 .description("Time taken to perform health checks")
                 .register(meterRegistry);
@@ -118,8 +128,8 @@ public class DeploymentTrackingService {
 
         // Record successful deployment on startup
         recordDeploymentSuccess();
-        
-        log.info("Deployment tracking initialized - Version: {}, Build Time: {}, Git Commit: {}", 
+
+        log.info("Deployment tracking initialized - Version: {}, Build Time: {}, Git Commit: {}",
                 applicationVersion, buildTime, gitCommit);
     }
 
@@ -165,29 +175,30 @@ public class DeploymentTrackingService {
         return healthCheckDurationTimer.record(() -> {
             healthCheckCounter.increment();
             lastHealthCheckTime.set(Instant.now().toEpochMilli());
-            
+
             try {
                 // Perform comprehensive health checks
                 boolean databaseHealthy = checkDatabaseHealth();
                 boolean memoryHealthy = checkMemoryHealth();
                 boolean diskHealthy = checkDiskHealth();
                 boolean externalServicesHealthy = checkExternalServicesHealth();
-                
+
                 // Calculate health score
-                double healthScore = calculateHealthScore(databaseHealthy, memoryHealthy, diskHealthy, externalServicesHealthy);
+                double healthScore = calculateHealthScore(databaseHealthy, memoryHealthy, diskHealthy,
+                        externalServicesHealthy);
                 currentHealthScore = healthScore;
-                
+
                 boolean overallHealthy = healthScore >= 80.0;
-                
+
                 if (!overallHealthy) {
                     healthCheckFailureCounter.increment();
                     log.warn("Health check failed - Score: {}", healthScore);
                 } else {
                     log.debug("Health check passed - Score: {}", healthScore);
                 }
-                
+
                 return overallHealthy;
-                
+
             } catch (Exception e) {
                 healthCheckFailureCounter.increment();
                 currentHealthScore = 0.0;
@@ -207,7 +218,8 @@ public class DeploymentTrackingService {
                 .gitCommit(gitCommit)
                 .environment(getEnvironment())
                 .startTime(LocalDateTime.ofInstant(Instant.ofEpochMilli(applicationStartTime.get()), ZoneOffset.UTC))
-                .lastDeploymentTime(LocalDateTime.ofInstant(Instant.ofEpochMilli(lastDeploymentTime.get()), ZoneOffset.UTC))
+                .lastDeploymentTime(
+                        LocalDateTime.ofInstant(Instant.ofEpochMilli(lastDeploymentTime.get()), ZoneOffset.UTC))
                 .uptimeSeconds(getUptimeSeconds())
                 .healthScore(currentHealthScore)
                 .build();
@@ -230,11 +242,19 @@ public class DeploymentTrackingService {
         return System.getProperty("spring.profiles.active", "dev");
     }
 
-    // Health check implementations
+    // Health check implementations — all are real checks, no placeholders (M4 fix)
+
     private boolean checkDatabaseHealth() {
-        // This would typically check database connectivity
-        // For now, return true as placeholder
-        return true;
+        try (Connection conn = dataSource.getConnection()) {
+            boolean valid = conn.isValid(2); // 2-second validity probe
+            if (!valid) {
+                log.warn("Database health check: connection invalid");
+            }
+            return valid;
+        } catch (Exception e) {
+            log.error("Database health check failed: {}", e.getMessage());
+            return false;
+        }
     }
 
     private boolean checkMemoryHealth() {
@@ -243,31 +263,64 @@ public class DeploymentTrackingService {
         long totalMemory = runtime.totalMemory();
         long freeMemory = runtime.freeMemory();
         long usedMemory = totalMemory - freeMemory;
-        
         double memoryUsagePercent = (double) usedMemory / maxMemory * 100;
-        return memoryUsagePercent < 85.0; // Healthy if memory usage < 85%
+        return memoryUsagePercent < 85.0;
     }
 
     private boolean checkDiskHealth() {
-        // This would typically check disk space
-        // For now, return true as placeholder
-        return true;
+        try {
+            File workDir = new File("/app");
+            long usableSpace = workDir.getUsableSpace();
+            long totalSpace = workDir.getTotalSpace();
+            if (totalSpace == 0)
+                return true; // cannot determine, assume healthy
+            double usedPercent = 100.0 - (100.0 * usableSpace / totalSpace);
+            if (usedPercent > 90.0) {
+                log.warn("Disk health check: disk is {:.1f}% full", usedPercent);
+                return false;
+            }
+            return true;
+        } catch (Exception e) {
+            log.warn("Disk health check failed: {}", e.getMessage());
+            return true; // non-fatal — disk check not available on all platforms
+        }
     }
 
     private boolean checkExternalServicesHealth() {
-        // This would typically check external service connectivity
-        // For now, return true as placeholder
-        return true;
+        try {
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofSeconds(3))
+                    .build();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(accountServiceBaseUrl + "/actuator/health"))
+                    .timeout(java.time.Duration.ofSeconds(3))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            boolean healthy = response.statusCode() == 200 && response.body().contains("UP");
+            if (!healthy) {
+                log.warn("External services health check: account-service returned status {} body={}",
+                        response.statusCode(), response.body());
+            }
+            return healthy;
+        } catch (Exception e) {
+            log.warn("External services health check failed — account-service unreachable: {}", e.getMessage());
+            return false;
+        }
     }
 
     private double calculateHealthScore(boolean database, boolean memory, boolean disk, boolean externalServices) {
         double score = 0.0;
-        
-        if (database) score += 30.0;      // Database is critical - 30%
-        if (memory) score += 25.0;        // Memory is important - 25%
-        if (disk) score += 20.0;          // Disk space is important - 20%
-        if (externalServices) score += 25.0; // External services - 25%
-        
+
+        if (database)
+            score += 30.0; // Database is critical - 30%
+        if (memory)
+            score += 25.0; // Memory is important - 25%
+        if (disk)
+            score += 20.0; // Disk space is important - 20%
+        if (externalServices)
+            score += 25.0; // External services - 25%
+
         return score;
     }
 

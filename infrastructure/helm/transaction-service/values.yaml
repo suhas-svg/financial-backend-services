@@ -1,0 +1,315 @@
+# Default values for transaction-service
+# This is a YAML-formatted file.
+
+# Global configuration
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+
+# Application configuration
+app:
+  name: transaction-service
+  version: "1.0.0"
+
+# Image configuration
+image:
+  registry: ghcr.io
+  repository: your-org/transaction-service
+  tag: "latest"
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# Deployment configuration
+replicaCount: 3
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8081
+  targetPort: 8081
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: transaction-service.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Resource configuration
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Health checks
+healthChecks:
+  liveness:
+    enabled: true
+    path: /actuator/health/liveness
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    path: /actuator/health/readiness
+    initialDelaySeconds: 30
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  startup:
+    enabled: true
+    path: /actuator/health
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+
+# Security context (container-level)
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1001
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+
+# Node selection
+nodeSelector: {}
+tolerations: []
+
+# Anti-affinity: spread pods across nodes for HA
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: transaction-service
+          topologyKey: kubernetes.io/hostname
+
+# Pod annotations and labels
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: "/actuator/prometheus"
+  prometheus.io/port: "8081"
+
+podLabels: {}
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Environment variables
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: "kubernetes"
+  - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+    value: "health,info,prometheus"
+  - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS
+    value: "never"
+
+# Environment variables from secrets/configmaps
+envFrom:
+  - secretRef:
+      name: transaction-service-db-credentials
+  - secretRef:
+      name: transaction-service-jwt-secrets
+  - configMapRef:
+      name: transaction-service-config
+
+# Volume mounts
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+  - name: logs
+    mountPath: /app/logs
+
+# Volumes
+volumes:
+  - name: tmp
+    emptyDir: {}
+  - name: logs
+    emptyDir: {}
+
+# ConfigMap data
+configMap:
+  enabled: true
+  data:
+    application.properties: |
+      # Spring Boot Configuration
+      server.port=8081
+      server.servlet.context-path=/
+
+      # Database Configuration
+      spring.datasource.url=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+      spring.datasource.username=${DB_USERNAME}
+      spring.datasource.password=${DB_PASSWORD}
+      spring.datasource.driver-class-name=org.postgresql.Driver
+
+      # JPA Configuration
+      spring.jpa.hibernate.ddl-auto=validate
+      spring.jpa.show-sql=false
+      spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+
+      # Flyway
+      spring.flyway.enabled=true
+      spring.flyway.locations=classpath:db/migration
+
+      # Redis
+      spring.data.redis.host=${REDIS_HOST}
+      spring.data.redis.port=${REDIS_PORT:6379}
+
+      # Account service
+      account-service.base-url=${ACCOUNT_SERVICE_URL}
+
+      # Actuator Configuration
+      management.endpoints.web.base-path=/actuator
+      management.endpoints.web.exposure.include=health,info,prometheus
+      management.endpoint.health.show-details=never
+      management.endpoint.health.show-components=always
+      management.health.probes.enabled=true
+
+      # Metrics
+      management.metrics.export.prometheus.enabled=true
+      management.metrics.distribution.percentiles-histogram.http.server.requests=true
+      management.metrics.distribution.percentiles.http.server.requests=0.5,0.95,0.99
+
+      # Logging
+      logging.level.com.suhasan.finance.transaction_service=INFO
+      logging.level.org.springframework.security=WARN
+
+# Database configuration (using Terraform-managed PostgreSQL)
+database:
+  enabled: false
+  host: transaction-service-postgres
+  port: 5432
+  name: transactiondb
+  username: postgres
+  existingSecret: transaction-service-db-credentials
+  secretKeys:
+    password: password
+
+# PostgreSQL subchart (disabled — managed externally)
+postgresql:
+  enabled: false
+
+# Redis configuration
+redis:
+  host: redis
+  port: 6379
+
+# Monitoring configuration
+monitoring:
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /actuator/prometheus
+    labels:
+      app: transaction-service
+
+# Network policy
+networkPolicy:
+  enabled: true
+  ingress:
+    # Allow Prometheus scraping (from monitoring namespace)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8081
+    # Allow ingress from API gateway / ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8081
+    # Allow inter-service communication
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: account-service
+      ports:
+        - protocol: TCP
+          port: 8081
+  egress:
+    # PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              app: transaction-service-postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Redis
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Account service
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: account-service
+      ports:
+        - protocol: TCP
+          port: 8080
+    # DNS
+    - to: {}
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+
+# Tests
+tests:
+  enabled: true
+  image:
+    repository: curlimages/curl
+    tag: latest
+    pullPolicy: IfNotPresent

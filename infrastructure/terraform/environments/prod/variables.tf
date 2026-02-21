@@ -98,3 +98,22 @@ variable "common_labels" {
     criticality = "high"
   }
 }
+
+# ── H6: S3 remote backend variables ──────────────────────────────────────────
+# These MUST be provided explicitly. No defaults — prevents accidental state
+# misconfiguration on a new machine or in a new CI runner.
+
+variable "tf_state_bucket" {
+  description = "S3 bucket that stores Terraform state for production. Must be pre-created."
+  type        = string
+}
+
+variable "tf_lock_table" {
+  description = "DynamoDB table used for Terraform state locking. Must be pre-created."
+  type        = string
+}
+
+variable "aws_region" {
+  description = "AWS region where the S3 state bucket and DynamoDB lock table reside."
+  type        = string
+}

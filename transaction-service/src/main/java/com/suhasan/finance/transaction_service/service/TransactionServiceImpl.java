@@ -13,14 +13,13 @@ import com.suhasan.finance.transaction_service.entity.TransactionType;
 import com.suhasan.finance.transaction_service.exception.AccountServiceUnavailableException;
 import com.suhasan.finance.transaction_service.exception.TransactionAlreadyReversedException;
 import com.suhasan.finance.transaction_service.repository.TransactionRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -32,9 +31,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -45,19 +42,20 @@ import java.util.stream.Collectors;
 @Slf4j
 @SuppressWarnings("null")
 public class TransactionServiceImpl implements TransactionService {
-    
+
     private final TransactionRepository transactionRepository;
     private final ResilientAccountServiceClient accountServiceClient;
     private final AuditService auditService;
     private final MetricsService metricsService;
     private final TransactionLimitService transactionLimitService;
-    
+
     @Override
     @Transactional(noRollbackFor = Exception.class)
     @CacheEvict(value = "transaction:history", allEntries = true)
     public TransactionResponse processTransfer(TransferRequest request, String userId, String idempotencyKey) {
         String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
-        Optional<Transaction> existing = findIdempotentTransaction(userId, TransactionType.TRANSFER, normalizedIdempotencyKey);
+        Optional<Transaction> existing = findIdempotentTransaction(userId, TransactionType.TRANSFER,
+                normalizedIdempotencyKey);
         if (existing.isPresent()) {
             return mapToResponse(existing.get());
         }
@@ -95,7 +93,18 @@ public class TransactionServiceImpl implements TransactionService {
                 .createdBy(userId)
                 .fromAccountBalanceBefore(fromAccount.getBalance())
                 .build();
-        transaction = transactionRepository.save(transaction);
+        try {
+            transaction = transactionRepository.save(transaction);
+        } catch (DataIntegrityViolationException dive) {
+            // Another concurrent request with the same idempotency key already inserted.
+            // The DB unique constraint caught the race. Treat as idempotent replay.
+            log.warn("Idempotent replay detected for TRANSFER key={} user={} — returning existing record",
+                    normalizedIdempotencyKey, userId);
+            return findIdempotentTransaction(userId, TransactionType.TRANSFER, normalizedIdempotencyKey)
+                    .map(this::mapToResponse)
+                    .orElseThrow(() -> new RuntimeException(
+                            "Idempotency conflict but record not found — manual review required"));
+        }
 
         auditService.logTransactionInitiated(transactionId, TransactionType.TRANSFER,
                 request.getFromAccountId(), request.getToAccountId(), request.getAmount(), userId);
@@ -103,14 +112,14 @@ public class TransactionServiceImpl implements TransactionService {
 
         boolean debitApplied = false;
         try {
-            ResilientAccountServiceClient.BalanceOperationResponse debitResult = accountServiceClient.applyBalanceOperation(
-                    request.getFromAccountId(),
-                    transactionId + ":debit",
-                    request.getAmount().negate(),
-                    transactionId,
-                    "TRANSFER_DEBIT",
-                    false
-            );
+            ResilientAccountServiceClient.BalanceOperationResponse debitResult = accountServiceClient
+                    .applyBalanceOperation(
+                            request.getFromAccountId(),
+                            transactionId + ":debit",
+                            request.getAmount().negate(),
+                            transactionId,
+                            "TRANSFER_DEBIT",
+                            false);
             debitApplied = debitResult.isApplied();
             transaction.setFromAccountBalanceAfter(debitResult.getNewBalance());
             transaction.setProcessingState(TransactionProcessingState.DEBIT_APPLIED);
@@ -122,14 +131,14 @@ public class TransactionServiceImpl implements TransactionService {
                 throw new IllegalArgumentException("Insufficient funds");
             }
 
-            ResilientAccountServiceClient.BalanceOperationResponse creditResult = accountServiceClient.applyBalanceOperation(
-                    request.getToAccountId(),
-                    transactionId + ":credit",
-                    request.getAmount(),
-                    transactionId,
-                    "TRANSFER_CREDIT",
-                    true
-            );
+            ResilientAccountServiceClient.BalanceOperationResponse creditResult = accountServiceClient
+                    .applyBalanceOperation(
+                            request.getToAccountId(),
+                            transactionId + ":credit",
+                            request.getAmount(),
+                            transactionId,
+                            "TRANSFER_CREDIT",
+                            true);
             transaction.setToAccountBalanceAfter(creditResult.getNewBalance());
             transaction.setProcessingState(TransactionProcessingState.CREDIT_APPLIED);
             transaction.setStatus(TransactionStatus.COMPLETED);
@@ -152,8 +161,7 @@ public class TransactionServiceImpl implements TransactionService {
                             request.getAmount(),
                             transactionId,
                             "TRANSFER_COMPENSATION",
-                            true
-                    );
+                            true);
                     transaction.setProcessingState(TransactionProcessingState.COMPENSATED);
                     transaction.setStatus(TransactionStatus.FAILED);
                 } catch (Exception compensationError) {
@@ -172,14 +180,15 @@ public class TransactionServiceImpl implements TransactionService {
             throw new RuntimeException("Transfer failed: " + e.getMessage());
         }
     }
-    
+
     @Override
     @Transactional(noRollbackFor = Exception.class)
     @CacheEvict(value = "transaction:history", allEntries = true)
     public TransactionResponse processDeposit(String accountId, BigDecimal amount,
-                                              String description, String userId, String idempotencyKey) {
+            String description, String userId, String idempotencyKey) {
         String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
-        Optional<Transaction> existing = findIdempotentTransaction(userId, TransactionType.DEPOSIT, normalizedIdempotencyKey);
+        Optional<Transaction> existing = findIdempotentTransaction(userId, TransactionType.DEPOSIT,
+                normalizedIdempotencyKey);
         if (existing.isPresent()) {
             return mapToResponse(existing.get());
         }
@@ -207,17 +216,26 @@ public class TransactionServiceImpl implements TransactionService {
                 .createdBy(userId)
                 .toAccountBalanceBefore(account.getBalance())
                 .build();
-        transaction = transactionRepository.save(transaction);
+        try {
+            transaction = transactionRepository.save(transaction);
+        } catch (DataIntegrityViolationException dive) {
+            log.warn("Idempotent replay detected for DEPOSIT key={} user={} — returning existing record",
+                    normalizedIdempotencyKey, userId);
+            return findIdempotentTransaction(userId, TransactionType.DEPOSIT, normalizedIdempotencyKey)
+                    .map(this::mapToResponse)
+                    .orElseThrow(() -> new RuntimeException(
+                            "Idempotency conflict but record not found — manual review required"));
+        }
 
         try {
-            ResilientAccountServiceClient.BalanceOperationResponse response = accountServiceClient.applyBalanceOperation(
-                    accountId,
-                    transaction.getTransactionId() + ":deposit",
-                    amount,
-                    transaction.getTransactionId(),
-                    "DEPOSIT",
-                    true
-            );
+            ResilientAccountServiceClient.BalanceOperationResponse response = accountServiceClient
+                    .applyBalanceOperation(
+                            accountId,
+                            transaction.getTransactionId() + ":deposit",
+                            amount,
+                            transaction.getTransactionId(),
+                            "DEPOSIT",
+                            true);
             transaction.setToAccountBalanceAfter(response.getNewBalance());
             transaction.setStatus(TransactionStatus.COMPLETED);
             transaction.setProcessedBy("SYSTEM");
@@ -232,14 +250,15 @@ public class TransactionServiceImpl implements TransactionService {
             throw new RuntimeException("Deposit failed: " + e.getMessage());
         }
     }
-    
+
     @Override
     @Transactional(noRollbackFor = Exception.class)
     @CacheEvict(value = "transaction:history", allEntries = true)
     public TransactionResponse processWithdrawal(String accountId, BigDecimal amount,
-                                                 String description, String userId, String idempotencyKey) {
+            String description, String userId, String idempotencyKey) {
         String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
-        Optional<Transaction> existing = findIdempotentTransaction(userId, TransactionType.WITHDRAWAL, normalizedIdempotencyKey);
+        Optional<Transaction> existing = findIdempotentTransaction(userId, TransactionType.WITHDRAWAL,
+                normalizedIdempotencyKey);
         if (existing.isPresent()) {
             return mapToResponse(existing.get());
         }
@@ -270,17 +289,26 @@ public class TransactionServiceImpl implements TransactionService {
                 .createdBy(userId)
                 .fromAccountBalanceBefore(account.getBalance())
                 .build();
-        transaction = transactionRepository.save(transaction);
+        try {
+            transaction = transactionRepository.save(transaction);
+        } catch (DataIntegrityViolationException dive) {
+            log.warn("Idempotent replay detected for WITHDRAWAL key={} user={} — returning existing record",
+                    normalizedIdempotencyKey, userId);
+            return findIdempotentTransaction(userId, TransactionType.WITHDRAWAL, normalizedIdempotencyKey)
+                    .map(this::mapToResponse)
+                    .orElseThrow(() -> new RuntimeException(
+                            "Idempotency conflict but record not found — manual review required"));
+        }
 
         try {
-            ResilientAccountServiceClient.BalanceOperationResponse response = accountServiceClient.applyBalanceOperation(
-                    accountId,
-                    transaction.getTransactionId() + ":withdrawal",
-                    amount.negate(),
-                    transaction.getTransactionId(),
-                    "WITHDRAWAL",
-                    false
-            );
+            ResilientAccountServiceClient.BalanceOperationResponse response = accountServiceClient
+                    .applyBalanceOperation(
+                            accountId,
+                            transaction.getTransactionId() + ":withdrawal",
+                            amount.negate(),
+                            transaction.getTransactionId(),
+                            "WITHDRAWAL",
+                            false);
             if (!response.isApplied()) {
                 transaction.setStatus(TransactionStatus.FAILED);
                 transaction.setProcessedAt(LocalDateTime.now());
@@ -303,7 +331,7 @@ public class TransactionServiceImpl implements TransactionService {
             throw new RuntimeException("Withdrawal failed: " + e.getMessage());
         }
     }
-    
+
     @Override
     public TransactionResponse getTransaction(String transactionId) {
         Transaction transaction = transactionRepository.findById(transactionId)
@@ -311,89 +339,107 @@ public class TransactionServiceImpl implements TransactionService {
         assertCanAccessTransaction(transaction);
         return mapToResponse(transaction);
     }
-    
+
     @Override
-    @Cacheable(value = "transaction:history",
-            key = "#accountId + ':' + #pageable.pageNumber + ':' + #pageable.pageSize + ':' + #pageable.sort.toString()")
+    @Cacheable(value = "transaction:history", key = "#accountId + ':' + #pageable.pageNumber + ':' + #pageable.pageSize + ':' + #pageable.sort.toString()")
     public Page<TransactionResponse> getAccountTransactions(String accountId, Pageable pageable) {
         assertCanAccessAccountScope(accountId);
         Page<Transaction> transactions = transactionRepository
                 .findByFromAccountIdOrToAccountIdOrderByCreatedAtDesc(accountId, accountId, pageable);
         return transactions.map(this::mapToResponse);
     }
-    
+
     @Override
     public Page<TransactionResponse> getUserTransactions(String userId, Pageable pageable) {
         Page<Transaction> transactions = transactionRepository
                 .findByCreatedByOrderByCreatedAtDesc(userId, pageable);
         return transactions.map(this::mapToResponse);
     }
-    
+
     @Override
     @Transactional(noRollbackFor = Exception.class)
     @CacheEvict(value = "transaction:history", allEntries = true)
-    public TransactionResponse reverseTransaction(String transactionId, String reason, String userId, String idempotencyKey) {
+    public TransactionResponse reverseTransaction(String transactionId, String reason, String userId,
+            String idempotencyKey) {
         log.info("Processing reversal request for transaction {} by user {}", transactionId, userId);
 
         String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
-        Optional<Transaction> existing = findIdempotentTransaction(userId, TransactionType.REVERSAL, normalizedIdempotencyKey);
+        Optional<Transaction> existing = findIdempotentTransaction(userId, TransactionType.REVERSAL,
+                normalizedIdempotencyKey);
         if (existing.isPresent()) {
             return mapToResponse(existing.get());
         }
-        
-        // Requirement 6.1: Validate the original transaction exists
-        Transaction originalTransaction = transactionRepository.findById(transactionId)
+
+        // Requirement 6.1: Validate the original transaction exists.
+        // Use a pessimistic read lock so concurrent reversal attempts block here
+        // instead of racing past the duplicate check below.
+        Transaction originalTransaction = transactionRepository.findByIdWithLock(transactionId)
                 .orElseThrow(() -> new IllegalArgumentException("Transaction not found: " + transactionId));
         assertCanAccessTransaction(originalTransaction);
-        
-        // Requirement 6.4: Prevent duplicate reversals
+
+        // Requirement 6.4: Prevent duplicate reversals.
+        // Check both the in-memory status (fast path) and the DB query (authoritative).
+        // The DB unique constraint on (original_transaction_id) WHERE type=REVERSAL AND
+        // status NOT IN ('FAILED','FAILED_REQUIRES_MANUAL_ACTION') is the final safety
+        // net.
         if (originalTransaction.getStatus() == TransactionStatus.REVERSED
                 || transactionRepository.isTransactionReversed(transactionId)) {
-            throw new TransactionAlreadyReversedException(transactionId, 
-                "Transaction " + transactionId + " has already been reversed");
+            throw new TransactionAlreadyReversedException(transactionId,
+                    "Transaction " + transactionId + " has already been reversed");
         }
 
         // Validate transaction can be reversed
         validateTransactionCanBeReversed(originalTransaction);
-        
-        // Requirement 6.2: Create a compensating transaction that undoes the original transaction
+
+        // Requirement 6.2: Create a compensating transaction that undoes the original
+        // transaction.
         Transaction reversal = createReversalTransaction(originalTransaction, reason, userId);
         reversal.setIdempotencyKey(normalizedIdempotencyKey);
-        reversal = transactionRepository.save(reversal);
-        
+        try {
+            reversal = transactionRepository.save(reversal);
+        } catch (DataIntegrityViolationException dive) {
+            // The DB unique constraint on reversals caught a concurrent duplicate reversal.
+            // Return the already-committed reversal as an idempotent response.
+            log.warn("Concurrent reversal detected for originalTxId={} — returning existing reversal", transactionId);
+            throw new TransactionAlreadyReversedException(transactionId,
+                    "Transaction " + transactionId + " is already being reversed by a concurrent request");
+        }
+
         try {
             // Requirement 6.3: Update account balances to reflect the reversal
             processReversalBalanceUpdates(originalTransaction, reversal);
-            
+
             // Complete the reversal transaction
             reversal.setStatus(TransactionStatus.COMPLETED);
             reversal.setProcessingState(TransactionProcessingState.COMPLETED);
             reversal.setProcessedBy("SYSTEM");
             reversal.setProcessedAt(LocalDateTime.now());
-            
+
             // Update original transaction status and link to reversal
             originalTransaction.setStatus(TransactionStatus.REVERSED);
             originalTransaction.setReversalTransactionId(reversal.getTransactionId());
             originalTransaction.setReversedAt(LocalDateTime.now());
             originalTransaction.setReversedBy(userId);
             originalTransaction.setReversalReason(reason);
-            
-            // Requirement 6.5: Link reversal transaction to original transaction for audit purposes
+
+            // Requirement 6.5: Link reversal transaction to original transaction for audit
+            // purposes
             reversal.setOriginalTransactionId(originalTransaction.getTransactionId());
-            
+
             // Save both transactions
             transactionRepository.save(reversal);
             transactionRepository.save(originalTransaction);
-            
+
             // Record successful reversal
             auditService.logTransactionReversal(transactionId, reversal.getTransactionId(), reason, userId);
             auditService.logTransactionCompleted(reversal);
             metricsService.recordTransactionReversal(originalTransaction.getType());
-            
+
             log.info("Transaction reversed successfully: {} -> {}", transactionId, reversal.getTransactionId());
-            
+
         } catch (AccountServiceUnavailableException e) {
-            log.error("Transaction reversal failed due to account service unavailability for {}: {}", transactionId, e.getMessage());
+            log.error("Transaction reversal failed due to account service unavailability for {}: {}", transactionId,
+                    e.getMessage());
             reversal.setStatus(TransactionStatus.FAILED_REQUIRES_MANUAL_ACTION);
             reversal.setProcessingState(TransactionProcessingState.MANUAL_ACTION_REQUIRED);
             reversal.setProcessedAt(LocalDateTime.now());
@@ -409,39 +455,40 @@ public class TransactionServiceImpl implements TransactionService {
             }
             reversal.setProcessedAt(LocalDateTime.now());
             transactionRepository.save(reversal);
-            
+
             // Record reversal failure
-            auditService.logTransactionFailed(reversal.getTransactionId(), TransactionType.REVERSAL, 
-                    reversal.getFromAccountId(), reversal.getToAccountId(), reversal.getAmount(), 
+            auditService.logTransactionFailed(reversal.getTransactionId(), TransactionType.REVERSAL,
+                    reversal.getFromAccountId(), reversal.getToAccountId(), reversal.getAmount(),
                     userId, e.getMessage(), "REVERSAL_ERROR");
             metricsService.recordTransactionFailed(TransactionType.REVERSAL, "REVERSAL_ERROR");
-            
+
             throw new RuntimeException("Reversal failed: " + e.getMessage());
         }
-        
+
         return mapToResponse(reversal);
     }
-    
+
     /**
      * Validate that a transaction can be reversed
      */
     private void validateTransactionCanBeReversed(Transaction transaction) {
         if (transaction.getStatus() != TransactionStatus.COMPLETED) {
-            throw new IllegalArgumentException("Can only reverse completed transactions. Current status: " + transaction.getStatus());
+            throw new IllegalArgumentException(
+                    "Can only reverse completed transactions. Current status: " + transaction.getStatus());
         }
-        
+
         // Don't allow reversing reversal transactions
         if (transaction.getType() == TransactionType.REVERSAL) {
             throw new IllegalArgumentException("Cannot reverse a reversal transaction");
         }
-        
+
         // Check if transaction is too old (business rule - can be configured)
         LocalDateTime cutoffDate = LocalDateTime.now().minusDays(30); // 30 days limit
         if (transaction.getCreatedAt().isBefore(cutoffDate)) {
             throw new IllegalArgumentException("Cannot reverse transactions older than 30 days");
         }
     }
-    
+
     /**
      * Create a compensating reversal transaction
      */
@@ -461,7 +508,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .reversalReason(reason)
                 .build();
     }
-    
+
     /**
      * Process balance updates for reversal transaction
      */
@@ -469,14 +516,14 @@ public class TransactionServiceImpl implements TransactionService {
         boolean debitApplied = false;
         try {
             if (!isExternalAccount(reversal.getFromAccountId())) {
-                ResilientAccountServiceClient.BalanceOperationResponse debit = accountServiceClient.applyBalanceOperation(
-                        reversal.getFromAccountId(),
-                        reversal.getTransactionId() + ":debit",
-                        reversal.getAmount().negate(),
-                        reversal.getTransactionId(),
-                        "REVERSAL_DEBIT",
-                        false
-                );
+                ResilientAccountServiceClient.BalanceOperationResponse debit = accountServiceClient
+                        .applyBalanceOperation(
+                                reversal.getFromAccountId(),
+                                reversal.getTransactionId() + ":debit",
+                                reversal.getAmount().negate(),
+                                reversal.getTransactionId(),
+                                "REVERSAL_DEBIT",
+                                false);
                 debitApplied = debit.isApplied();
                 reversal.setFromAccountBalanceAfter(debit.getNewBalance());
                 if (!debit.isApplied()) {
@@ -485,14 +532,14 @@ public class TransactionServiceImpl implements TransactionService {
             }
 
             if (!isExternalAccount(reversal.getToAccountId())) {
-                ResilientAccountServiceClient.BalanceOperationResponse credit = accountServiceClient.applyBalanceOperation(
-                        reversal.getToAccountId(),
-                        reversal.getTransactionId() + ":credit",
-                        reversal.getAmount(),
-                        reversal.getTransactionId(),
-                        "REVERSAL_CREDIT",
-                        true
-                );
+                ResilientAccountServiceClient.BalanceOperationResponse credit = accountServiceClient
+                        .applyBalanceOperation(
+                                reversal.getToAccountId(),
+                                reversal.getTransactionId() + ":credit",
+                                reversal.getAmount(),
+                                reversal.getTransactionId(),
+                                "REVERSAL_CREDIT",
+                                true);
                 reversal.setToAccountBalanceAfter(credit.getNewBalance());
             }
             reversal.setProcessingState(TransactionProcessingState.COMPLETED);
@@ -505,8 +552,7 @@ public class TransactionServiceImpl implements TransactionService {
                             reversal.getAmount(),
                             reversal.getTransactionId(),
                             "REVERSAL_COMPENSATION",
-                            true
-                    );
+                            true);
                     reversal.setProcessingState(TransactionProcessingState.COMPENSATED);
                 } catch (Exception compensationError) {
                     reversal.setStatus(TransactionStatus.FAILED_REQUIRES_MANUAL_ACTION);
@@ -516,12 +562,12 @@ public class TransactionServiceImpl implements TransactionService {
             throw e;
         }
     }
-    
+
     @Override
     public boolean isTransactionReversed(String transactionId) {
         return transactionRepository.isTransactionReversed(transactionId);
     }
-    
+
     @Override
     public List<TransactionResponse> getReversalTransactions(String originalTransactionId) {
         List<Transaction> reversals = transactionRepository.findReversalsByOriginalTransactionId(originalTransactionId);
@@ -529,7 +575,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
-    
+
     @Override
     public List<TransactionResponse> getTransactionsByStatus(TransactionStatus status) {
         List<Transaction> transactions = transactionRepository.findByStatusOrderByCreatedAtDesc(status);
@@ -537,24 +583,24 @@ public class TransactionServiceImpl implements TransactionService {
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
-    
+
     @Override
     @Transactional
     public void processPendingTransactions() {
         LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(5);
         List<Transaction> pendingTransactions = transactionRepository
                 .findPendingTransactionsOlderThan(cutoffTime);
-        
+
         for (Transaction transaction : pendingTransactions) {
             log.warn("Processing stale pending transaction: {}", transaction.getTransactionId());
             transaction.setStatus(TransactionStatus.FAILED);
             transactionRepository.save(transaction);
         }
     }
-    
+
     @Override
-    public boolean validateTransactionLimits(String accountId, String accountType, 
-                                           TransactionType type, BigDecimal amount) {
+    public boolean validateTransactionLimits(String accountId, String accountType,
+            TransactionType type, BigDecimal amount) {
         try {
             if (!transactionLimitService.validateTransactionLimits(accountId, accountType, type, amount)) {
                 return false;
@@ -569,40 +615,30 @@ public class TransactionServiceImpl implements TransactionService {
         }
         return true;
     }
-    
+
     @Override
     public Page<TransactionResponse> searchTransactions(TransactionFilterRequest filter, Pageable pageable) {
         log.debug("Searching transactions with filters: {}", filter);
-
-        List<Transaction> scopedTransactions;
-        if (filter.getCreatedBy() != null && !filter.getCreatedBy().isBlank()) {
-            scopedTransactions = transactionRepository
-                    .findByCreatedByOrderByCreatedAtDesc(filter.getCreatedBy(), Pageable.unpaged())
-                    .getContent();
-        } else {
-            scopedTransactions = transactionRepository.findAll();
-        }
-
-        List<Transaction> filteredTransactions = scopedTransactions.stream()
-                .filter(transaction -> matchesTransactionFilter(transaction, filter))
-                .collect(Collectors.toList());
-
-        filteredTransactions.sort(buildTransactionSortComparator(pageable.getSort()));
-
-        int fromIndex = Math.toIntExact(pageable.getOffset());
-        int toIndex = Math.min(fromIndex + pageable.getPageSize(), filteredTransactions.size());
-        List<Transaction> pageContent = fromIndex >= filteredTransactions.size()
-                ? List.of()
-                : filteredTransactions.subList(fromIndex, toIndex);
-
-        Page<Transaction> page = new PageImpl<>(pageContent, pageable, filteredTransactions.size());
-        return page.map(this::mapToResponse);
+        // Delegate all filtering, sorting, and pagination to the database via the
+        // existing JPQL query. This eliminates the previous findAll() memory load.
+        return transactionRepository.findTransactionsWithFilters(
+                filter.getAccountId(),
+                filter.getType(),
+                filter.getStatus(),
+                filter.getStartDate(),
+                filter.getEndDate(),
+                filter.getMinAmount(),
+                filter.getMaxAmount(),
+                filter.getDescription(),
+                filter.getReference(),
+                filter.getCreatedBy(),
+                pageable).map(this::mapToResponse);
     }
-    
+
     @Override
-    public TransactionStatsResponse getAccountTransactionStats(String accountId, 
-                                                              LocalDateTime startDate, 
-                                                              LocalDateTime endDate) {
+    public TransactionStatsResponse getAccountTransactionStats(String accountId,
+            LocalDateTime startDate,
+            LocalDateTime endDate) {
         log.debug("Getting transaction statistics for account {} from {} to {}", accountId, startDate, endDate);
 
         if (accountId == null || accountId.isBlank()) {
@@ -616,11 +652,11 @@ public class TransactionServiceImpl implements TransactionService {
 
         return buildTransactionStats(accountId, accountTransactions, startDate, endDate);
     }
-    
+
     @Override
-    public TransactionStatsResponse getUserTransactionStats(String userId, 
-                                                           LocalDateTime startDate, 
-                                                           LocalDateTime endDate) {
+    public TransactionStatsResponse getUserTransactionStats(String userId,
+            LocalDateTime startDate,
+            LocalDateTime endDate) {
         log.debug("Getting transaction statistics for user {} from {} to {}", userId, startDate, endDate);
 
         List<Transaction> userTransactions = transactionRepository
@@ -631,9 +667,9 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     private TransactionStatsResponse buildTransactionStats(String accountId,
-                                                           List<Transaction> scopedTransactions,
-                                                           LocalDateTime startDate,
-                                                           LocalDateTime endDate) {
+            List<Transaction> scopedTransactions,
+            LocalDateTime startDate,
+            LocalDateTime endDate) {
         LocalDateTime resolvedStart = startDate != null ? startDate : LocalDateTime.now().minusDays(30);
         LocalDateTime resolvedEnd = endDate != null ? endDate : LocalDateTime.now();
 
@@ -716,8 +752,7 @@ public class TransactionServiceImpl implements TransactionService {
             averageTransactionAmount = totalAmount.divide(
                     BigDecimal.valueOf(completedTransactions),
                     2,
-                    RoundingMode.HALF_UP
-            );
+                    RoundingMode.HALF_UP);
         }
 
         LocalDate today = LocalDate.now();
@@ -770,13 +805,11 @@ public class TransactionServiceImpl implements TransactionService {
                 .transactionCountsByType(java.util.Map.of(
                         "DEPOSIT", depositCount,
                         "WITHDRAWAL", withdrawalCount,
-                        "TRANSFER", transferCount
-                ))
+                        "TRANSFER", transferCount))
                 .transactionAmountsByType(java.util.Map.of(
                         "DEPOSIT", totalDeposits,
                         "WITHDRAWAL", totalWithdrawals,
-                        "TRANSFER", totalTransfers
-                ))
+                        "TRANSFER", totalTransfers))
                 .dailyTotal(dailyTotal)
                 .monthlyTotal(monthlyTotal)
                 .dailyCount(dailyCount)
@@ -795,8 +828,8 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     private Optional<Transaction> findIdempotentTransaction(String userId,
-                                                            TransactionType type,
-                                                            String normalizedIdempotencyKey) {
+            TransactionType type,
+            String normalizedIdempotencyKey) {
         if (normalizedIdempotencyKey == null) {
             return Optional.empty();
         }
@@ -873,121 +906,10 @@ public class TransactionServiceImpl implements TransactionService {
                 .count();
     }
 
-    private boolean matchesTransactionFilter(Transaction transaction, TransactionFilterRequest filter) {
-        if (filter.getAccountId() != null && !filter.getAccountId().isBlank()) {
-            if (!filter.getAccountId().equals(transaction.getFromAccountId())
-                    && !filter.getAccountId().equals(transaction.getToAccountId())) {
-                return false;
-            }
-        }
-
-        if (filter.getFromAccountId() != null && !filter.getFromAccountId().isBlank()
-                && !filter.getFromAccountId().equals(transaction.getFromAccountId())) {
-            return false;
-        }
-
-        if (filter.getToAccountId() != null && !filter.getToAccountId().isBlank()
-                && !filter.getToAccountId().equals(transaction.getToAccountId())) {
-            return false;
-        }
-
-        if (filter.getType() != null && filter.getType() != transaction.getType()) {
-            return false;
-        }
-
-        if (filter.getStatus() != null && filter.getStatus() != transaction.getStatus()) {
-            return false;
-        }
-
-        if (filter.getStartDate() != null) {
-            if (transaction.getCreatedAt() == null || transaction.getCreatedAt().isBefore(filter.getStartDate())) {
-                return false;
-            }
-        }
-
-        if (filter.getEndDate() != null) {
-            if (transaction.getCreatedAt() == null || transaction.getCreatedAt().isAfter(filter.getEndDate())) {
-                return false;
-            }
-        }
-
-        if (filter.getMinAmount() != null) {
-            if (transaction.getAmount() == null || transaction.getAmount().compareTo(filter.getMinAmount()) < 0) {
-                return false;
-            }
-        }
-
-        if (filter.getMaxAmount() != null) {
-            if (transaction.getAmount() == null || transaction.getAmount().compareTo(filter.getMaxAmount()) > 0) {
-                return false;
-            }
-        }
-
-        if (filter.getDescription() != null && !filter.getDescription().isBlank()) {
-            String currentDescription = transaction.getDescription();
-            if (currentDescription == null || !currentDescription.toLowerCase(Locale.ROOT)
-                    .contains(filter.getDescription().toLowerCase(Locale.ROOT))) {
-                return false;
-            }
-        }
-
-        if (filter.getReference() != null && !filter.getReference().isBlank()) {
-            if (!filter.getReference().equals(transaction.getReference())) {
-                return false;
-            }
-        }
-
-        if (filter.getCreatedBy() != null && !filter.getCreatedBy().isBlank()
-                && !filter.getCreatedBy().equals(transaction.getCreatedBy())) {
-            return false;
-        }
-
-        return true;
-    }
-
-    private Comparator<Transaction> buildTransactionSortComparator(Sort sort) {
-        Comparator<Transaction> defaultComparator =
-                Comparator.comparing(Transaction::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()));
-
-        if (sort.isUnsorted()) {
-            return defaultComparator;
-        }
-
-        Comparator<Transaction> comparator = null;
-        for (Sort.Order order : sort) {
-            Comparator<Transaction> fieldComparator = switch (order.getProperty()) {
-                case "amount" -> Comparator.comparing(
-                        Transaction::getAmount, Comparator.nullsLast(BigDecimal::compareTo));
-                case "type" -> Comparator.comparing(
-                        Transaction::getType, Comparator.nullsLast((a, b) -> a.compareTo(b)));
-                case "status" -> Comparator.comparing(
-                        Transaction::getStatus, Comparator.nullsLast((a, b) -> a.compareTo(b)));
-                case "transactionId" -> Comparator.comparing(
-                        Transaction::getTransactionId, Comparator.nullsLast(String::compareTo));
-                case "fromAccountId" -> Comparator.comparing(
-                        Transaction::getFromAccountId, Comparator.nullsLast(String::compareTo));
-                case "toAccountId" -> Comparator.comparing(
-                        Transaction::getToAccountId, Comparator.nullsLast(String::compareTo));
-                case "createdAt" -> Comparator.comparing(
-                        Transaction::getCreatedAt, Comparator.nullsLast(LocalDateTime::compareTo));
-                default -> Comparator.comparing(
-                        Transaction::getCreatedAt, Comparator.nullsLast(LocalDateTime::compareTo));
-            };
-
-            if (order.isDescending()) {
-                fieldComparator = fieldComparator.reversed();
-            }
-
-            comparator = comparator == null ? fieldComparator : comparator.thenComparing(fieldComparator);
-        }
-
-        return comparator != null ? comparator : defaultComparator;
-    }
-
     private boolean isExternalAccount(String accountId) {
         return accountId != null && "EXTERNAL".equalsIgnoreCase(accountId.trim());
     }
-    
+
     private TransactionResponse mapToResponse(Transaction transaction) {
         String reversalLinkId = transaction.getReversalTransactionId();
         if (reversalLinkId == null && transaction.getType() == TransactionType.REVERSAL) {
@@ -1009,7 +931,8 @@ public class TransactionServiceImpl implements TransactionService {
                 .createdBy(transaction.getCreatedBy())
                 .idempotencyKey(transaction.getIdempotencyKey())
                 .processingState(transaction.getProcessingState() != null
-                        ? transaction.getProcessingState().name() : null)
+                        ? transaction.getProcessingState().name()
+                        : null)
                 .originalTransactionId(transaction.getOriginalTransactionId())
                 .reversalTransactionId(reversalLinkId)
                 .reversedAt(transaction.getReversedAt())
