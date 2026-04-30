@@ -16,7 +16,7 @@ services:
       - ACCOUNT_SERVICE_URL=http://account-service:8080
       - ZIPKIN_URL=http://zipkin:9411/api/v2/spans
       # C2 fix: hardcoded literal JWT secret removed.
-      # CRITICAL: rotate AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14= immediately \u2014 it was committed to git.
+      # CRITICAL: rotate any JWT secret that was previously committed to git.
       - JWT_SECRET=${JWT_SECRET:?Env var JWT_SECRET must be set}
     depends_on:
       - postgres

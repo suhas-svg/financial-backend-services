@@ -52,7 +52,7 @@ class JwtAuthenticationFilterTest {
 
     @BeforeEach
     void setUp() {
-        String secretKeyString = "AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14=";
+        String secretKeyString = "test-only-jwt-secret-key-32-bytes-min";
         secretKey = Keys.hmacShaKeyFor(secretKeyString.getBytes(StandardCharsets.UTF_8));
         
         // Set the secret key in the filter using reflection

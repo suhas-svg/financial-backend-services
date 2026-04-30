@@ -85,7 +85,7 @@ class FullSystemIntegrationE2ETest {
                         .withEnv("SPRING_DATASOURCE_URL", "jdbc:postgresql://postgres-e2e:5432/fullsystem_test")
                         .withEnv("SPRING_DATASOURCE_USERNAME", "testuser")
                         .withEnv("SPRING_DATASOURCE_PASSWORD", "testpass")
-                        .withEnv("JWT_SECRET", "AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14=")
+                        .withEnv("JWT_SECRET", "test-only-jwt-secret-key-32-bytes-min")
                         .withEnv("INTERNAL_JWT_SECRET", "testInternalSecretKeyForTransactionServiceOnly1234567890")
                         .withEnv("JWT_EXPIRATION", "3600000")
                         .waitingFor(Wait.forHttp("/actuator/health").forStatusCode(200))
