@@ -32,8 +32,13 @@ public interface TransactionService {
         return processDeposit(accountId, amount, description, userId, null);
     }
 
+    default TransactionResponse processDeposit(String accountId, BigDecimal amount,
+                                               String description, String userId, String idempotencyKey) {
+        return processDeposit(accountId, amount, description, null, userId, idempotencyKey);
+    }
+
     TransactionResponse processDeposit(String accountId, BigDecimal amount,
-                                       String description, String userId, String idempotencyKey);
+                                       String description, String reference, String userId, String idempotencyKey);
     
     /**
      * Process a withdrawal from an account
@@ -43,8 +48,13 @@ public interface TransactionService {
         return processWithdrawal(accountId, amount, description, userId, null);
     }
 
+    default TransactionResponse processWithdrawal(String accountId, BigDecimal amount,
+                                                  String description, String userId, String idempotencyKey) {
+        return processWithdrawal(accountId, amount, description, null, userId, idempotencyKey);
+    }
+
     TransactionResponse processWithdrawal(String accountId, BigDecimal amount,
-                                          String description, String userId, String idempotencyKey);
+                                          String description, String reference, String userId, String idempotencyKey);
     
     /**
      * Get transaction by ID

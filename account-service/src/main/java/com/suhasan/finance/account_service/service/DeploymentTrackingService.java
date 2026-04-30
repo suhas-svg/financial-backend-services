@@ -35,16 +35,16 @@ public class DeploymentTrackingService {
     private final DataSource dataSource;
 
     @Value("${account-service.base-url:http://localhost:8080}")
-    private String accountServiceBaseUrl;
+    private String accountServiceBaseUrl = "http://localhost:8080";
 
     @Value("${app.version:unknown}")
-    private String applicationVersion;
+    private String applicationVersion = "unknown";
 
     @Value("${app.build-time:unknown}")
-    private String buildTime;
+    private String buildTime = "unknown";
 
     @Value("${app.git-commit:unknown}")
-    private String gitCommit;
+    private String gitCommit = "unknown";
 
     // Deployment tracking metrics
     private Counter deploymentCounter;
@@ -239,7 +239,8 @@ public class DeploymentTrackingService {
     }
 
     private String getEnvironment() {
-        return System.getProperty("spring.profiles.active", "dev");
+        String activeProfile = System.getProperty("spring.profiles.active");
+        return activeProfile == null || activeProfile.isBlank() ? "dev" : activeProfile;
     }
 
     // Health check implementations — all are real checks, no placeholders (M4 fix)

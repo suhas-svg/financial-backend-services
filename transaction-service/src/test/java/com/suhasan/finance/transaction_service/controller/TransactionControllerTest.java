@@ -79,12 +79,14 @@ class TransactionControllerTest {
                 .accountId("acc1")
                 .amount(BigDecimal.valueOf(200))
                 .description("Test deposit")
+                .reference("DEP-REF")
                 .build();
 
         withdrawalRequest = WithdrawalRequest.builder()
                 .accountId("acc1")
                 .amount(BigDecimal.valueOf(150))
                 .description("Test withdrawal")
+                .reference("WDR-REF")
                 .build();
 
         reversalRequest = ReversalRequest.builder()
@@ -148,7 +150,7 @@ class TransactionControllerTest {
     void processDeposit_Success() throws Exception {
         // Arrange
         when(transactionService.processDeposit(eq("acc1"), eq(BigDecimal.valueOf(200)), 
-                eq("Test deposit"), eq("user123")))
+                eq("Test deposit"), eq("DEP-REF"), eq("user123"), isNull()))
                 .thenReturn(transactionResponse);
 
         // Act & Assert
@@ -160,7 +162,7 @@ class TransactionControllerTest {
                 .andExpect(jsonPath("$.transactionId").value("txn123"));
 
         verify(transactionService).processDeposit(eq("acc1"), eq(BigDecimal.valueOf(200)), 
-                eq("Test deposit"), eq("user123"));
+                eq("Test deposit"), eq("DEP-REF"), eq("user123"), isNull());
     }
 
     @Test
@@ -168,7 +170,7 @@ class TransactionControllerTest {
     void processWithdrawal_Success() throws Exception {
         // Arrange
         when(transactionService.processWithdrawal(eq("acc1"), eq(BigDecimal.valueOf(150)), 
-                eq("Test withdrawal"), eq("user123")))
+                eq("Test withdrawal"), eq("WDR-REF"), eq("user123"), isNull()))
                 .thenReturn(transactionResponse);
 
         // Act & Assert
@@ -180,7 +182,7 @@ class TransactionControllerTest {
                 .andExpect(jsonPath("$.transactionId").value("txn123"));
 
         verify(transactionService).processWithdrawal(eq("acc1"), eq(BigDecimal.valueOf(150)), 
-                eq("Test withdrawal"), eq("user123"));
+                eq("Test withdrawal"), eq("WDR-REF"), eq("user123"), isNull());
     }
 
     @Test

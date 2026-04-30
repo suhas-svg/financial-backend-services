@@ -69,9 +69,9 @@ public class TransactionController {
         String userId = authentication.getName();
         TransactionResponse response = idempotencyKey == null || idempotencyKey.isBlank()
                 ? transactionService.processDeposit(
-                    request.getAccountId(), request.getAmount(), request.getDescription(), userId)
+                    request.getAccountId(), request.getAmount(), request.getDescription(), request.getReference(), userId, null)
                 : transactionService.processDeposit(
-                    request.getAccountId(), request.getAmount(), request.getDescription(), userId, idempotencyKey);
+                    request.getAccountId(), request.getAmount(), request.getDescription(), request.getReference(), userId, idempotencyKey);
         
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -90,9 +90,9 @@ public class TransactionController {
         String userId = authentication.getName();
         TransactionResponse response = idempotencyKey == null || idempotencyKey.isBlank()
                 ? transactionService.processWithdrawal(
-                    request.getAccountId(), request.getAmount(), request.getDescription(), userId)
+                    request.getAccountId(), request.getAmount(), request.getDescription(), request.getReference(), userId, null)
                 : transactionService.processWithdrawal(
-                    request.getAccountId(), request.getAmount(), request.getDescription(), userId, idempotencyKey);
+                    request.getAccountId(), request.getAmount(), request.getDescription(), request.getReference(), userId, idempotencyKey);
         
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -265,6 +265,8 @@ public class TransactionController {
         
         log.debug("Searching transactions with filters");
         
+        String effectiveCreatedBy = isPrivileged(authentication) ? null : authentication.getName();
+
         TransactionFilterRequest filter = TransactionFilterRequest.builder()
                 .accountId(accountId)
                 .type(type)
@@ -277,11 +279,17 @@ public class TransactionController {
                 .reference(reference)
                 .fromAccountId(fromAccountId)
                 .toAccountId(toAccountId)
-                .createdBy(authentication.getName())
+                .createdBy(effectiveCreatedBy)
                 .build();
         
         Page<TransactionResponse> transactions = transactionService.searchTransactions(filter, pageable);
         return ResponseEntity.ok(transactions);
+    }
+
+    private boolean isPrivileged(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority())
+                        || "ROLE_INTERNAL_SERVICE".equals(authority.getAuthority()));
     }
     
     /**

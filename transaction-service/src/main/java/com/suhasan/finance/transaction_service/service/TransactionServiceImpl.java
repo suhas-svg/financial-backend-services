@@ -32,6 +32,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -185,7 +186,7 @@ public class TransactionServiceImpl implements TransactionService {
     @Transactional(noRollbackFor = Exception.class)
     @CacheEvict(value = "transaction:history", allEntries = true)
     public TransactionResponse processDeposit(String accountId, BigDecimal amount,
-            String description, String userId, String idempotencyKey) {
+            String description, String reference, String userId, String idempotencyKey) {
         String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
         Optional<Transaction> existing = findIdempotentTransaction(userId, TransactionType.DEPOSIT,
                 normalizedIdempotencyKey);
@@ -212,6 +213,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .status(TransactionStatus.PROCESSING)
                 .processingState(TransactionProcessingState.INITIATED)
                 .description(description)
+                .reference(reference)
                 .idempotencyKey(normalizedIdempotencyKey)
                 .createdBy(userId)
                 .toAccountBalanceBefore(account.getBalance())
@@ -255,7 +257,7 @@ public class TransactionServiceImpl implements TransactionService {
     @Transactional(noRollbackFor = Exception.class)
     @CacheEvict(value = "transaction:history", allEntries = true)
     public TransactionResponse processWithdrawal(String accountId, BigDecimal amount,
-            String description, String userId, String idempotencyKey) {
+            String description, String reference, String userId, String idempotencyKey) {
         String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
         Optional<Transaction> existing = findIdempotentTransaction(userId, TransactionType.WITHDRAWAL,
                 normalizedIdempotencyKey);
@@ -285,6 +287,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .status(TransactionStatus.PROCESSING)
                 .processingState(TransactionProcessingState.INITIATED)
                 .description(description)
+                .reference(reference)
                 .idempotencyKey(normalizedIdempotencyKey)
                 .createdBy(userId)
                 .fromAccountBalanceBefore(account.getBalance())
@@ -629,10 +632,17 @@ public class TransactionServiceImpl implements TransactionService {
                 filter.getEndDate(),
                 filter.getMinAmount(),
                 filter.getMaxAmount(),
-                filter.getDescription(),
+                buildDescriptionPattern(filter.getDescription()),
                 filter.getReference(),
                 filter.getCreatedBy(),
                 pageable).map(this::mapToResponse);
+    }
+
+    private String buildDescriptionPattern(String description) {
+        if (description == null || description.isBlank()) {
+            return null;
+        }
+        return "%" + description.trim().toLowerCase(Locale.ROOT) + "%";
     }
 
     @Override
