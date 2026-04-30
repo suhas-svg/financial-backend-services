@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface TransactionRepository extends JpaRepository<Transaction, String> {
+public interface TransactionRepository extends JpaRepository<Transaction, String>, TransactionRepositoryCustom {
 
        // Find transactions by account
        Page<Transaction> findByFromAccountIdOrToAccountIdOrderByCreatedAtDesc(
@@ -102,32 +102,6 @@ public interface TransactionRepository extends JpaRepository<Transaction, String
        // Find original transaction by reversal transaction ID
        @Query("SELECT t FROM Transaction t WHERE t.reversalTransactionId = :reversalTransactionId")
        Transaction findOriginalTransactionByReversalId(@Param("reversalTransactionId") String reversalTransactionId);
-
-       // Advanced filtering queries
-       @Query("SELECT t FROM Transaction t WHERE " +
-                     "(:accountId IS NULL OR t.fromAccountId = :accountId OR t.toAccountId = :accountId) " +
-                     "AND (:type IS NULL OR t.type = :type) " +
-                     "AND (:status IS NULL OR t.status = :status) " +
-                     "AND (:startDate IS NULL OR t.createdAt >= :startDate) " +
-                     "AND (:endDate IS NULL OR t.createdAt <= :endDate) " +
-                     "AND (:minAmount IS NULL OR t.amount >= :minAmount) " +
-                     "AND (:maxAmount IS NULL OR t.amount <= :maxAmount) " +
-                     "AND (:description IS NULL OR LOWER(t.description) LIKE LOWER(CONCAT('%', :description, '%'))) " +
-                     "AND (:reference IS NULL OR t.reference = :reference) " +
-                     "AND (:createdBy IS NULL OR t.createdBy = :createdBy) " +
-                     "ORDER BY t.createdAt DESC")
-       Page<Transaction> findTransactionsWithFilters(
-                     @Param("accountId") String accountId,
-                     @Param("type") TransactionType type,
-                     @Param("status") TransactionStatus status,
-                     @Param("startDate") LocalDateTime startDate,
-                     @Param("endDate") LocalDateTime endDate,
-                     @Param("minAmount") BigDecimal minAmount,
-                     @Param("maxAmount") BigDecimal maxAmount,
-                     @Param("description") String description,
-                     @Param("reference") String reference,
-                     @Param("createdBy") String createdBy,
-                     Pageable pageable);
 
        // Statistics queries
        @Query("SELECT COUNT(t) FROM Transaction t WHERE " +

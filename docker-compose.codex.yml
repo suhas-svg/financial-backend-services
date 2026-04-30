@@ -1,0 +1,142 @@
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - financial-network
+
+  account-postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: myfirstdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    volumes:
+      - account_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d myfirstdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - financial-network
+
+  transaction-postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: transactiondb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    volumes:
+      - transaction_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d transactiondb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - financial-network
+
+  account-service:
+    build:
+      context: ./account-service
+      dockerfile: Dockerfile
+      args:
+        BUILD_ENV: prod
+        APP_VERSION: ${VERSION:-latest}
+        SKIP_TESTS: true
+    image: account-service:${VERSION:-latest}
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://account-postgres:5432/myfirstdb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      JAVA_OPTS: -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+UseStringDeduplication
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      LOGGING_LEVEL_ROOT: INFO
+      JWT_SECRET: ${JWT_SECRET:?Env var JWT_SECRET must be set}
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?Env var INTERNAL_JWT_SECRET must be set}
+    depends_on:
+      account-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - financial-network
+    volumes:
+      - account_logs:/app/logs
+
+  transaction-service:
+    build:
+      context: ./transaction-service
+      dockerfile: Dockerfile
+      args:
+        BUILD_ENV: prod
+        APP_VERSION: ${VERSION:-latest}
+    image: transaction-service:${VERSION:-latest}
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://transaction-postgres:5432/transactiondb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      ACCOUNT_SERVICE_URL: http://account-service:8080
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      JAVA_OPTS: -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+UseStringDeduplication
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      LOGGING_LEVEL_ROOT: INFO
+      JWT_SECRET: ${JWT_SECRET:?Env var JWT_SECRET must be set}
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?Env var INTERNAL_JWT_SECRET must be set}
+    depends_on:
+      transaction-postgres:
+        condition: service_healthy
+      account-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - financial-network
+    volumes:
+      - transaction_logs:/app/logs
+
+volumes:
+  account_postgres_data:
+  transaction_postgres_data:
+  account_logs:
+  transaction_logs:
+  redis_data:
+
+networks:
+  financial-network:
+    driver: bridge

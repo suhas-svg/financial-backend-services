@@ -14,6 +14,7 @@ public class CreditCardAccount extends Account {
     @Column(nullable = true)
     private BigDecimal creditLimit;
 
+    @NotNull(message = "Due date is required")
     @Future(message = "Due date must be in the future")
     @Column(nullable = true)
     private LocalDate dueDate;

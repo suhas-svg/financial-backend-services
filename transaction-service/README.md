@@ -122,7 +122,7 @@ account-service.base-url=http://localhost:8080
 account-service.timeout=5000
 
 # JWT Security (shared with Account Service)
-security.jwt.secret=AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14=
+security.jwt.secret=${JWT_SECRET}
 ```
 
 ### Environment Variables

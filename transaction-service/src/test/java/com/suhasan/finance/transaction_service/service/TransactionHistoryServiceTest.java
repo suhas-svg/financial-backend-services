@@ -26,6 +26,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -97,6 +98,28 @@ class TransactionHistoryServiceTest {
                 assertThat(result.getContent()).hasSize(1);
                 assertThat(result.getContent().get(0).getTransactionId()).isEqualTo("tx-123");
                 assertThat(result.getContent().get(0).getAmount()).isEqualByComparingTo(BigDecimal.valueOf(100.00));
+        }
+
+        @Test
+        void testSearchTransactionsNormalizesDescriptionPattern() {
+                TransactionFilterRequest filter = TransactionFilterRequest.builder()
+                                .accountId("account-1")
+                                .description("  Test Transaction ")
+                                .createdBy("test-user")
+                                .build();
+
+                Page<Transaction> scoped = new PageImpl<>(List.of(sampleTransaction));
+                when(transactionRepository.findTransactionsWithFilters(
+                                eq("account-1"), eq(null), eq(null), eq(null), eq(null), eq(null), eq(null),
+                                eq("%test transaction%"), eq(null), eq("test-user"), eq(pageable)))
+                                .thenReturn(scoped);
+
+                Page<TransactionResponse> result = transactionService.searchTransactions(filter, pageable);
+
+                assertThat(result.getContent()).hasSize(1);
+                verify(transactionRepository).findTransactionsWithFilters(
+                                eq("account-1"), eq(null), eq(null), eq(null), eq(null), eq(null), eq(null),
+                                eq("%test transaction%"), eq(null), eq("test-user"), eq(pageable));
         }
 
         @Test

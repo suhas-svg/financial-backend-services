@@ -27,6 +27,8 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -79,6 +81,7 @@ class TransactionControllerMockMvcTest {
                 .accountId("acc1")
                 .amount(BigDecimal.valueOf(150))
                 .description("Test withdrawal")
+                .reference("WDR-REF")
                 .build();
     }
 
@@ -172,7 +175,7 @@ class TransactionControllerMockMvcTest {
     void processWithdrawal_InsufficientFunds_ReturnsBadRequest() throws Exception {
         // Arrange
         when(transactionService.processWithdrawal(eq("acc1"), eq(BigDecimal.valueOf(150)), 
-                eq("Test withdrawal"), eq("user123")))
+                eq("Test withdrawal"), eq("WDR-REF"), eq("user123"), isNull()))
                 .thenThrow(new InsufficientFundsException("Insufficient funds for withdrawal"));
 
         // Act & Assert
@@ -185,7 +188,7 @@ class TransactionControllerMockMvcTest {
                 .andExpect(jsonPath("$.message").value("Insufficient funds for withdrawal"));
 
         verify(transactionService).processWithdrawal(eq("acc1"), eq(BigDecimal.valueOf(150)), 
-                eq("Test withdrawal"), eq("user123"));
+                eq("Test withdrawal"), eq("WDR-REF"), eq("user123"), isNull());
     }
 
     @Test
@@ -240,6 +243,42 @@ class TransactionControllerMockMvcTest {
                 .andExpect(jsonPath("$.totalElements").value(1));
 
         verify(transactionService).searchTransactions(any(TransactionFilterRequest.class), any());
+    }
+
+    @Test
+    @WithMockUser(username = "user123", roles = "USER")
+    void searchTransactions_ForCustomer_ScopesToAuthenticatedUser() throws Exception {
+        // Arrange
+        Page<TransactionResponse> page = new PageImpl<>(List.of(transactionResponse), PageRequest.of(0, 20), 1);
+        when(transactionService.searchTransactions(any(TransactionFilterRequest.class), any()))
+                .thenReturn(page);
+
+        // Act
+        mockMvc.perform(get("/api/transactions/search"))
+                .andExpect(status().isOk());
+
+        // Assert
+        ArgumentCaptor<TransactionFilterRequest> filterCaptor = ArgumentCaptor.forClass(TransactionFilterRequest.class);
+        verify(transactionService).searchTransactions(filterCaptor.capture(), any());
+        assertThat(filterCaptor.getValue().getCreatedBy()).isEqualTo("user123");
+    }
+
+    @Test
+    @WithMockUser(username = "ops", roles = "ADMIN")
+    void searchTransactions_ForAdmin_DoesNotScopeToAuthenticatedUser() throws Exception {
+        // Arrange
+        Page<TransactionResponse> page = new PageImpl<>(List.of(transactionResponse), PageRequest.of(0, 20), 1);
+        when(transactionService.searchTransactions(any(TransactionFilterRequest.class), any()))
+                .thenReturn(page);
+
+        // Act
+        mockMvc.perform(get("/api/transactions/search"))
+                .andExpect(status().isOk());
+
+        // Assert
+        ArgumentCaptor<TransactionFilterRequest> filterCaptor = ArgumentCaptor.forClass(TransactionFilterRequest.class);
+        verify(transactionService).searchTransactions(filterCaptor.capture(), any());
+        assertThat(filterCaptor.getValue().getCreatedBy()).isNull();
     }
 
     @Test

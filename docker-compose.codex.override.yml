@@ -1,0 +1,8 @@
+services:
+  account-postgres:
+    ports:
+      - "127.0.0.1:15432:5432"
+
+  transaction-postgres:
+    ports:
+      - "127.0.0.1:15433:5432"
