@@ -126,7 +126,7 @@ jobs:
           DC_ARGS=(
             "-DdataDirectory=${HOME}/.m2/repository/org/owasp/dependency-check-data"
             "-DnvdMaxRetryCount=20"
-            "-DnvdApiDelay=16000"
+            "-DnvdApiDelay=8000"
           )
           if [ -n "${NVD_API_KEY:-}" ]; then
             DC_ARGS+=("-DnvdApiKey=${NVD_API_KEY}" "-DnvdApiDelay=3500")
