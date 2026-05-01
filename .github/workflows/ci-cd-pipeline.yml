@@ -96,6 +96,7 @@ jobs:
   dependency-scan:
     name: Dependency Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 75
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -107,13 +108,38 @@ jobs:
           distribution: temurin
           cache: maven
 
+      - name: Cache OWASP dependency-check data
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/owasp/dependency-check-data
+          key: dependency-check-data-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            dependency-check-data-${{ runner.os }}-
+
+      - name: Update dependency-check data
+        working-directory: account-service
+        shell: bash
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          set -euo pipefail
+          DC_ARGS=(
+            "-DdataDirectory=${HOME}/.m2/repository/org/owasp/dependency-check-data"
+            "-DnvdMaxRetryCount=20"
+            "-DnvdApiDelay=8000"
+          )
+          if [ -n "${NVD_API_KEY:-}" ]; then
+            DC_ARGS+=("-DnvdApiKey=${NVD_API_KEY}" "-DnvdApiDelay=3500")
+          fi
+          ./mvnw org.owasp:dependency-check-maven:update-only "${DC_ARGS[@]}"
+
       - name: Scan account-service dependencies
         working-directory: account-service
-        run: ./mvnw -q org.owasp:dependency-check-maven:check -DskipTests
+        run: ./mvnw -q org.owasp:dependency-check-maven:check -DskipTests -DautoUpdate=false -DdataDirectory="${HOME}/.m2/repository/org/owasp/dependency-check-data"
 
       - name: Scan transaction-service dependencies
         working-directory: transaction-service
-        run: ./mvnw -q org.owasp:dependency-check-maven:check -DskipTests
+        run: ./mvnw -q org.owasp:dependency-check-maven:check -DskipTests -DautoUpdate=false -DdataDirectory="${HOME}/.m2/repository/org/owasp/dependency-check-data"
 
   secret-scan:
     name: Secret Scan
