@@ -4,7 +4,7 @@ This document describes how to set up your development environment with code qua
 
 ## Prerequisites
 
-- Java 22
+- Java 21 (matching service build configuration)
 - Maven 3.9+
 - Git
 - Docker (for integration tests)
@@ -87,6 +87,27 @@ cd account-service
 
 # Run all quality checks
 ./mvnw clean verify
+```
+
+
+### 3.5 Multi-Project Validation (Monorepo)
+
+This repository includes Java services, a Python MCP server, a React frontend, and a Node.js E2E test suite.
+Run stack-specific checks before opening a PR:
+
+```bash
+# Java services
+(cd account-service && ./mvnw clean verify)
+(cd transaction-service && ./mvnw clean verify)
+
+# Python MCP server
+(cd financial-mcp-server && python -m pytest tests/)
+
+# Frontend
+(cd frontend && npm run lint && npm run test && npm run build)
+
+# E2E tests
+(cd e2e-tests && npm run lint && npm run test)
 ```
 
 ### 4. SonarCloud Setup (Optional for local development)
