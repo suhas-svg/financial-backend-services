@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
+import { searchAuditEvents } from "./queries";
 import { clearSession, saveSession } from "./session";
 
 function tokenFor(payload: object) {
@@ -64,5 +65,21 @@ describe("apiRequest", () => {
     await expect(apiRequest("account", "/api/auth/login", { method: "POST", body: { username: "u", password: "p" } })).resolves.toEqual({
       accessToken: "jwt-token"
     });
+  });
+
+  it("maps audit search requests to the transaction proxy", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ content: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+
+    await searchAuditEvents({ userId: "customer", outcome: "FAILURE" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/transaction-api/api/audit/events?size=20&sort=createdAt%2Cdesc&userId=customer&outcome=FAILURE",
+      expect.any(Object)
+    );
   });
 });
