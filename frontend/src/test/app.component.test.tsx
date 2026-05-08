@@ -83,6 +83,12 @@ function mockFetch(handler?: (url: string, init?: RequestInit) => Promise<Respon
     if (url.includes("/api/health") || url.includes("/api/monitoring")) {
       return jsonResponse({ status: "UP" });
     }
+    if (url.includes("/api/audit/summary")) {
+      return jsonResponse({ totalEvents: 0, failureEvents: 0, reversalEvents: 0, securityEvents: 0 });
+    }
+    if (url.includes("/api/audit/events")) {
+      return jsonResponse(emptyPage);
+    }
     return jsonResponse({});
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -211,6 +217,7 @@ describe("admin navigation", () => {
     expect(screen.getByRole("link", { name: "Admin Accounts" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Monitoring" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Ops Transactions" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Audit Log" })).toBeInTheDocument();
   });
 
   it("redirects non-admin users away from admin routes", async () => {
@@ -219,6 +226,62 @@ describe("admin navigation", () => {
 
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Monitoring" })).not.toBeInTheDocument();
+  });
+});
+
+describe("admin audit log", () => {
+  it("renders summary, filters, table rows, and selected event details", async () => {
+    const user = userEvent.setup();
+    const { calls } = mockFetch((url) => {
+      if (url.includes("/api/audit/summary")) {
+        return jsonResponse({ totalEvents: 4, failureEvents: 1, reversalEvents: 1, securityEvents: 1 });
+      }
+      if (url.includes("/api/audit/events")) {
+        return jsonResponse({
+          ...emptyPage,
+          content: [
+            {
+              eventId: "event-1",
+              eventType: "TRANSACTION",
+              action: "TRANSACTION_FAILED",
+              outcome: "FAILURE",
+              userId: "customer",
+              transactionId: "txn-1",
+              amount: 42.5,
+              currency: "USD",
+              details: "Insufficient funds",
+              createdAt: "2026-05-08T10:15:30"
+            }
+          ],
+          totalElements: 1,
+          totalPages: 1
+        });
+      }
+      return undefined;
+    });
+
+    renderApp("/admin/audit-log", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
+
+    expect(await screen.findByRole("heading", { name: "Audit Log" })).toBeInTheDocument();
+    expect(await screen.findByText("4")).toBeInTheDocument();
+    expect(screen.getByText("TRANSACTION_FAILED")).toBeInTheDocument();
+    expect(screen.getByText("txn-1")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("User ID"), "customer");
+    await user.type(screen.getByPlaceholderText("Transaction ID"), "txn-1");
+    await user.selectOptions(screen.getByDisplayValue("All outcomes"), "FAILURE");
+
+    await waitFor(() => {
+      expect(calls.some(({ url }) =>
+        url.includes("/transaction-api/api/audit/events")
+        && url.includes("userId=customer")
+        && url.includes("transactionId=txn-1")
+        && url.includes("outcome=FAILURE")
+      )).toBe(true);
+    });
+
+    await user.click(screen.getByRole("button", { name: "View event-1" }));
+    expect(screen.getByText("Insufficient funds")).toBeInTheDocument();
   });
 });
 

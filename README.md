@@ -42,6 +42,7 @@ financial-backend-services/
 - Search operational transaction views.
 - Reverse transactions using the backend reversal endpoint.
 - View reversal-related status panels.
+- Review the transaction-service audit log with admin-only summary counters, filters, event search, and selected-event details.
 
 ### Backend Services
 
@@ -56,6 +57,8 @@ financial-backend-services/
   - Transaction history and search.
   - Transaction stats and monitoring endpoints.
   - Idempotency and reversal workflows.
+  - Persistent audit log storage for high-value transaction and security events.
+  - Admin-only audit log search, detail, and summary APIs.
   - Account-service integration for balance updates.
 
 ## Technology Stack
@@ -209,6 +212,20 @@ GET /api/monitoring/alerts/status
 GET /api/monitoring/metrics/available
 ```
 
+### Audit Log
+
+The admin Audit Log page calls the transaction-service audit APIs through the frontend proxy at `/transaction-api/api/audit/*`.
+
+Audit APIs require `ROLE_ADMIN` or `ROLE_INTERNAL_SERVICE`.
+
+```http
+GET /api/audit/events?page=&size=&eventType=&action=&outcome=&userId=&transactionId=&from=&to=
+GET /api/audit/events/{eventId}
+GET /api/audit/summary?from=&to=
+```
+
+Version 1 stores transaction initiated, completed, failed, reversed, and security events in `transaction-service`. Audit rows are retained for 90 days and intentionally exclude stack traces, JWTs, passwords, authorization headers, and raw token values.
+
 ## Testing
 
 ### Frontend
@@ -229,6 +246,7 @@ The frontend test suite covers:
 - Account type-specific fields.
 - Transaction table filters.
 - Admin navigation visibility.
+- Admin audit log summary, filters, event table, detail panel, and API proxy mapping.
 - Customer and admin Playwright flows.
 
 ### Backend
@@ -243,6 +261,8 @@ cd transaction-service
 .\mvnw.cmd -q -DskipTests compile
 .\mvnw.cmd -q -Dtest=TransactionServiceHardeningTest test
 ```
+
+The transaction-service test suite also covers the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup.
 
 ## Demo Evidence
 

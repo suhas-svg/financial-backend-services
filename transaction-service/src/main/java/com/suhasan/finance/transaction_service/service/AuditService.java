@@ -3,16 +3,20 @@ package com.suhasan.finance.transaction_service.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.suhasan.finance.transaction_service.dto.AuditEvent;
+import com.suhasan.finance.transaction_service.entity.AuditLogEntry;
 import com.suhasan.finance.transaction_service.entity.Transaction;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
+import com.suhasan.finance.transaction_service.repository.AuditLogEntryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
 
@@ -25,7 +29,9 @@ import java.util.UUID;
 public class AuditService {
     
     private static final Logger AUDIT_LOGGER = LoggerFactory.getLogger("AUDIT");
+    private static final int RETENTION_DAYS = 90;
     private final ObjectMapper objectMapper;
+    private final AuditLogEntryRepository auditLogEntryRepository;
     
     /**
      * Log transaction initiation
@@ -45,6 +51,17 @@ public class AuditService {
             
             AUDIT_LOGGER.info("Transaction initiated: {} {} from {} to {} amount {}", 
                     transactionId, type, fromAccountId, toAccountId, amount);
+            persist(AuditLogEntry.builder()
+                    .eventType("TRANSACTION")
+                    .action("TRANSACTION_INITIATED")
+                    .outcome("INITIATED")
+                    .transactionId(transactionId)
+                    .userId(userId)
+                    .fromAccountId(fromAccountId)
+                    .toAccountId(toAccountId)
+                    .amount(amount)
+                    .currency("USD")
+                    .build());
         } finally {
             MDC.clear();
         }
@@ -69,6 +86,18 @@ public class AuditService {
             AUDIT_LOGGER.info("Transaction completed successfully: {} status {} amount {} {}",
                     transaction.getTransactionId(), transaction.getStatus(), 
                     transaction.getAmount(), transaction.getCurrency());
+            persist(AuditLogEntry.builder()
+                    .eventType("TRANSACTION")
+                    .action("TRANSACTION_COMPLETED")
+                    .outcome("SUCCESS")
+                    .transactionId(transaction.getTransactionId())
+                    .userId(transaction.getCreatedBy())
+                    .fromAccountId(transaction.getFromAccountId())
+                    .toAccountId(transaction.getToAccountId())
+                    .amount(transaction.getAmount())
+                    .currency(transaction.getCurrency())
+                    .details(transaction.getDescription())
+                    .build());
         } finally {
             MDC.clear();
         }
@@ -94,6 +123,19 @@ public class AuditService {
             
             AUDIT_LOGGER.error("Transaction failed: {} {} from {} to {} amount {} - Error: {} ({})",
                     transactionId, type, fromAccountId, toAccountId, amount, errorMessage, errorCode);
+            persist(AuditLogEntry.builder()
+                    .eventType("TRANSACTION")
+                    .action("TRANSACTION_FAILED")
+                    .outcome("FAILURE")
+                    .transactionId(transactionId)
+                    .userId(userId)
+                    .fromAccountId(fromAccountId)
+                    .toAccountId(toAccountId)
+                    .amount(amount)
+                    .currency("USD")
+                    .errorCode(errorCode)
+                    .errorMessage(errorMessage)
+                    .build());
         } finally {
             MDC.clear();
         }
@@ -113,6 +155,15 @@ public class AuditService {
             
             AUDIT_LOGGER.info("Transaction reversed: original {} reversal {} reason: {}",
                     originalTransactionId, reversalTransactionId, reason);
+            persist(AuditLogEntry.builder()
+                    .eventType("TRANSACTION")
+                    .action("TRANSACTION_REVERSED")
+                    .outcome("SUCCESS")
+                    .transactionId(originalTransactionId)
+                    .userId(userId)
+                    .details(reason)
+                    .metadata("{\"reversalTransactionId\":\"" + sanitizeJsonValue(reversalTransactionId) + "\"}")
+                    .build());
         } finally {
             MDC.clear();
         }
@@ -197,6 +248,14 @@ public class AuditService {
             
             AUDIT_LOGGER.warn("Security event: {} user {} from {} details: {}",
                     eventType, userId, ipAddress, details != null ? details : "N/A");
+            persist(AuditLogEntry.builder()
+                    .eventType("SECURITY")
+                    .action("SECURITY_EVENT")
+                    .outcome(eventType)
+                    .userId(userId != null ? userId : "anonymous")
+                    .ipAddress(ipAddress != null ? ipAddress : "unknown")
+                    .details(details)
+                    .build());
         } finally {
             MDC.clear();
         }
@@ -263,6 +322,24 @@ public class AuditService {
             }
             
             AUDIT_LOGGER.info("Structured audit event: {}", jsonEvent);
+            if ("TRANSACTION".equals(auditEvent.getEventType()) || "SECURITY".equals(auditEvent.getEventType())) {
+                persist(AuditLogEntry.builder()
+                        .eventType(auditEvent.getEventType())
+                        .action(auditEvent.getAction())
+                        .outcome(auditEvent.getOutcome())
+                        .userId(auditEvent.getUserId())
+                        .transactionId(auditEvent.getTransactionId())
+                        .fromAccountId(auditEvent.getFromAccountId())
+                        .toAccountId(auditEvent.getToAccountId())
+                        .amount(parseAmount(auditEvent.getAmount()))
+                        .currency(auditEvent.getCurrency())
+                        .ipAddress(auditEvent.getIpAddress())
+                        .details(auditEvent.getDetails())
+                        .errorCode(auditEvent.getErrorCode())
+                        .errorMessage(auditEvent.getErrorMessage())
+                        .metadata(auditEvent.getMetadata() != null ? objectMapper.writeValueAsString(auditEvent.getMetadata()) : null)
+                        .build());
+            }
             
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize audit event", e);
@@ -304,5 +381,29 @@ public class AuditService {
             return millis + "ms";
         }
         return "unknown";
+    }
+
+    @Scheduled(cron = "0 30 2 * * *")
+    public void cleanupOldAuditLogs() {
+        auditLogEntryRepository.deleteByCreatedAtBefore(LocalDateTime.now().minusDays(RETENTION_DAYS));
+    }
+
+    private void persist(AuditLogEntry entry) {
+        auditLogEntryRepository.save(entry);
+    }
+
+    private BigDecimal parseAmount(String amount) {
+        if (amount == null || amount.isBlank()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(amount);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private String sanitizeJsonValue(String value) {
+        return value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

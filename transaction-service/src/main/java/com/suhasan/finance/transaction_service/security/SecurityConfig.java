@@ -41,6 +41,7 @@ public class SecurityConfig {
                         // Previously .authenticated() — any user could read circuit-breaker state
                         // and alert thresholds. Now restricted to privileged roles only.
                         .requestMatchers("/api/monitoring/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
+                        .requestMatchers("/api/audit/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
 
                         // ── Transaction endpoints — require authenticated user ────────────────
                         .requestMatchers("/api/transactions/**").authenticated()

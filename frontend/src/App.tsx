@@ -3,6 +3,7 @@ import { AppLayout } from "./components/AppLayout";
 import { RequireAuth } from "./components/RequireAuth";
 import { AccountsPage } from "./pages/AccountsPage";
 import { AdminAccountsPage } from "./pages/AdminAccountsPage";
+import { AdminAuditLogPage } from "./pages/AdminAuditLogPage";
 import { AdminMonitoringPage } from "./pages/AdminMonitoringPage";
 import { AdminTransactionsPage } from "./pages/AdminTransactionsPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -26,6 +27,7 @@ export function App() {
             <Route path="admin/accounts" element={<AdminAccountsPage />} />
             <Route path="admin/monitoring" element={<AdminMonitoringPage />} />
             <Route path="admin/transactions" element={<AdminTransactionsPage />} />
+            <Route path="admin/audit-log" element={<AdminAuditLogPage />} />
           </Route>
         </Route>
       </Route>

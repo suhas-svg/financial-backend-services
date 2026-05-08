@@ -18,12 +18,20 @@ test("admin can open monitoring pages when logged in with admin credentials", as
   await expect(page.getByRole("link", { name: "Admin Accounts" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Monitoring" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Ops Transactions" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Audit Log" })).toBeVisible();
 
   await page.getByRole("link", { name: "Monitoring" }).click();
   await expect(page.getByRole("heading", { name: "Monitoring" })).toBeVisible();
   await expect(page.getByText("Account health")).toBeVisible();
   await expect(page.getByText("Transaction health")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Available metrics" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Audit Log" }).click();
+  await expect(page.getByRole("heading", { name: "Audit Log" })).toBeVisible();
+  await expect(page.getByText("Total events")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Audit events" })).toBeVisible();
+  await expect(page.getByPlaceholder("User ID")).toBeVisible();
+  await expect(page.getByPlaceholder("Transaction ID")).toBeVisible();
 });
 
 test("normal user cannot see or open admin routes", async ({ page }) => {

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.suhasan.finance.transaction_service.entity.Transaction;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
 import com.suhasan.finance.transaction_service.entity.TransactionStatus;
+import com.suhasan.finance.transaction_service.repository.AuditLogEntryRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -23,6 +24,9 @@ class AuditServiceTest {
     
     @Mock
     private ObjectMapper objectMapper;
+
+    @Mock
+    private AuditLogEntryRepository auditLogEntryRepository;
     
     @InjectMocks
     private AuditService auditService;

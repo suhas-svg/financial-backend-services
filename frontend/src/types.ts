@@ -82,3 +82,29 @@ export type Limits = {
   singleTransactionLimit: number;
   currency: string;
 };
+
+export type AuditLogEntry = {
+  eventId: string;
+  eventType: string;
+  action: string;
+  outcome: string;
+  userId?: string;
+  transactionId?: string;
+  fromAccountId?: string;
+  toAccountId?: string;
+  amount?: number;
+  currency?: string;
+  ipAddress?: string;
+  details?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  createdAt: string;
+  metadata?: string;
+};
+
+export type AuditSummary = {
+  totalEvents: number;
+  failureEvents: number;
+  reversalEvents: number;
+  securityEvents: number;
+};
