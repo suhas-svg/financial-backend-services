@@ -89,6 +89,12 @@ function mockFetch(handler?: (url: string, init?: RequestInit) => Promise<Respon
     if (url.includes("/api/audit/events")) {
       return jsonResponse(emptyPage);
     }
+    if (url.includes("/api/risk/summary")) {
+      return jsonResponse({ totalAlerts: 0, openAlerts: 0, highSeverityAlerts: 0, escalatedAlerts: 0 });
+    }
+    if (url.includes("/api/risk/alerts")) {
+      return jsonResponse(emptyPage);
+    }
     return jsonResponse({});
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -218,6 +224,7 @@ describe("admin navigation", () => {
     expect(screen.getByRole("link", { name: "Monitoring" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Ops Transactions" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Audit Log" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Risk Alerts" })).toBeInTheDocument();
   });
 
   it("redirects non-admin users away from admin routes", async () => {
@@ -282,6 +289,98 @@ describe("admin audit log", () => {
 
     await user.click(screen.getByRole("button", { name: "View event-1" }));
     expect(screen.getByText("Insufficient funds")).toBeInTheDocument();
+  });
+});
+
+describe("admin risk alerts", () => {
+  it("renders summary, filters, table rows, details, and status actions", async () => {
+    const user = userEvent.setup();
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/risk/summary")) {
+        return jsonResponse({ totalAlerts: 5, openAlerts: 3, highSeverityAlerts: 2, escalatedAlerts: 1 });
+      }
+      if (url.includes("/api/risk/alerts/alert-1/status") && init?.method === "PATCH") {
+        return jsonResponse({
+          alertId: "alert-1",
+          alertType: "HIGH_VALUE_TRANSFER",
+          severity: "HIGH",
+          status: "ESCALATED",
+          userId: "customer",
+          transactionId: "txn-1",
+          amount: 6000,
+          currency: "USD",
+          reason: "Transfer amount exceeded high-value threshold",
+          recommendation: "Review sender and recipient",
+          reviewedBy: "ops",
+          resolutionNote: "Escalated to fraud operations",
+          createdAt: "2026-05-09T10:15:30",
+          updatedAt: "2026-05-09T10:20:30"
+        });
+      }
+      if (url.includes("/api/risk/alerts")) {
+        return jsonResponse({
+          ...emptyPage,
+          content: [
+            {
+              alertId: "alert-1",
+              alertType: "HIGH_VALUE_TRANSFER",
+              severity: "HIGH",
+              status: "OPEN",
+              userId: "customer",
+              transactionId: "txn-1",
+              amount: 6000,
+              currency: "USD",
+              reason: "Transfer amount exceeded high-value threshold",
+              recommendation: "Review sender and recipient",
+              metadata: "{\"threshold\":\"5000.00\"}",
+              createdAt: "2026-05-09T10:15:30",
+              updatedAt: "2026-05-09T10:15:30"
+            }
+          ],
+          totalElements: 1,
+          totalPages: 1
+        });
+      }
+      return undefined;
+    });
+
+    renderApp("/admin/risk-alerts", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
+
+    expect(await screen.findByRole("heading", { name: "Risk Alerts" })).toBeInTheDocument();
+    expect(await screen.findByText("5")).toBeInTheDocument();
+    expect(screen.getByText("HIGH_VALUE_TRANSFER")).toBeInTheDocument();
+    expect(screen.getByText("txn-1")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("User ID"), "customer");
+    await user.type(screen.getByPlaceholderText("Transaction ID"), "txn-1");
+    await user.selectOptions(screen.getByDisplayValue("All status"), "OPEN");
+    await user.selectOptions(screen.getByDisplayValue("All severity"), "HIGH");
+
+    await waitFor(() => {
+      expect(calls.some(({ url }) =>
+        url.includes("/transaction-api/api/risk/alerts")
+        && url.includes("userId=customer")
+        && url.includes("transactionId=txn-1")
+        && url.includes("status=OPEN")
+        && url.includes("severity=HIGH")
+      )).toBe(true);
+    });
+
+    await user.click(screen.getByRole("button", { name: "View alert-1" }));
+    expect(screen.getByText("Transfer amount exceeded high-value threshold")).toBeInTheDocument();
+    expect(screen.getByText("Review sender and recipient")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Resolution note"), "Escalated to fraud operations");
+    await user.click(screen.getByRole("button", { name: "Escalate alert" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) =>
+        url.includes("/transaction-api/api/risk/alerts/alert-1/status")
+        && init?.method === "PATCH"
+        && String(init.body).includes("\"status\":\"ESCALATED\"")
+        && String(init.body).includes("Escalated to fraud operations")
+      )).toBe(true);
+    });
   });
 });
 

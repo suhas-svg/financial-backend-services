@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
-import { searchAuditEvents } from "./queries";
+import { searchAuditEvents, searchRiskAlerts, updateRiskAlertStatus } from "./queries";
 import { clearSession, saveSession } from "./session";
 
 function tokenFor(payload: object) {
@@ -80,6 +80,41 @@ describe("apiRequest", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/transaction-api/api/audit/events?size=20&sort=createdAt%2Cdesc&userId=customer&outcome=FAILURE",
       expect.any(Object)
+    );
+  });
+
+  it("maps risk alert search requests to the transaction proxy", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ content: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+
+    await searchRiskAlerts({ userId: "customer", status: "OPEN" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/transaction-api/api/risk/alerts?size=20&sort=createdAt%2Cdesc&userId=customer&status=OPEN",
+      expect.any(Object)
+    );
+  });
+
+  it("patches risk alert status through the transaction proxy", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ alertId: "alert-1", status: "ESCALATED" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+
+    await updateRiskAlertStatus("alert-1", { status: "ESCALATED", resolutionNote: "Review with fraud ops" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/transaction-api/api/risk/alerts/alert-1/status",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ status: "ESCALATED", resolutionNote: "Review with fraud ops" })
+      })
     );
   });
 });

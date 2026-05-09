@@ -5,6 +5,7 @@ import { AccountsPage } from "./pages/AccountsPage";
 import { AdminAccountsPage } from "./pages/AdminAccountsPage";
 import { AdminAuditLogPage } from "./pages/AdminAuditLogPage";
 import { AdminMonitoringPage } from "./pages/AdminMonitoringPage";
+import { AdminRiskAlertsPage } from "./pages/AdminRiskAlertsPage";
 import { AdminTransactionsPage } from "./pages/AdminTransactionsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -28,6 +29,7 @@ export function App() {
             <Route path="admin/monitoring" element={<AdminMonitoringPage />} />
             <Route path="admin/transactions" element={<AdminTransactionsPage />} />
             <Route path="admin/audit-log" element={<AdminAuditLogPage />} />
+            <Route path="admin/risk-alerts" element={<AdminRiskAlertsPage />} />
           </Route>
         </Route>
       </Route>

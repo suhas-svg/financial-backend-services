@@ -19,6 +19,7 @@ test("admin can open monitoring pages when logged in with admin credentials", as
   await expect(page.getByRole("link", { name: "Monitoring" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Ops Transactions" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Audit Log" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Risk Alerts" })).toBeVisible();
 
   await page.getByRole("link", { name: "Monitoring" }).click();
   await expect(page.getByRole("heading", { name: "Monitoring" })).toBeVisible();
@@ -30,6 +31,13 @@ test("admin can open monitoring pages when logged in with admin credentials", as
   await expect(page.getByRole("heading", { name: "Audit Log" })).toBeVisible();
   await expect(page.getByText("Total events")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Audit events" })).toBeVisible();
+  await expect(page.getByPlaceholder("User ID")).toBeVisible();
+  await expect(page.getByPlaceholder("Transaction ID")).toBeVisible();
+
+  await page.getByRole("link", { name: "Risk Alerts" }).click();
+  await expect(page.getByRole("heading", { name: "Risk Alerts" })).toBeVisible();
+  await expect(page.getByText("Total alerts")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Review queue" })).toBeVisible();
   await expect(page.getByPlaceholder("User ID")).toBeVisible();
   await expect(page.getByPlaceholder("Transaction ID")).toBeVisible();
 });
