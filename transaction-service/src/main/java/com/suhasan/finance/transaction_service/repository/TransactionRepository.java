@@ -15,6 +15,7 @@ import jakarta.persistence.LockModeType;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -31,6 +32,12 @@ public interface TransactionRepository extends JpaRepository<Transaction, String
 
        Optional<Transaction> findFirstByCreatedByAndTypeAndIdempotencyKey(
                      String createdBy, TransactionType type, String idempotencyKey);
+
+       long countByCreatedByAndStatusInAndCreatedAtAfter(
+                     String createdBy, Collection<TransactionStatus> statuses, LocalDateTime createdAt);
+
+       long countByCreatedByAndTypeAndStatusAndCreatedAtAfter(
+                     String createdBy, TransactionType type, TransactionStatus status, LocalDateTime createdAt);
 
        // Pessimistic lock for reversal flow — prevents concurrent duplicate reversals
        // from both passing the isTransactionReversed() check simultaneously.

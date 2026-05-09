@@ -49,6 +49,7 @@ public class TransactionServiceImpl implements TransactionService {
     private final AuditService auditService;
     private final MetricsService metricsService;
     private final TransactionLimitService transactionLimitService;
+    private final RiskEvaluationService riskEvaluationService;
 
     @Override
     @Transactional(noRollbackFor = Exception.class)
@@ -150,6 +151,7 @@ public class TransactionServiceImpl implements TransactionService {
 
             long processingTime = System.currentTimeMillis() - startTime;
             auditService.logTransactionCompleted(transaction);
+            riskEvaluationService.evaluateCompletedTransaction(transaction);
             metricsService.recordTransactionCompleted(TransactionType.TRANSFER,
                     TransactionStatus.COMPLETED, request.getAmount(), processingTime);
             return mapToResponse(transaction);
@@ -177,6 +179,7 @@ public class TransactionServiceImpl implements TransactionService {
             auditService.logTransactionFailed(transactionId, TransactionType.TRANSFER,
                     request.getFromAccountId(), request.getToAccountId(), request.getAmount(),
                     userId, e.getMessage(), "PROCESSING_ERROR");
+            riskEvaluationService.evaluateFailedTransaction(transaction);
             metricsService.recordTransactionFailed(TransactionType.TRANSFER, "PROCESSING_ERROR");
             throw new RuntimeException("Transfer failed: " + e.getMessage());
         }
@@ -244,11 +247,13 @@ public class TransactionServiceImpl implements TransactionService {
             transaction.setProcessedAt(LocalDateTime.now());
             transaction.setProcessingState(TransactionProcessingState.COMPLETED);
             transaction = transactionRepository.save(transaction);
+            riskEvaluationService.evaluateCompletedTransaction(transaction);
             return mapToResponse(transaction);
         } catch (Exception e) {
             transaction.setStatus(TransactionStatus.FAILED);
             transaction.setProcessedAt(LocalDateTime.now());
             transactionRepository.save(transaction);
+            riskEvaluationService.evaluateFailedTransaction(transaction);
             throw new RuntimeException("Deposit failed: " + e.getMessage());
         }
     }
@@ -324,12 +329,14 @@ public class TransactionServiceImpl implements TransactionService {
             transaction.setProcessedAt(LocalDateTime.now());
             transaction.setProcessingState(TransactionProcessingState.COMPLETED);
             transaction = transactionRepository.save(transaction);
+            riskEvaluationService.evaluateCompletedTransaction(transaction);
             return mapToResponse(transaction);
         } catch (Exception e) {
             if (transaction.getStatus() != TransactionStatus.COMPLETED) {
                 transaction.setStatus(TransactionStatus.FAILED);
                 transaction.setProcessedAt(LocalDateTime.now());
                 transactionRepository.save(transaction);
+                riskEvaluationService.evaluateFailedTransaction(transaction);
             }
             throw new RuntimeException("Withdrawal failed: " + e.getMessage());
         }
@@ -436,6 +443,7 @@ public class TransactionServiceImpl implements TransactionService {
             // Record successful reversal
             auditService.logTransactionReversal(transactionId, reversal.getTransactionId(), reason, userId);
             auditService.logTransactionCompleted(reversal);
+            riskEvaluationService.evaluateReversalTransaction(reversal);
             metricsService.recordTransactionReversal(originalTransaction.getType());
 
             log.info("Transaction reversed successfully: {} -> {}", transactionId, reversal.getTransactionId());
@@ -463,6 +471,7 @@ public class TransactionServiceImpl implements TransactionService {
             auditService.logTransactionFailed(reversal.getTransactionId(), TransactionType.REVERSAL,
                     reversal.getFromAccountId(), reversal.getToAccountId(), reversal.getAmount(),
                     userId, e.getMessage(), "REVERSAL_ERROR");
+            riskEvaluationService.evaluateFailedTransaction(reversal);
             metricsService.recordTransactionFailed(TransactionType.REVERSAL, "REVERSAL_ERROR");
 
             throw new RuntimeException("Reversal failed: " + e.getMessage());

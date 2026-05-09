@@ -43,6 +43,7 @@ financial-backend-services/
 - Reverse transactions using the backend reversal endpoint.
 - View reversal-related status panels.
 - Review the transaction-service audit log with admin-only summary counters, filters, event search, and selected-event details.
+- Review transaction risk alerts with summary counters, filters, detail inspection, and review/dismiss/escalate actions.
 
 ### Backend Services
 
@@ -59,6 +60,8 @@ financial-backend-services/
   - Idempotency and reversal workflows.
   - Persistent audit log storage for high-value transaction and security events.
   - Admin-only audit log search, detail, and summary APIs.
+  - Persistent risk alert review queue for conservative transaction risk rules.
+  - Admin-only risk alert search, detail, summary, and status update APIs.
   - Account-service integration for balance updates.
 
 ## Technology Stack
@@ -226,6 +229,39 @@ GET /api/audit/summary?from=&to=
 
 Version 1 stores transaction initiated, completed, failed, reversed, and security events in `transaction-service`. Audit rows are retained for 90 days and intentionally exclude stack traces, JWTs, passwords, authorization headers, and raw token values.
 
+### Risk Alerts
+
+The admin Risk Alerts page calls the transaction-service risk APIs through the frontend proxy at `/transaction-api/api/risk/*`.
+
+Risk APIs require `ROLE_ADMIN` or `ROLE_INTERNAL_SERVICE`.
+
+```http
+GET   /api/risk/alerts?page=&size=&status=&severity=&alertType=&userId=&transactionId=&from=&to=
+GET   /api/risk/alerts/{alertId}
+GET   /api/risk/summary?from=&to=
+PATCH /api/risk/alerts/{alertId}/status
+```
+
+`PATCH /api/risk/alerts/{alertId}/status` accepts:
+
+```json
+{
+  "status": "REVIEWED | DISMISSED | ESCALATED",
+  "resolutionNote": "short admin note"
+}
+```
+
+Version 1 creates operational review records only; it does not block transactions, reverse transactions, or lock accounts automatically.
+
+Default built-in rules:
+
+- `HIGH_VALUE_TRANSFER`: completed transfer amount greater than or equal to `5000`, severity `HIGH`.
+- `REPEATED_FAILURES`: at least `3` failed transactions by the same user in `15` minutes, severity `MEDIUM`.
+- `RAPID_TRANSFERS`: at least `5` completed transfers by the same user in `10` minutes, severity `MEDIUM`.
+- `REVERSAL_HEAVY_ACTIVITY`: at least `2` reversals by the same user in `24` hours, severity `HIGH`.
+
+Open alerts use a `dedupeKey` so repeated evaluations do not create duplicate open alerts for the same rule/user/transaction/window.
+
 ## Testing
 
 ### Frontend
@@ -247,6 +283,7 @@ The frontend test suite covers:
 - Transaction table filters.
 - Admin navigation visibility.
 - Admin audit log summary, filters, event table, detail panel, and API proxy mapping.
+- Admin risk alert summary, filters, queue table, detail panel, status actions, and API proxy mapping.
 - Customer and admin Playwright flows.
 
 ### Backend
@@ -262,7 +299,7 @@ cd transaction-service
 .\mvnw.cmd -q -Dtest=TransactionServiceHardeningTest test
 ```
 
-The transaction-service test suite also covers the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup.
+The transaction-service test suite also covers the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup. Risk alert tests cover admin-only access, filters, summary counts, status updates with reviewer metadata, rule generation, dedupe behavior, and non-risky transaction handling.
 
 ## Demo Evidence
 

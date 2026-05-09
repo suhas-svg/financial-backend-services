@@ -108,3 +108,36 @@ export type AuditSummary = {
   reversalEvents: number;
   securityEvents: number;
 };
+
+export type RiskAlertStatus = "OPEN" | "REVIEWED" | "DISMISSED" | "ESCALATED";
+export type RiskAlertSeverity = "MEDIUM" | "HIGH";
+export type RiskAlertType = "HIGH_VALUE_TRANSFER" | "REPEATED_FAILURES" | "RAPID_TRANSFERS" | "REVERSAL_HEAVY_ACTIVITY";
+
+export type RiskAlert = {
+  alertId: string;
+  alertType: RiskAlertType;
+  severity: RiskAlertSeverity;
+  status: RiskAlertStatus;
+  userId?: string;
+  transactionId?: string;
+  fromAccountId?: string;
+  toAccountId?: string;
+  amount?: number;
+  currency?: string;
+  reason: string;
+  recommendation?: string;
+  dedupeKey?: string;
+  metadata?: string;
+  createdAt: string;
+  updatedAt?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  resolutionNote?: string;
+};
+
+export type RiskSummary = {
+  totalAlerts: number;
+  openAlerts: number;
+  highSeverityAlerts: number;
+  escalatedAlerts: number;
+};

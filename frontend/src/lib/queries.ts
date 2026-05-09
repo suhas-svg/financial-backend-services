@@ -1,4 +1,4 @@
-import type { Account, AuditLogEntry, AuditSummary, Limits, Page, Transaction, TransactionStats } from "../types";
+import type { Account, AuditLogEntry, AuditSummary, Limits, Page, RiskAlert, RiskSummary, Transaction, TransactionStats } from "../types";
 import { apiRequest, toQuery } from "./api";
 import type { AccountValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, TransferValues } from "./schemas";
 import { getSession } from "./session";
@@ -138,4 +138,20 @@ export function getAuditEvent(eventId: string) {
 
 export function getAuditSummary(params: Record<string, string | undefined> = {}) {
   return apiRequest<AuditSummary>("transaction", `/api/audit/summary${toQuery(params)}`);
+}
+
+export function searchRiskAlerts(params: Record<string, string | number | undefined>) {
+  return apiRequest<Page<RiskAlert>>("transaction", `/api/risk/alerts${toQuery({ size: 20, sort: "createdAt,desc", ...params })}`);
+}
+
+export function getRiskAlert(alertId: string) {
+  return apiRequest<RiskAlert>("transaction", `/api/risk/alerts/${alertId}`);
+}
+
+export function getRiskSummary(params: Record<string, string | undefined> = {}) {
+  return apiRequest<RiskSummary>("transaction", `/api/risk/summary${toQuery(params)}`);
+}
+
+export function updateRiskAlertStatus(alertId: string, values: { status: string; resolutionNote?: string }) {
+  return apiRequest<RiskAlert>("transaction", `/api/risk/alerts/${alertId}/status`, { method: "PATCH", body: values });
 }

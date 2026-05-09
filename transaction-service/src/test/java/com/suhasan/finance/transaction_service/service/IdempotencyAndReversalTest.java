@@ -74,6 +74,9 @@ class IdempotencyAndReversalTest {
         @Mock
         private TransactionLimitService transactionLimitService;
 
+        @Mock
+        private RiskEvaluationService riskEvaluationService;
+
         @InjectMocks
         private TransactionServiceImpl transactionService;
 
