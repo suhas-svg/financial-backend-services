@@ -92,6 +92,12 @@ function mockFetch(handler?: (url: string, init?: RequestInit) => Promise<Respon
     if (url.includes("/api/risk/summary")) {
       return jsonResponse({ totalAlerts: 0, openAlerts: 0, highSeverityAlerts: 0, escalatedAlerts: 0 });
     }
+    if (url.includes("/api/risk/cases/summary")) {
+      return jsonResponse({ totalCases: 0, openCases: 0, inReviewCases: 0, resolvedCases: 0, closedCases: 0, unassignedCases: 0 });
+    }
+    if (url.includes("/api/risk/cases")) {
+      return jsonResponse(emptyPage);
+    }
     if (url.includes("/api/risk/alerts")) {
       return jsonResponse(emptyPage);
     }
@@ -225,6 +231,7 @@ describe("admin navigation", () => {
     expect(screen.getByRole("link", { name: "Ops Transactions" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Audit Log" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Risk Alerts" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Risk Cases" })).toBeInTheDocument();
   });
 
   it("redirects non-admin users away from admin routes", async () => {
@@ -293,11 +300,28 @@ describe("admin audit log", () => {
 });
 
 describe("admin risk alerts", () => {
-  it("renders summary, filters, table rows, details, and status actions", async () => {
+  it("renders summary, filters, table rows, details, status actions, and create case action", async () => {
     const user = userEvent.setup();
     const { calls } = mockFetch((url, init) => {
       if (url.includes("/api/risk/summary")) {
         return jsonResponse({ totalAlerts: 5, openAlerts: 3, highSeverityAlerts: 2, escalatedAlerts: 1 });
+      }
+      if (url.includes("/api/risk/cases/from-alert/alert-1") && init?.method === "POST") {
+        return jsonResponse({
+          caseId: "case-1",
+          caseNumber: "RC-20260509-0001",
+          status: "OPEN",
+          priority: "HIGH",
+          title: "Review high-value transfer",
+          primaryAlertId: "alert-1",
+          userId: "customer",
+          transactionId: "txn-1",
+          createdBy: "ops",
+          createdAt: "2026-05-09T10:30:00",
+          updatedAt: "2026-05-09T10:30:00",
+          linkedAlerts: [],
+          notes: []
+        });
       }
       if (url.includes("/api/risk/alerts/alert-1/status") && init?.method === "PATCH") {
         return jsonResponse({
@@ -370,6 +394,14 @@ describe("admin risk alerts", () => {
     expect(screen.getByText("Transfer amount exceeded high-value threshold")).toBeInTheDocument();
     expect(screen.getByText("Review sender and recipient")).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Create case" }));
+    expect(await screen.findByText("Case RC-20260509-0001 created")).toBeInTheDocument();
+    expect(calls.some(({ url, init }) =>
+      url.includes("/transaction-api/api/risk/cases/from-alert/alert-1")
+      && init?.method === "POST"
+      && String(init.body).includes("Review HIGH_VALUE_TRANSFER")
+    )).toBe(true);
+
     await user.type(screen.getByPlaceholderText("Resolution note"), "Escalated to fraud operations");
     await user.click(screen.getByRole("button", { name: "Escalate alert" }));
 
@@ -383,6 +415,118 @@ describe("admin risk alerts", () => {
     });
   });
 });
+
+describe("admin risk cases", () => {
+  it("renders summary, filters, table rows, detail panel, claim, status, and notes actions", async () => {
+    const user = userEvent.setup();
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/risk/cases/summary")) {
+        return jsonResponse({ totalCases: 6, openCases: 3, inReviewCases: 1, resolvedCases: 1, closedCases: 1, unassignedCases: 2 });
+      }
+      if (url.includes("/api/risk/cases/case-1/claim") && init?.method === "PATCH") {
+        return jsonResponse(sampleRiskCase({ assignedTo: "ops", status: "IN_REVIEW", claimedAt: "2026-05-09T10:45:00" }));
+      }
+      if (url.includes("/api/risk/cases/case-1/status") && init?.method === "PATCH") {
+        return jsonResponse(sampleRiskCase({ status: "RESOLVED", resolutionNote: "Reviewed and resolved", closedAt: "2026-05-09T11:00:00" }));
+      }
+      if (url.includes("/api/risk/cases/case-1/notes") && init?.method === "POST") {
+        return jsonResponse(sampleRiskCase({
+          notes: [
+            { noteId: "note-1", author: "ops", note: "Customer pattern needs follow-up", createdAt: "2026-05-09T11:15:00" }
+          ]
+        }));
+      }
+      if (url.includes("/api/risk/cases")) {
+        return jsonResponse({ ...emptyPage, content: [sampleRiskCase()], totalElements: 1, totalPages: 1 });
+      }
+      return undefined;
+    });
+
+    renderApp("/admin/risk-cases", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
+
+    expect(await screen.findByRole("heading", { name: "Risk Cases" })).toBeInTheDocument();
+    expect(await screen.findByText("6")).toBeInTheDocument();
+    expect(screen.getByText("RC-20260509-0001")).toBeInTheDocument();
+    expect(screen.getByText("txn-1")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("User ID"), "customer");
+    await user.type(screen.getByPlaceholderText("Transaction ID"), "txn-1");
+    await user.type(screen.getByPlaceholderText("Alert ID"), "alert-1");
+    await user.selectOptions(screen.getByDisplayValue("All status"), "OPEN");
+    await user.selectOptions(screen.getByDisplayValue("All priority"), "HIGH");
+    await user.selectOptions(screen.getByDisplayValue("All assignment"), "UNASSIGNED");
+
+    await waitFor(() => {
+      expect(calls.some(({ url }) =>
+        url.includes("/transaction-api/api/risk/cases")
+        && url.includes("userId=customer")
+        && url.includes("transactionId=txn-1")
+        && url.includes("alertId=alert-1")
+        && url.includes("status=OPEN")
+        && url.includes("priority=HIGH")
+        && url.includes("assignedTo=UNASSIGNED")
+      )).toBe(true);
+    });
+
+    await user.click(screen.getByRole("button", { name: "View RC-20260509-0001" }));
+    expect(screen.getAllByText("Review high-value transfer").length).toBeGreaterThan(0);
+    expect(screen.getByText("HIGH_VALUE_TRANSFER")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Claim case" }));
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) => url.includes("/transaction-api/api/risk/cases/case-1/claim") && init?.method === "PATCH")).toBe(true);
+    });
+
+    await user.type(screen.getByPlaceholderText("Internal note"), "Customer pattern needs follow-up");
+    await user.click(screen.getByRole("button", { name: "Add note" }));
+    expect(await screen.findByText("Customer pattern needs follow-up")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Resolution note"), "Reviewed and resolved");
+    await user.click(screen.getByRole("button", { name: "Resolve case" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) =>
+        url.includes("/transaction-api/api/risk/cases/case-1/status")
+        && init?.method === "PATCH"
+        && String(init.body).includes("\"status\":\"RESOLVED\"")
+        && String(init.body).includes("Reviewed and resolved")
+      )).toBe(true);
+    });
+  });
+});
+
+function sampleRiskCase(overrides: Record<string, unknown> = {}) {
+  return {
+    caseId: "case-1",
+    caseNumber: "RC-20260509-0001",
+    status: "OPEN",
+    priority: "HIGH",
+    title: "Review high-value transfer",
+    userId: "customer",
+    transactionId: "txn-1",
+    primaryAlertId: "alert-1",
+    assignedTo: undefined,
+    createdBy: "ops",
+    createdAt: "2026-05-09T10:30:00",
+    updatedAt: "2026-05-09T10:30:00",
+    linkedAlerts: [
+      {
+        alertId: "alert-1",
+        alertType: "HIGH_VALUE_TRANSFER",
+        severity: "HIGH",
+        status: "OPEN",
+        userId: "customer",
+        transactionId: "txn-1",
+        amount: 6000,
+        currency: "USD",
+        reason: "Transfer amount exceeded high-value threshold",
+        createdAt: "2026-05-09T10:15:30"
+      }
+    ],
+    notes: [],
+    ...overrides
+  };
+}
 
 describe("admin monitoring", () => {
   it("renders readable metric summaries and derives alert status", async () => {

@@ -262,6 +262,47 @@ Default built-in rules:
 
 Open alerts use a `dedupeKey` so repeated evaluations do not create duplicate open alerts for the same rule/user/transaction/window.
 
+### Risk Case Management
+
+The admin Risk Cases page builds an internal case workflow on top of Risk Alerts. Cases are created manually from a selected alert, start unassigned, and can be claimed by an admin for review. Version 1 keeps cases operational only: it does not message customers, lock accounts, reverse transactions, or make automated fraud decisions.
+
+Case APIs use the same `/transaction-api/api/risk/*` frontend proxy and require `ROLE_ADMIN` or `ROLE_INTERNAL_SERVICE`.
+
+```http
+GET   /api/risk/cases?page=&size=&status=&priority=&assignedTo=&userId=&transactionId=&alertId=&from=&to=
+GET   /api/risk/cases/{caseId}
+GET   /api/risk/cases/summary?from=&to=
+POST  /api/risk/cases/from-alert/{alertId}
+PATCH /api/risk/cases/{caseId}/claim
+PATCH /api/risk/cases/{caseId}/status
+POST  /api/risk/cases/{caseId}/notes
+```
+
+Case statuses are `OPEN`, `IN_REVIEW`, `RESOLVED`, and `CLOSED`. Priorities are `LOW`, `MEDIUM`, `HIGH`, and `CRITICAL`; when omitted at creation time, alert severity maps to case priority (`HIGH` -> `HIGH`, `MEDIUM` -> `MEDIUM`, fallback `LOW`). Notes are internal, append-only admin notes.
+
+Example create/status/note bodies:
+
+```json
+{
+  "title": "Review high-value transfer",
+  "priority": "HIGH",
+  "reason": "Manual review requested by admin"
+}
+```
+
+```json
+{
+  "status": "RESOLVED",
+  "resolutionNote": "Reviewed transaction history and no further action required."
+}
+```
+
+```json
+{
+  "note": "Customer transaction pattern looks unusual compared with prior activity."
+}
+```
+
 ## Testing
 
 ### Frontend
@@ -284,6 +325,7 @@ The frontend test suite covers:
 - Admin navigation visibility.
 - Admin audit log summary, filters, event table, detail panel, and API proxy mapping.
 - Admin risk alert summary, filters, queue table, detail panel, status actions, and API proxy mapping.
+- Admin risk case summary, filters, queue table, detail panel, claim/status/note actions, create-from-alert action, and API proxy mapping.
 - Customer and admin Playwright flows.
 
 ### Backend
@@ -299,7 +341,7 @@ cd transaction-service
 .\mvnw.cmd -q -Dtest=TransactionServiceHardeningTest test
 ```
 
-The transaction-service test suite also covers the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup. Risk alert tests cover admin-only access, filters, summary counts, status updates with reviewer metadata, rule generation, dedupe behavior, and non-risky transaction handling.
+The transaction-service test suite also covers the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup. Risk alert tests cover admin-only access, filters, summary counts, status updates with reviewer metadata, rule generation, dedupe behavior, and non-risky transaction handling. Risk case tests cover admin-only access, filters, summary counts, create-from-alert, duplicate open-case handling, claim, status updates, linked alert details, and append-only notes.
 
 ## Demo Evidence
 

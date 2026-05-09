@@ -141,3 +141,42 @@ export type RiskSummary = {
   highSeverityAlerts: number;
   escalatedAlerts: number;
 };
+
+export type RiskCaseStatus = "OPEN" | "IN_REVIEW" | "RESOLVED" | "CLOSED";
+export type RiskCasePriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+export type RiskCaseNote = {
+  noteId: string;
+  author: string;
+  note: string;
+  createdAt: string;
+};
+
+export type RiskCase = {
+  caseId: string;
+  caseNumber: string;
+  status: RiskCaseStatus;
+  priority: RiskCasePriority;
+  title: string;
+  userId?: string;
+  transactionId?: string;
+  primaryAlertId?: string;
+  assignedTo?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt?: string;
+  claimedAt?: string;
+  closedAt?: string;
+  resolutionNote?: string;
+  linkedAlerts?: RiskAlert[];
+  notes?: RiskCaseNote[];
+};
+
+export type RiskCaseSummary = {
+  totalCases: number;
+  openCases: number;
+  inReviewCases: number;
+  resolvedCases: number;
+  closedCases: number;
+  unassignedCases: number;
+};
