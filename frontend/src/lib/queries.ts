@@ -1,4 +1,4 @@
-import type { Account, AuditLogEntry, AuditSummary, Limits, Page, RiskAlert, RiskSummary, Transaction, TransactionStats } from "../types";
+import type { Account, AuditLogEntry, AuditSummary, Limits, Page, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, Transaction, TransactionStats } from "../types";
 import { apiRequest, toQuery } from "./api";
 import type { AccountValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, TransferValues } from "./schemas";
 import { getSession } from "./session";
@@ -154,4 +154,32 @@ export function getRiskSummary(params: Record<string, string | undefined> = {}) 
 
 export function updateRiskAlertStatus(alertId: string, values: { status: string; resolutionNote?: string }) {
   return apiRequest<RiskAlert>("transaction", `/api/risk/alerts/${alertId}/status`, { method: "PATCH", body: values });
+}
+
+export function searchRiskCases(params: Record<string, string | number | undefined>) {
+  return apiRequest<Page<RiskCase>>("transaction", `/api/risk/cases${toQuery({ size: 20, sort: "createdAt,desc", ...params })}`);
+}
+
+export function getRiskCase(caseId: string) {
+  return apiRequest<RiskCase>("transaction", `/api/risk/cases/${caseId}`);
+}
+
+export function getRiskCaseSummary(params: Record<string, string | undefined> = {}) {
+  return apiRequest<RiskCaseSummary>("transaction", `/api/risk/cases/summary${toQuery(params)}`);
+}
+
+export function createRiskCaseFromAlert(alertId: string, values: { title?: string; priority?: string; reason?: string }) {
+  return apiRequest<RiskCase>("transaction", `/api/risk/cases/from-alert/${alertId}`, { method: "POST", body: values });
+}
+
+export function claimRiskCase(caseId: string) {
+  return apiRequest<RiskCase>("transaction", `/api/risk/cases/${caseId}/claim`, { method: "PATCH" });
+}
+
+export function updateRiskCaseStatus(caseId: string, values: { status: string; resolutionNote?: string }) {
+  return apiRequest<RiskCase>("transaction", `/api/risk/cases/${caseId}/status`, { method: "PATCH", body: values });
+}
+
+export function addRiskCaseNote(caseId: string, values: { note: string }) {
+  return apiRequest<RiskCase>("transaction", `/api/risk/cases/${caseId}/notes`, { method: "POST", body: values });
 }

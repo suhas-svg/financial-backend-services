@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
-import { searchAuditEvents, searchRiskAlerts, updateRiskAlertStatus } from "./queries";
+import { addRiskCaseNote, claimRiskCase, createRiskCaseFromAlert, searchAuditEvents, searchRiskAlerts, searchRiskCases, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
 import { clearSession, saveSession } from "./session";
 
 function tokenFor(payload: object) {
@@ -114,6 +114,62 @@ describe("apiRequest", () => {
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ status: "ESCALATED", resolutionNote: "Review with fraud ops" })
+      })
+    );
+  });
+
+  it("maps risk case search requests to the transaction proxy", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ content: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+
+    await searchRiskCases({ userId: "customer", status: "OPEN", assignedTo: "UNASSIGNED" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/transaction-api/api/risk/cases?size=20&sort=createdAt%2Cdesc&userId=customer&status=OPEN&assignedTo=UNASSIGNED",
+      expect.any(Object)
+    );
+  });
+
+  it("creates, claims, updates, and notes risk cases through the transaction proxy", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify({ caseId: "case-1" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    ));
+
+    await createRiskCaseFromAlert("alert-1", { title: "Review high-value transfer", priority: "HIGH", reason: "Manual review" });
+    await claimRiskCase("case-1");
+    await updateRiskCaseStatus("case-1", { status: "RESOLVED", resolutionNote: "Reviewed" });
+    await addRiskCaseNote("case-1", { note: "Internal note" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/transaction-api/api/risk/cases/from-alert/alert-1",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ title: "Review high-value transfer", priority: "HIGH", reason: "Manual review" })
+      })
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/transaction-api/api/risk/cases/case-1/claim",
+      expect.objectContaining({ method: "PATCH" })
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/transaction-api/api/risk/cases/case-1/status",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ status: "RESOLVED", resolutionNote: "Reviewed" })
+      })
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/transaction-api/api/risk/cases/case-1/notes",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ note: "Internal note" })
       })
     );
   });

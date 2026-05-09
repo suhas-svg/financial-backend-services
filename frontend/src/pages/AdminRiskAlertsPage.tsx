@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
 import { Badge, Button, EmptyState, Input, Panel, Select, Stat } from "../components/ui";
-import { getRiskSummary, searchRiskAlerts, updateRiskAlertStatus } from "../lib/queries";
+import { createRiskCaseFromAlert, getRiskSummary, searchRiskAlerts, searchRiskCases, updateRiskAlertStatus } from "../lib/queries";
 import type { RiskAlert, RiskAlertStatus } from "../types";
 
 const defaultFilters = {
@@ -20,9 +20,15 @@ export function AdminRiskAlertsPage() {
   const [filters, setFilters] = useState(defaultFilters);
   const [selected, setSelected] = useState<RiskAlert | null>(null);
   const [resolutionNote, setResolutionNote] = useState("");
+  const [caseMessage, setCaseMessage] = useState("");
 
   const alerts = useQuery({ queryKey: ["risk-alerts", filters], queryFn: () => searchRiskAlerts(filters) });
   const summary = useQuery({ queryKey: ["risk-summary", filters.from, filters.to], queryFn: () => getRiskSummary({ from: filters.from, to: filters.to }) });
+  const selectedCases = useQuery({
+    queryKey: ["risk-cases-for-alert", selected?.alertId],
+    queryFn: () => searchRiskCases({ alertId: selected?.alertId }),
+    enabled: Boolean(selected?.alertId)
+  });
   const statusMutation = useMutation({
     mutationFn: ({ alert, status }: { alert: RiskAlert; status: Exclude<RiskAlertStatus, "OPEN"> }) =>
       updateRiskAlertStatus(alert.alertId, { status, resolutionNote }),
@@ -31,6 +37,18 @@ export function AdminRiskAlertsPage() {
       setResolutionNote(updated.resolutionNote || "");
       queryClient.invalidateQueries({ queryKey: ["risk-alerts"] });
       queryClient.invalidateQueries({ queryKey: ["risk-summary"] });
+    }
+  });
+  const createCaseMutation = useMutation({
+    mutationFn: (alert: RiskAlert) => createRiskCaseFromAlert(alert.alertId, {
+      title: `Review ${alert.alertType}`,
+      priority: alert.severity === "HIGH" ? "HIGH" : "MEDIUM",
+      reason: alert.reason
+    }),
+    onSuccess: (created) => {
+      setCaseMessage(`Case ${created.caseNumber} created`);
+      queryClient.invalidateQueries({ queryKey: ["risk-cases"] });
+      queryClient.invalidateQueries({ queryKey: ["risk-cases-for-alert"] });
     }
   });
 
@@ -85,6 +103,7 @@ export function AdminRiskAlertsPage() {
           {alerts.data?.content.length ? <RiskAlertTable alerts={alerts.data.content} onSelect={(alert) => {
             setSelected(alert);
             setResolutionNote(alert.resolutionNote || "");
+            setCaseMessage("");
           }} /> : null}
         </Panel>
 
@@ -96,9 +115,13 @@ export function AdminRiskAlertsPage() {
             <RiskAlertDetail
               alert={selected}
               resolutionNote={resolutionNote}
+              caseMessage={caseMessage}
+              linkedCaseNumber={selectedCases.data?.content[0]?.caseNumber}
               onResolutionNoteChange={setResolutionNote}
               onStatusChange={(status) => statusMutation.mutate({ alert: selected, status })}
+              onCreateCase={() => createCaseMutation.mutate(selected)}
               isUpdating={statusMutation.isPending}
+              isCreatingCase={createCaseMutation.isPending}
             />
           ) : (
             <EmptyState title="No alert selected" detail="Select a risk alert to inspect and resolve it." />
@@ -149,15 +172,23 @@ function RiskAlertTable({ alerts, onSelect }: { alerts: RiskAlert[]; onSelect: (
 function RiskAlertDetail({
   alert,
   resolutionNote,
+  caseMessage,
+  linkedCaseNumber,
   onResolutionNoteChange,
   onStatusChange,
-  isUpdating
+  onCreateCase,
+  isUpdating,
+  isCreatingCase
 }: {
   alert: RiskAlert;
   resolutionNote: string;
+  caseMessage: string;
+  linkedCaseNumber?: string;
   onResolutionNoteChange: (value: string) => void;
   onStatusChange: (status: Exclude<RiskAlertStatus, "OPEN">) => void;
+  onCreateCase: () => void;
   isUpdating: boolean;
+  isCreatingCase: boolean;
 }) {
   const rows = [
     ["Alert ID", alert.alertId],
@@ -187,6 +218,15 @@ function RiskAlertDetail({
           </div>
         ))}
       </dl>
+      {linkedCaseNumber ? (
+        <div className="rounded-md border border-line bg-white p-3">
+          <p className="text-xs font-medium uppercase text-muted">Linked case</p>
+          <p className="mt-1 text-sm font-medium text-ink">{linkedCaseNumber}</p>
+        </div>
+      ) : (
+        <Button variant="secondary" disabled={isCreatingCase} onClick={onCreateCase}>Create case</Button>
+      )}
+      {caseMessage ? <p className="text-sm font-medium text-brand">{caseMessage}</p> : null}
       <label className="grid gap-1 text-sm">
         <span className="font-medium text-ink">Resolution note</span>
         <textarea
