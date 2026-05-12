@@ -98,6 +98,12 @@ function mockFetch(handler?: (url: string, init?: RequestInit) => Promise<Respon
     if (url.includes("/api/risk/cases")) {
       return jsonResponse(emptyPage);
     }
+    if (url.includes("/api/investigations/summary")) {
+      return jsonResponse({ transactions: 0, auditEvents: 0, riskAlerts: 0, riskCases: 0, failures: 0, reversals: 0, highSeverityItems: 0 });
+    }
+    if (url.includes("/api/investigations/timeline")) {
+      return jsonResponse(emptyPage);
+    }
     if (url.includes("/api/risk/alerts")) {
       return jsonResponse(emptyPage);
     }
@@ -232,6 +238,7 @@ describe("admin navigation", () => {
     expect(screen.getByRole("link", { name: "Audit Log" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Risk Alerts" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Risk Cases" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Investigations" })).toBeInTheDocument();
   });
 
   it("redirects non-admin users away from admin routes", async () => {
@@ -492,6 +499,87 @@ describe("admin risk cases", () => {
         && String(init.body).includes("Reviewed and resolved")
       )).toBe(true);
     });
+  });
+});
+
+describe("admin investigations", () => {
+  it("renders summary, search controls, timeline items, and selected item details", async () => {
+    const user = userEvent.setup();
+    const { calls } = mockFetch((url) => {
+      if (url.includes("/api/investigations/summary")) {
+        return jsonResponse({ transactions: 2, auditEvents: 2, riskAlerts: 1, riskCases: 1, failures: 1, reversals: 1, highSeverityItems: 2 });
+      }
+      if (url.includes("/api/investigations/timeline")) {
+        return jsonResponse({
+          ...emptyPage,
+          size: 50,
+          content: [
+            {
+              itemId: "alert-1",
+              itemType: "RISK_ALERT",
+              title: "HIGH_VALUE_TRANSFER",
+              description: "Transfer amount exceeded threshold",
+              severity: "HIGH",
+              status: "OPEN",
+              userId: "customer",
+              transactionId: "txn-1",
+              accountId: "101",
+              alertId: "alert-1",
+              amount: "6000.00",
+              currency: "USD",
+              createdAt: "2026-05-10T10:02:00",
+              metadata: { recommendation: "Review sender and recipient" }
+            },
+            {
+              itemId: "case-1",
+              itemType: "RISK_CASE",
+              title: "RC-20260510-0001",
+              description: "Review high value transfer",
+              severity: "HIGH",
+              status: "OPEN",
+              userId: "customer",
+              transactionId: "txn-1",
+              alertId: "alert-1",
+              caseId: "case-1",
+              createdAt: "2026-05-10T10:03:00",
+              metadata: { assignedTo: "ops" }
+            }
+          ],
+          totalElements: 2,
+          totalPages: 1
+        });
+      }
+      return undefined;
+    });
+
+    renderApp("/admin/investigations", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
+
+    expect(await screen.findByRole("heading", { name: "Investigations" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText("2").length).toBeGreaterThan(0));
+    expect(screen.getByText("HIGH_VALUE_TRANSFER")).toBeInTheDocument();
+    expect(screen.getByText("RC-20260510-0001")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("User ID"), "customer");
+    await user.type(screen.getByPlaceholderText("Transaction ID"), "txn-1");
+    await user.type(screen.getByPlaceholderText("Account ID"), "101");
+    await user.type(screen.getByPlaceholderText("Alert ID"), "alert-1");
+    await user.type(screen.getByPlaceholderText("Case ID"), "case-1");
+
+    await waitFor(() => {
+      expect(calls.some(({ url }) =>
+        url.includes("/transaction-api/api/investigations/timeline")
+        && url.includes("userId=customer")
+        && url.includes("transactionId=txn-1")
+        && url.includes("accountId=101")
+        && url.includes("alertId=alert-1")
+        && url.includes("caseId=case-1")
+      )).toBe(true);
+    });
+
+    await user.click(screen.getByRole("button", { name: "View alert-1" }));
+    expect(screen.getAllByText("Transfer amount exceeded threshold").length).toBeGreaterThan(0);
+    expect(screen.getByText("Review sender and recipient")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open alert" })).toHaveAttribute("href", "/admin/risk-alerts");
   });
 });
 

@@ -180,3 +180,33 @@ export type RiskCaseSummary = {
   closedCases: number;
   unassignedCases: number;
 };
+
+export type InvestigationItemType = "TRANSACTION" | "AUDIT_EVENT" | "RISK_ALERT" | "RISK_CASE" | "CASE_NOTE";
+
+export type InvestigationTimelineItem = {
+  itemId: string;
+  itemType: InvestigationItemType;
+  title: string;
+  description?: string;
+  severity?: string;
+  status?: string;
+  userId?: string;
+  transactionId?: string;
+  accountId?: string;
+  alertId?: string;
+  caseId?: string;
+  amount?: string;
+  currency?: string;
+  createdAt: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type InvestigationSummary = {
+  transactions: number;
+  auditEvents: number;
+  riskAlerts: number;
+  riskCases: number;
+  failures: number;
+  reversals: number;
+  highSeverityItems: number;
+};

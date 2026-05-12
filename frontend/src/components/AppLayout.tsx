@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
-import { Activity, ArrowLeftRight, Banknote, ClipboardList, FolderKanban, Gauge, Landmark, LogOut, Shield, ShieldAlert, WalletCards } from "lucide-react";
+import { Activity, ArrowLeftRight, Banknote, ClipboardList, FolderKanban, Gauge, Landmark, LogOut, Search, Shield, ShieldAlert, WalletCards } from "lucide-react";
 import clsx from "clsx";
 import { Button } from "./ui";
 import { useAuth } from "../state/AuthProvider";
@@ -17,7 +17,8 @@ const adminItems = [
   { to: "/admin/transactions", label: "Ops Transactions", icon: Landmark },
   { to: "/admin/audit-log", label: "Audit Log", icon: ClipboardList },
   { to: "/admin/risk-alerts", label: "Risk Alerts", icon: ShieldAlert },
-  { to: "/admin/risk-cases", label: "Risk Cases", icon: FolderKanban }
+  { to: "/admin/risk-cases", label: "Risk Cases", icon: FolderKanban },
+  { to: "/admin/investigations", label: "Investigations", icon: Search }
 ];
 
 function NavigationLink({ to, label, icon: Icon }: { to: string; label: string; icon: React.ComponentType<{ className?: string }> }) {

@@ -22,7 +22,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -65,7 +67,7 @@ class RiskCaseServiceTest {
                 "ops");
 
         assertThat(response.getCaseId()).isEqualTo("case-1");
-        assertThat(response.getCaseNumber()).isEqualTo("RC-20260509-0008");
+        assertThat(response.getCaseNumber()).isEqualTo("RC-" + LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE) + "-0008");
         assertThat(response.getPriority()).isEqualTo(RiskCasePriority.HIGH);
         assertThat(response.getStatus()).isEqualTo(RiskCaseStatus.OPEN);
         assertThat(response.getPrimaryAlertId()).isEqualTo("alert-1");

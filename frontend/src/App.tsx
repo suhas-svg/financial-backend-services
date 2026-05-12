@@ -4,6 +4,7 @@ import { RequireAuth } from "./components/RequireAuth";
 import { AccountsPage } from "./pages/AccountsPage";
 import { AdminAccountsPage } from "./pages/AdminAccountsPage";
 import { AdminAuditLogPage } from "./pages/AdminAuditLogPage";
+import { AdminInvestigationsPage } from "./pages/AdminInvestigationsPage";
 import { AdminMonitoringPage } from "./pages/AdminMonitoringPage";
 import { AdminRiskAlertsPage } from "./pages/AdminRiskAlertsPage";
 import { AdminRiskCasesPage } from "./pages/AdminRiskCasesPage";
@@ -32,6 +33,7 @@ export function App() {
             <Route path="admin/audit-log" element={<AdminAuditLogPage />} />
             <Route path="admin/risk-alerts" element={<AdminRiskAlertsPage />} />
             <Route path="admin/risk-cases" element={<AdminRiskCasesPage />} />
+            <Route path="admin/investigations" element={<AdminInvestigationsPage />} />
           </Route>
         </Route>
       </Route>
