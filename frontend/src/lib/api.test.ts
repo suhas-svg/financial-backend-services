@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
-import { addRiskCaseNote, claimRiskCase, createRiskCaseFromAlert, searchAuditEvents, searchRiskAlerts, searchRiskCases, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
+import { addRiskCaseNote, claimRiskCase, createRiskCaseFromAlert, getInvestigationSummary, getInvestigationTimeline, searchAuditEvents, searchRiskAlerts, searchRiskCases, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
 import { clearSession, saveSession } from "./session";
 
 function tokenFor(payload: object) {
@@ -171,6 +171,27 @@ describe("apiRequest", () => {
         method: "POST",
         body: JSON.stringify({ note: "Internal note" })
       })
+    );
+  });
+
+  it("maps investigation timeline and summary requests to the transaction proxy", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify({ content: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    ));
+
+    await getInvestigationTimeline({ userId: "customer", transactionId: "txn-1", accountId: "101", alertId: "alert-1", caseId: "case-1" });
+    await getInvestigationSummary({ userId: "customer", transactionId: "txn-1" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/transaction-api/api/investigations/timeline?size=50&sort=createdAt%2Cdesc&userId=customer&transactionId=txn-1&accountId=101&alertId=alert-1&caseId=case-1",
+      expect.any(Object)
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/transaction-api/api/investigations/summary?userId=customer&transactionId=txn-1",
+      expect.any(Object)
     );
   });
 });

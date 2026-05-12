@@ -1,4 +1,4 @@
-import type { Account, AuditLogEntry, AuditSummary, Limits, Page, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, Transaction, TransactionStats } from "../types";
+import type { Account, AuditLogEntry, AuditSummary, InvestigationSummary, InvestigationTimelineItem, Limits, Page, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, Transaction, TransactionStats } from "../types";
 import { apiRequest, toQuery } from "./api";
 import type { AccountValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, TransferValues } from "./schemas";
 import { getSession } from "./session";
@@ -182,4 +182,12 @@ export function updateRiskCaseStatus(caseId: string, values: { status: string; r
 
 export function addRiskCaseNote(caseId: string, values: { note: string }) {
   return apiRequest<RiskCase>("transaction", `/api/risk/cases/${caseId}/notes`, { method: "POST", body: values });
+}
+
+export function getInvestigationTimeline(params: Record<string, string | number | undefined>) {
+  return apiRequest<Page<InvestigationTimelineItem>>("transaction", `/api/investigations/timeline${toQuery({ size: 50, sort: "createdAt,desc", ...params })}`);
+}
+
+export function getInvestigationSummary(params: Record<string, string | undefined> = {}) {
+  return apiRequest<InvestigationSummary>("transaction", `/api/investigations/summary${toQuery(params)}`);
 }

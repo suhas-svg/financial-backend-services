@@ -43,6 +43,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/monitoring/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
                         .requestMatchers("/api/audit/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
                         .requestMatchers("/api/risk/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
+                        .requestMatchers("/api/investigations/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
 
                         // ── Transaction endpoints — require authenticated user ────────────────
                         .requestMatchers("/api/transactions/**").authenticated()

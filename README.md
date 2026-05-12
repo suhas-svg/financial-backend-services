@@ -303,6 +303,19 @@ Example create/status/note bodies:
 }
 ```
 
+### Investigation Timeline
+
+The admin Investigations page is a read-only workspace for reconstructing what happened across transaction, audit, risk alert, and risk case records. Admins can search by user, transaction, account, alert, or case identifiers and review a single chronological timeline with linked metadata.
+
+Investigation APIs use the `/transaction-api/api/investigations/*` frontend proxy and require `ROLE_ADMIN` or `ROLE_INTERNAL_SERVICE`.
+
+```http
+GET /api/investigations/timeline?userId=&transactionId=&accountId=&alertId=&caseId=&from=&to=&page=&size=
+GET /api/investigations/summary?userId=&transactionId=&accountId=&alertId=&caseId=&from=&to=
+```
+
+Timeline items include `TRANSACTION`, `AUDIT_EVENT`, `RISK_ALERT`, `RISK_CASE`, and `CASE_NOTE` records. Searches by `caseId` expand to the case user, transaction, and linked alert context; searches by `alertId` expand to the alert user and transaction context. Version 1 is read-only and does not update alerts, cases, accounts, or transactions.
+
 ## Testing
 
 ### Frontend
@@ -326,6 +339,7 @@ The frontend test suite covers:
 - Admin audit log summary, filters, event table, detail panel, and API proxy mapping.
 - Admin risk alert summary, filters, queue table, detail panel, status actions, and API proxy mapping.
 - Admin risk case summary, filters, queue table, detail panel, claim/status/note actions, create-from-alert action, and API proxy mapping.
+- Admin investigation summary, search controls, mixed-source timeline, detail panel, and API proxy mapping.
 - Customer and admin Playwright flows.
 
 ### Backend
@@ -341,7 +355,7 @@ cd transaction-service
 .\mvnw.cmd -q -Dtest=TransactionServiceHardeningTest test
 ```
 
-The transaction-service test suite also covers the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup. Risk alert tests cover admin-only access, filters, summary counts, status updates with reviewer metadata, rule generation, dedupe behavior, and non-risky transaction handling. Risk case tests cover admin-only access, filters, summary counts, create-from-alert, duplicate open-case handling, claim, status updates, linked alert details, and append-only notes.
+The transaction-service test suite also covers the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup. Risk alert tests cover admin-only access, filters, summary counts, status updates with reviewer metadata, rule generation, dedupe behavior, and non-risky transaction handling. Risk case tests cover admin-only access, filters, summary counts, create-from-alert, duplicate open-case handling, claim, status updates, linked alert details, and append-only notes. Investigation tests cover admin-only access, search context expansion, mixed-source timeline sorting, summary counts, and empty search results.
 
 ## Demo Evidence
 

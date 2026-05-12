@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const adminUsername = process.env.E2E_ADMIN_USERNAME ?? "admin_phase2_212714";
+const adminUsername = process.env.E2E_ADMIN_USERNAME ?? "demo_admin";
 const adminPassword = process.env.E2E_ADMIN_PASSWORD ?? "password123";
 const customerPassword = "password123";
 
