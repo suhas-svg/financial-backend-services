@@ -2,7 +2,7 @@ import { Link, NavLink, Outlet } from "react-router-dom";
 import { Activity, ArrowLeftRight, Banknote, ClipboardList, FolderKanban, Gauge, Landmark, LogOut, Search, Shield, ShieldAlert, WalletCards } from "lucide-react";
 import clsx from "clsx";
 import { Button } from "./ui";
-import { useAuth } from "../state/AuthProvider";
+import { useAuth } from "../state/useAuth";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: Gauge },

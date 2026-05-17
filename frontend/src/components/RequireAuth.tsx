@@ -1,5 +1,5 @@
 import { Navigate, Outlet } from "react-router-dom";
-import { useAuth } from "../state/AuthProvider";
+import { useAuth } from "../state/useAuth";
 
 export function RequireAuth({ admin = false }: { admin?: boolean }) {
   const { session, isAdmin } = useAuth();

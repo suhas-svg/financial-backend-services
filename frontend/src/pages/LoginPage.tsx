@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { login } from "../lib/queries";
 import { loginSchema, type LoginValues } from "../lib/schemas";
-import { useAuth } from "../state/AuthProvider";
+import { useAuth } from "../state/useAuth";
 import { Button, ErrorNotice, Field, Input } from "../components/ui";
 
 export function LoginPage() {

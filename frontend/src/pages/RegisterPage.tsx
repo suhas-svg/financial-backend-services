@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { Link, Navigate } from "react-router-dom";
 import { register } from "../lib/queries";
 import { registerSchema, type RegisterValues } from "../lib/schemas";
-import { useAuth } from "../state/AuthProvider";
+import { useAuth } from "../state/useAuth";
 import { Button, ErrorNotice, Field, Input } from "../components/ui";
 
 export function RegisterPage() {
