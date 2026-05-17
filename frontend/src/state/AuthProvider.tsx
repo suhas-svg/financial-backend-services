@@ -1,15 +1,7 @@
-import { createContext, useContext, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { clearSession, getSession, saveSession, type Session } from "../lib/session";
-
-type AuthContextValue = {
-  session: Session | null;
-  loginWithToken: (token: string) => void;
-  logout: () => void;
-  isAdmin: boolean;
-};
-
-const AuthContext = createContext<AuthContextValue | null>(null);
+import { AuthContext, type AuthContextValue } from "./authContext";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(() => getSession());
@@ -33,12 +25,4 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth() {
-  const value = useContext(AuthContext);
-  if (!value) {
-    throw new Error("useAuth must be used inside AuthProvider");
-  }
-  return value;
 }
