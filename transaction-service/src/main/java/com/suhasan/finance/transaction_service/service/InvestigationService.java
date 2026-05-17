@@ -1,5 +1,7 @@
 package com.suhasan.finance.transaction_service.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.suhasan.finance.transaction_service.dto.InvestigationFilter;
 import com.suhasan.finance.transaction_service.dto.InvestigationSummaryResponse;
 import com.suhasan.finance.transaction_service.dto.InvestigationTimelineItemResponse;
@@ -20,7 +22,9 @@ import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,10 +43,14 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class InvestigationService {
 
+    private static final int EXPORT_LIMIT = 10_000;
+    private static final String CSV_HEADER = "itemId,itemType,title,description,severity,status,userId,transactionId,accountId,alertId,caseId,amount,currency,createdAt,metadataJson\n";
+
     private final TransactionRepository transactionRepository;
     private final AuditLogEntryRepository auditLogEntryRepository;
     private final RiskAlertRepository riskAlertRepository;
     private final RiskCaseRepository riskCaseRepository;
+    private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
     public Page<InvestigationTimelineItemResponse> getTimeline(InvestigationFilter filter, Pageable pageable) {
@@ -76,6 +84,17 @@ public class InvestigationService {
                 + cases.stream().filter(riskCase -> riskCase.getPriority() == RiskCasePriority.HIGH || riskCase.getPriority() == RiskCasePriority.CRITICAL).count();
 
         return new InvestigationSummaryResponse(transactions.size(), audits.size(), alerts.size(), cases.size(), failures, reversals, highSeverity);
+    }
+
+    @Transactional(readOnly = true)
+    public String exportTimelineCsv(InvestigationFilter filter) {
+        Page<InvestigationTimelineItemResponse> page = getTimeline(
+                filter,
+                PageRequest.of(0, EXPORT_LIMIT, Sort.by(Sort.Direction.DESC, "createdAt")));
+
+        StringBuilder csv = new StringBuilder(CSV_HEADER);
+        page.getContent().forEach(item -> csv.append(toCsvRow(item)));
+        return csv.toString();
     }
 
     private List<InvestigationTimelineItemResponse> collectItems(InvestigationContext context) {
@@ -333,6 +352,44 @@ public class InvestigationService {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private String toCsvRow(InvestigationTimelineItemResponse item) {
+        return String.join(",",
+                csv(item.getItemId()),
+                csv(item.getItemType()),
+                csv(item.getTitle()),
+                csv(item.getDescription()),
+                csv(item.getSeverity()),
+                csv(item.getStatus()),
+                csv(item.getUserId()),
+                csv(item.getTransactionId()),
+                csv(item.getAccountId()),
+                csv(item.getAlertId()),
+                csv(item.getCaseId()),
+                csv(item.getAmount()),
+                csv(item.getCurrency()),
+                csv(item.getCreatedAt() != null ? item.getCreatedAt().toString() : null),
+                csv(metadataJson(item))) + "\n";
+    }
+
+    private String metadataJson(InvestigationTimelineItemResponse item) {
+        try {
+            return objectMapper.writeValueAsString(item.getMetadata() != null ? item.getMetadata() : Map.of());
+        } catch (JsonProcessingException ex) {
+            return "{}";
+        }
+    }
+
+    private String csv(String value) {
+        if (value == null) {
+            return "";
+        }
+        String escaped = value.replace("\"", "\"\"");
+        if (escaped.contains(",") || escaped.contains("\"") || escaped.contains("\n") || escaped.contains("\r")) {
+            return "\"" + escaped + "\"";
+        }
+        return escaped;
     }
 
     private class InvestigationContext {

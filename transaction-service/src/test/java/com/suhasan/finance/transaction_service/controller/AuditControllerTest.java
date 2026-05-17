@@ -2,10 +2,7 @@ package com.suhasan.finance.transaction_service.controller;
 
 import com.suhasan.finance.transaction_service.dto.AuditLogEntryResponse;
 import com.suhasan.finance.transaction_service.dto.AuditSummaryResponse;
-import com.suhasan.finance.transaction_service.security.JwtAuthenticationFilter;
 import com.suhasan.finance.transaction_service.service.AuditQueryService;
-import jakarta.servlet.FilterChain;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -22,15 +19,16 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(AuditController.class)
-@Import(com.suhasan.finance.transaction_service.security.SecurityConfig.class)
+@WebMvcTest(
+        controllers = AuditController.class,
+        properties = "security.jwt.secret=01234567890123456789012345678901")
+@Import({com.suhasan.finance.transaction_service.security.SecurityConfig.class, JwtFilterTestConfig.class})
 @EnableWebSecurity
 class AuditControllerTest {
 
@@ -39,18 +37,6 @@ class AuditControllerTest {
 
     @MockitoBean
     private AuditQueryService auditQueryService;
-
-    @MockitoBean
-    private JwtAuthenticationFilter jwtAuthenticationFilter;
-
-    @BeforeEach
-    void setUpFilter() throws Exception {
-        doAnswer(invocation -> {
-            FilterChain chain = invocation.getArgument(2);
-            chain.doFilter(invocation.getArgument(0), invocation.getArgument(1));
-            return null;
-        }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
-    }
 
     @Test
     @WithMockUser(roles = "ADMIN")

@@ -5,15 +5,16 @@ import com.suhasan.finance.transaction_service.dto.InvestigationSummaryResponse;
 import com.suhasan.finance.transaction_service.dto.InvestigationTimelineItemResponse;
 import com.suhasan.finance.transaction_service.security.JwtAuthenticationFilter;
 import com.suhasan.finance.transaction_service.service.InvestigationService;
-import jakarta.servlet.FilterChain;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -23,17 +24,21 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(InvestigationController.class)
-@Import(com.suhasan.finance.transaction_service.security.SecurityConfig.class)
+@WebMvcTest(
+        controllers = InvestigationController.class,
+        properties = "security.jwt.secret=01234567890123456789012345678901")
+@Import({com.suhasan.finance.transaction_service.security.SecurityConfig.class, InvestigationControllerTest.JwtFilterTestConfig.class})
 @EnableWebSecurity
 class InvestigationControllerTest {
 
@@ -43,16 +48,12 @@ class InvestigationControllerTest {
     @MockitoBean
     private InvestigationService investigationService;
 
-    @MockitoBean
-    private JwtAuthenticationFilter jwtAuthenticationFilter;
-
-    @BeforeEach
-    void setUpFilter() throws Exception {
-        doAnswer(invocation -> {
-            FilterChain chain = invocation.getArgument(2);
-            chain.doFilter(invocation.getArgument(0), invocation.getArgument(1));
-            return null;
-        }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
+    @TestConfiguration
+    static class JwtFilterTestConfig {
+        @Bean
+        JwtAuthenticationFilter jwtAuthenticationFilter() {
+            return new JwtAuthenticationFilter();
+        }
     }
 
     @Test
@@ -104,6 +105,36 @@ class InvestigationControllerTest {
     @WithMockUser(roles = "USER")
     void timeline_RejectsNormalUsers() throws Exception {
         mockMvc.perform(get("/api/investigations/timeline"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void export_AllowsAdminAndReturnsCsvAttachment() throws Exception {
+        when(investigationService.exportTimelineCsv(any())).thenReturn(
+                "itemId,itemType,title,description,severity,status,userId,transactionId,accountId,alertId,caseId,amount,currency,createdAt,metadataJson\n" +
+                        "txn-1,TRANSACTION,TRANSFER COMPLETED,High value transfer,,COMPLETED,customer,txn-1,101,,,6000.00,USD,2026-05-10T10:15:30,{}\n");
+
+        mockMvc.perform(get("/api/investigations/export")
+                        .param("caseId", "case-1")
+                        .param("from", "2026-05-01T00:00:00")
+                        .param("to", "2026-05-11T00:00:00"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"investigation-export.csv\""))
+                .andExpect(header().string(HttpHeaders.CONTENT_TYPE, "text/csv"))
+                .andExpect(content().string(containsString("txn-1,TRANSACTION")));
+
+        verify(investigationService).exportTimelineCsv(argThat(filter ->
+                "case-1".equals(filter.getCaseId())
+                        && LocalDateTime.parse("2026-05-01T00:00:00").equals(filter.getFrom())
+                        && LocalDateTime.parse("2026-05-11T00:00:00").equals(filter.getTo())));
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void export_RejectsNormalUsers() throws Exception {
+        mockMvc.perform(get("/api/investigations/export")
+                        .param("caseId", "case-1"))
                 .andExpect(status().isForbidden());
     }
 

@@ -581,6 +581,97 @@ describe("admin investigations", () => {
     expect(screen.getByText("Review sender and recipient")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open alert" })).toHaveAttribute("href", "/admin/risk-alerts");
   });
+
+  it("exports the current investigation filters as a CSV download", async () => {
+    const user = userEvent.setup();
+    const createObjectUrl = vi.fn(() => "blob:investigation-export");
+    const revokeObjectUrl = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    vi.stubGlobal("URL", { createObjectURL: createObjectUrl, revokeObjectURL: revokeObjectUrl });
+
+    const { calls } = mockFetch((url) => {
+      if (url.includes("/api/investigations/export")) {
+        return new Response("itemId,itemType\nalert-1,RISK_ALERT\n", {
+          status: 200,
+          headers: { "Content-Type": "text/csv" }
+        });
+      }
+      if (url.includes("/api/investigations/summary")) {
+        return jsonResponse({ transactions: 0, auditEvents: 0, riskAlerts: 0, riskCases: 0, failures: 0, reversals: 0, highSeverityItems: 0 });
+      }
+      if (url.includes("/api/investigations/timeline")) {
+        return jsonResponse(emptyPage);
+      }
+      return undefined;
+    });
+
+    renderApp("/admin/investigations", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
+
+    expect(await screen.findByRole("heading", { name: "Investigations" })).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText("User ID"), "customer");
+    await user.type(screen.getByPlaceholderText("Alert ID"), "alert-1");
+    await user.click(screen.getByRole("button", { name: "Export CSV" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url }) =>
+        url.includes("/transaction-api/api/investigations/export")
+        && url.includes("userId=customer")
+        && url.includes("alertId=alert-1")
+      )).toBe(true);
+    });
+    expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob));
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:investigation-export");
+  });
+
+  it("shows a report preview and prints the investigation report", async () => {
+    const user = userEvent.setup();
+    const printSpy = vi.fn();
+    vi.stubGlobal("print", printSpy);
+
+    mockFetch((url) => {
+      if (url.includes("/api/investigations/summary")) {
+        return jsonResponse({ transactions: 1, auditEvents: 1, riskAlerts: 1, riskCases: 1, failures: 1, reversals: 0, highSeverityItems: 2 });
+      }
+      if (url.includes("/api/investigations/timeline")) {
+        return jsonResponse({
+          ...emptyPage,
+          size: 50,
+          content: [
+            {
+              itemId: "alert-1",
+              itemType: "RISK_ALERT",
+              title: "HIGH_VALUE_TRANSFER",
+              description: "Transfer amount exceeded threshold",
+              severity: "HIGH",
+              status: "OPEN",
+              userId: "customer",
+              transactionId: "txn-1",
+              accountId: "101",
+              alertId: "alert-1",
+              amount: "6000.00",
+              currency: "USD",
+              createdAt: "2026-05-10T10:02:00",
+              metadata: { recommendation: "Review sender and recipient" }
+            }
+          ],
+          totalElements: 1,
+          totalPages: 1
+        });
+      }
+      return undefined;
+    });
+
+    renderApp("/admin/investigations", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
+
+    expect(await screen.findByRole("heading", { name: "Investigation report" })).toBeInTheDocument();
+    expect(screen.getByText("Report scope")).toBeInTheDocument();
+    expect(await screen.findByText("High-risk items require review")).toBeInTheDocument();
+    expect(screen.getByText("alert-1")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Print report" }));
+
+    expect(printSpy).toHaveBeenCalledTimes(1);
+  });
 });
 
 function sampleRiskCase(overrides: Record<string, unknown> = {}) {

@@ -1,5 +1,6 @@
 package com.suhasan.finance.transaction_service.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.suhasan.finance.transaction_service.dto.InvestigationFilter;
 import com.suhasan.finance.transaction_service.dto.InvestigationSummaryResponse;
 import com.suhasan.finance.transaction_service.dto.InvestigationTimelineItemResponse;
@@ -19,10 +20,10 @@ import com.suhasan.finance.transaction_service.repository.AuditLogEntryRepositor
 import com.suhasan.finance.transaction_service.repository.RiskAlertRepository;
 import com.suhasan.finance.transaction_service.repository.RiskCaseRepository;
 import com.suhasan.finance.transaction_service.repository.TransactionRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -55,8 +56,17 @@ class InvestigationServiceTest {
     @Mock
     private RiskCaseRepository riskCaseRepository;
 
-    @InjectMocks
     private InvestigationService investigationService;
+
+    @BeforeEach
+    void setUp() {
+        investigationService = new InvestigationService(
+                transactionRepository,
+                auditLogEntryRepository,
+                riskAlertRepository,
+                riskCaseRepository,
+                new ObjectMapper());
+    }
 
     @Test
     void getTimeline_ExpandsCaseSearchAndReturnsMixedItemsNewestFirst() {
@@ -119,6 +129,35 @@ class InvestigationServiceTest {
         assertThat(summary.getHighSeverityItems()).isEqualTo(2);
     }
 
+    @Test
+    void exportTimelineCsv_ReturnsHeaderAndEscapedRows() {
+        RiskAlert alert = alert();
+        RiskCase riskCase = riskCase(alert);
+        when(riskCaseRepository.findById("case-1")).thenReturn(Optional.of(riskCase));
+        when(transactionRepository.findAll(any(Specification.class))).thenReturn(List.of(transactionWithCsvCharacters()));
+        when(auditLogEntryRepository.findAll(any(Specification.class))).thenReturn(List.of(audit()));
+        when(riskAlertRepository.findAll(any(Specification.class))).thenReturn(List.of(alert));
+        when(riskCaseRepository.findAll(any(Specification.class))).thenReturn(List.of(riskCase));
+
+        String csv = investigationService.exportTimelineCsv(
+                InvestigationFilter.builder().caseId("case-1").build());
+
+        assertThat(csv).startsWith("itemId,itemType,title,description,severity,status,userId,transactionId,accountId,alertId,caseId,amount,currency,createdAt,metadataJson\n");
+        assertThat(csv).contains("txn-csv,TRANSACTION,TRANSFER COMPLETED,\"High value, transfer\"");
+        assertThat(csv).contains("audit-1,AUDIT_EVENT");
+        assertThat(csv).contains("alert-1,RISK_ALERT");
+        assertThat(csv).contains("case-1,RISK_CASE");
+        assertThat(csv).contains("CASE_NOTE");
+        assertThat(csv).contains("\"{\"\"type\"\":\"\"TRANSFER\"\"");
+    }
+
+    @Test
+    void exportTimelineCsv_NoCriteriaReturnsHeaderOnly() {
+        String csv = investigationService.exportTimelineCsv(InvestigationFilter.builder().build());
+
+        assertThat(csv).isEqualTo("itemId,itemType,title,description,severity,status,userId,transactionId,accountId,alertId,caseId,amount,currency,createdAt,metadataJson\n");
+    }
+
     private Transaction transaction() {
         return Transaction.builder()
                 .transactionId("txn-1")
@@ -129,6 +168,21 @@ class InvestigationServiceTest {
                 .type(TransactionType.TRANSFER)
                 .status(TransactionStatus.COMPLETED)
                 .description("High value transfer")
+                .createdBy("customer")
+                .createdAt(LocalDateTime.parse("2026-05-10T10:00:00"))
+                .build();
+    }
+
+    private Transaction transactionWithCsvCharacters() {
+        return Transaction.builder()
+                .transactionId("txn-csv")
+                .fromAccountId("101")
+                .toAccountId("202")
+                .amount(new BigDecimal("6000.00"))
+                .currency("USD")
+                .type(TransactionType.TRANSFER)
+                .status(TransactionStatus.COMPLETED)
+                .description("High value, transfer")
                 .createdBy("customer")
                 .createdAt(LocalDateTime.parse("2026-05-10T10:00:00"))
                 .build();
