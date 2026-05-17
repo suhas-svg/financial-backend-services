@@ -44,6 +44,9 @@ financial-backend-services/
 - View reversal-related status panels.
 - Review the transaction-service audit log with admin-only summary counters, filters, event search, and selected-event details.
 - Review transaction risk alerts with summary counters, filters, detail inspection, and review/dismiss/escalate actions.
+- Reconstruct investigation context across transactions, audit events, risk alerts, risk cases, and case notes.
+- Print investigation reports with current filters, key findings, and a timeline preview.
+- Export investigation timelines as admin-only CSV files using the same investigation filters used by the timeline view.
 
 ### Backend Services
 
@@ -62,6 +65,7 @@ financial-backend-services/
   - Admin-only audit log search, detail, and summary APIs.
   - Persistent risk alert review queue for conservative transaction risk rules.
   - Admin-only risk alert search, detail, summary, and status update APIs.
+  - Admin-only investigation timeline, summary, and CSV export APIs.
   - Account-service integration for balance updates.
 
 ## Technology Stack
@@ -312,9 +316,14 @@ Investigation APIs use the `/transaction-api/api/investigations/*` frontend prox
 ```http
 GET /api/investigations/timeline?userId=&transactionId=&accountId=&alertId=&caseId=&from=&to=&page=&size=
 GET /api/investigations/summary?userId=&transactionId=&accountId=&alertId=&caseId=&from=&to=
+GET /api/investigations/export?userId=&transactionId=&accountId=&alertId=&caseId=&from=&to=
 ```
 
-Timeline items include `TRANSACTION`, `AUDIT_EVENT`, `RISK_ALERT`, `RISK_CASE`, and `CASE_NOTE` records. Searches by `caseId` expand to the case user, transaction, and linked alert context; searches by `alertId` expand to the alert user and transaction context. Version 1 is read-only and does not update alerts, cases, accounts, or transactions.
+Timeline items include `TRANSACTION`, `AUDIT_EVENT`, `RISK_ALERT`, `RISK_CASE`, and `CASE_NOTE` records. Searches by `caseId` expand to the case user, transaction, and linked alert context; searches by `alertId` expand to the alert user and transaction context.
+
+The page also builds a report panel from the current filters. It summarizes the report scope, flags high-severity investigation activity, previews the first timeline items, and supports browser printing through the `Print report` action. `GET /api/investigations/export` returns a `text/csv` attachment named `investigation-export.csv` with the same filtered timeline data and escaped metadata JSON for offline review.
+
+Version 1 is read-only and does not update alerts, cases, accounts, or transactions.
 
 ## Testing
 
@@ -339,7 +348,7 @@ The frontend test suite covers:
 - Admin audit log summary, filters, event table, detail panel, and API proxy mapping.
 - Admin risk alert summary, filters, queue table, detail panel, status actions, and API proxy mapping.
 - Admin risk case summary, filters, queue table, detail panel, claim/status/note actions, create-from-alert action, and API proxy mapping.
-- Admin investigation summary, search controls, mixed-source timeline, detail panel, and API proxy mapping.
+- Admin investigation summary, search controls, report preview, print action, CSV export flow, mixed-source timeline, detail panel, and API proxy mapping.
 - Customer and admin Playwright flows.
 
 ### Backend
@@ -355,7 +364,7 @@ cd transaction-service
 .\mvnw.cmd -q -Dtest=TransactionServiceHardeningTest test
 ```
 
-The transaction-service test suite also covers the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup. Risk alert tests cover admin-only access, filters, summary counts, status updates with reviewer metadata, rule generation, dedupe behavior, and non-risky transaction handling. Risk case tests cover admin-only access, filters, summary counts, create-from-alert, duplicate open-case handling, claim, status updates, linked alert details, and append-only notes. Investigation tests cover admin-only access, search context expansion, mixed-source timeline sorting, summary counts, and empty search results.
+The transaction-service test suite also covers the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup. Risk alert tests cover admin-only access, filters, summary counts, status updates with reviewer metadata, rule generation, dedupe behavior, and non-risky transaction handling. Risk case tests cover admin-only access, filters, summary counts, create-from-alert, duplicate open-case handling, claim, status updates, linked alert details, and append-only notes. Investigation tests cover admin-only access, search context expansion, mixed-source timeline sorting, summary counts, CSV export headers/content escaping, and empty search results.
 
 ## Demo Evidence
 

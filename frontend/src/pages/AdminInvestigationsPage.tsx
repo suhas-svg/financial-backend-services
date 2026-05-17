@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
 import { Badge, Button, EmptyState, Input, Panel, Stat } from "../components/ui";
-import { getInvestigationSummary, getInvestigationTimeline } from "../lib/queries";
+import { exportInvestigationTimelineCsv, getInvestigationSummary, getInvestigationTimeline } from "../lib/queries";
 import type { InvestigationItemType, InvestigationTimelineItem } from "../types";
 
 const defaultFilters = {
@@ -19,19 +19,40 @@ const defaultFilters = {
 export function AdminInvestigationsPage() {
   const [filters, setFilters] = useState(defaultFilters);
   const [selected, setSelected] = useState<InvestigationTimelineItem | null>(null);
+  const [exportState, setExportState] = useState<"idle" | "loading" | "error">("idle");
 
   const timeline = useQuery({ queryKey: ["investigation-timeline", filters], queryFn: () => getInvestigationTimeline(filters) });
   const summary = useQuery({ queryKey: ["investigation-summary", filters], queryFn: () => getInvestigationSummary(filters) });
+  const timelineItems = timeline.data?.content || [];
   const groupedItems = groupTimeline(timeline.data?.content || []);
+  const activeFilters = activeFilterEntries(filters);
+  const exportCsv = async () => {
+    setExportState("loading");
+    try {
+      const csv = await exportInvestigationTimelineCsv(filters);
+      downloadCsv(csv, "investigation-export.csv");
+      setExportState("idle");
+    } catch {
+      setExportState("error");
+    }
+  };
 
   return (
-    <div className="grid gap-6">
+    <div className="investigation-screen grid gap-6">
       <div>
         <h1 className="text-2xl font-semibold">Investigations</h1>
         <p className="text-sm text-muted">Read-only timeline for transaction, audit, risk alert, and case context.</p>
       </div>
 
-      <Panel title="Search context">
+      <Panel
+        title="Search context"
+        action={(
+          <div className="print-hidden flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={exportCsv} disabled={exportState === "loading"}>{exportState === "loading" ? "Exporting..." : "Export CSV"}</Button>
+            <Button variant="secondary" onClick={() => window.print()}>Print report</Button>
+          </div>
+        )}
+      >
         <div className="grid gap-2 md:grid-cols-4 xl:grid-cols-7">
           <Input placeholder="User ID" value={filters.userId} onChange={(event) => updateFilter(setFilters, "userId", event.target.value)} />
           <Input placeholder="Transaction ID" value={filters.transactionId} onChange={(event) => updateFilter(setFilters, "transactionId", event.target.value)} />
@@ -41,6 +62,7 @@ export function AdminInvestigationsPage() {
           <Input type="datetime-local" aria-label="From" value={filters.from} onChange={(event) => updateFilter(setFilters, "from", event.target.value)} />
           <Input type="datetime-local" aria-label="To" value={filters.to} onChange={(event) => updateFilter(setFilters, "to", event.target.value)} />
         </div>
+        {exportState === "error" ? <p className="mt-3 text-sm text-danger">Could not export investigation CSV.</p> : null}
       </Panel>
 
       <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-7">
@@ -52,6 +74,31 @@ export function AdminInvestigationsPage() {
         <Stat label="Reversals" value={formatNumber(summary.data?.reversals)} />
         <Stat label="High severity" value={<Badge tone={summary.data?.highSeverityItems ? "bad" : "neutral"}>{formatNumber(summary.data?.highSeverityItems)}</Badge>} />
       </div>
+
+      <Panel title="Investigation report" className="investigation-report">
+        <div className="grid gap-5">
+          <div className="grid gap-3 md:grid-cols-3">
+            <ReportBlock title="Report scope" value={activeFilters.length ? activeFilters.map((entry) => `${entry.label}: ${entry.value}`).join(" | ") : "All investigation records"} />
+            <ReportBlock title="Key finding" value={summary.data?.highSeverityItems ? "High-risk items require review" : "No high-risk items in scope"} tone={summary.data?.highSeverityItems ? "bad" : "good"} />
+            <ReportBlock title="Included timeline items" value={`${timelineItems.length} item${timelineItems.length === 1 ? "" : "s"}`} />
+          </div>
+          <div className="grid gap-2">
+            <p className="text-xs font-semibold uppercase text-muted">Report timeline preview</p>
+            {timelineItems.length ? timelineItems.slice(0, 6).map((item) => (
+              <div key={`report-${item.itemType}-${item.itemId}`} className="grid gap-1 rounded-md border border-line bg-white p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone={toneForType(item.itemType)}>{item.itemType}</Badge>
+                  {item.severity ? <Badge tone={toneForSeverity(item.severity)}>{item.severity}</Badge> : null}
+                  {item.status ? <Badge tone="neutral">{item.status}</Badge> : null}
+                </div>
+                <p className="text-sm font-medium text-ink">Report item: {item.title}</p>
+                <p className="font-mono text-xs font-semibold text-ink">{item.itemId}</p>
+                <p className="font-mono text-xs text-muted">{[item.itemId, item.userId, item.transactionId, item.accountId, item.alertId, item.caseId].filter(Boolean).join(" / ")}</p>
+              </div>
+            )) : <EmptyState title="No report items" detail="Use filters with matching investigation activity to populate the report preview." />}
+          </div>
+        </div>
+      </Panel>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_430px]">
         <Panel title="Timeline">
@@ -76,6 +123,15 @@ export function AdminInvestigationsPage() {
           {selected ? <TimelineDetail item={selected} /> : <EmptyState title="No item selected" detail="Select a timeline item to inspect linked identifiers and metadata." />}
         </Panel>
       </div>
+    </div>
+  );
+}
+
+function ReportBlock({ title, value, tone = "neutral" }: { title: string; value: string; tone?: "neutral" | "good" | "bad" }) {
+  return (
+    <div className="rounded-md border border-line bg-white p-3">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted">{title}</p>
+      <p className={tone === "bad" ? "mt-1 text-sm font-semibold text-danger" : tone === "good" ? "mt-1 text-sm font-semibold text-brand" : "mt-1 text-sm font-semibold text-ink"}>{value}</p>
     </div>
   );
 }
@@ -157,6 +213,34 @@ function groupTimeline(items: InvestigationTimelineItem[]) {
 
 function updateFilter(setFilters: Dispatch<SetStateAction<typeof defaultFilters>>, key: keyof typeof defaultFilters, value: string) {
   setFilters((prev) => ({ ...prev, [key]: value }));
+}
+
+function activeFilterEntries(filters: typeof defaultFilters) {
+  const labels: Record<keyof typeof defaultFilters, string> = {
+    userId: "User",
+    transactionId: "Transaction",
+    accountId: "Account",
+    alertId: "Alert",
+    caseId: "Case",
+    from: "From",
+    to: "To"
+  };
+
+  return Object.entries(filters)
+    .filter(([, value]) => value)
+    .map(([key, value]) => ({ label: labels[key as keyof typeof defaultFilters], value }));
+}
+
+function downloadCsv(csv: string, filename: string) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function toneForType(type: InvestigationItemType): "neutral" | "good" | "warn" | "bad" | "info" {

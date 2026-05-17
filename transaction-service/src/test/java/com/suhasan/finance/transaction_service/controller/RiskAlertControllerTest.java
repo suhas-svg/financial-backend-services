@@ -5,10 +5,7 @@ import com.suhasan.finance.transaction_service.dto.RiskSummaryResponse;
 import com.suhasan.finance.transaction_service.entity.RiskAlertSeverity;
 import com.suhasan.finance.transaction_service.entity.RiskAlertStatus;
 import com.suhasan.finance.transaction_service.entity.RiskAlertType;
-import com.suhasan.finance.transaction_service.security.JwtAuthenticationFilter;
 import com.suhasan.finance.transaction_service.service.RiskAlertQueryService;
-import jakarta.servlet.FilterChain;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -28,7 +25,6 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -36,8 +32,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(RiskAlertController.class)
-@Import(com.suhasan.finance.transaction_service.security.SecurityConfig.class)
+@WebMvcTest(
+        controllers = RiskAlertController.class,
+        properties = "security.jwt.secret=01234567890123456789012345678901")
+@Import({com.suhasan.finance.transaction_service.security.SecurityConfig.class, JwtFilterTestConfig.class})
 @EnableWebSecurity
 class RiskAlertControllerTest {
 
@@ -46,18 +44,6 @@ class RiskAlertControllerTest {
 
     @MockitoBean
     private RiskAlertQueryService riskAlertQueryService;
-
-    @MockitoBean
-    private JwtAuthenticationFilter jwtAuthenticationFilter;
-
-    @BeforeEach
-    void setUpFilter() throws Exception {
-        doAnswer(invocation -> {
-            FilterChain chain = invocation.getArgument(2);
-            chain.doFilter(invocation.getArgument(0), invocation.getArgument(1));
-            return null;
-        }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
-    }
 
     @Test
     @WithMockUser(roles = "ADMIN")

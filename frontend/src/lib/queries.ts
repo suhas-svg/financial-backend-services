@@ -191,3 +191,7 @@ export function getInvestigationTimeline(params: Record<string, string | number 
 export function getInvestigationSummary(params: Record<string, string | undefined> = {}) {
   return apiRequest<InvestigationSummary>("transaction", `/api/investigations/summary${toQuery(params)}`);
 }
+
+export function exportInvestigationTimelineCsv(params: Record<string, string | undefined> = {}) {
+  return apiRequest<string>("transaction", `/api/investigations/export${toQuery(params)}`);
+}

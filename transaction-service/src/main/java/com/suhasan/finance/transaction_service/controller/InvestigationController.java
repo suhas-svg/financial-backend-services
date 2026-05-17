@@ -10,6 +10,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -48,6 +50,23 @@ public class InvestigationController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         return ResponseEntity.ok(investigationService.getSummary(toFilter(userId, transactionId, accountId, alertId, caseId, from, to)));
+    }
+
+    @GetMapping(value = "/export", produces = "text/csv")
+    public ResponseEntity<String> exportTimeline(
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String transactionId,
+            @RequestParam(required = false) String accountId,
+            @RequestParam(required = false) String alertId,
+            @RequestParam(required = false) String caseId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+        String csv = investigationService.exportTimelineCsv(toFilter(userId, transactionId, accountId, alertId, caseId, from, to));
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"investigation-export.csv\"")
+                .contentType(new MediaType("text", "csv"))
+                .body(csv);
     }
 
     private InvestigationFilter toFilter(String userId, String transactionId, String accountId, String alertId, String caseId,

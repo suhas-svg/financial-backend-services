@@ -5,12 +5,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Map;
 
@@ -141,14 +144,9 @@ class GlobalExceptionHandlerTest {
     @Test
     void handleValidationExceptions_ReturnsValidationErrorResponse() {
         // Arrange
-        MethodArgumentNotValidException exception = mock(MethodArgumentNotValidException.class);
-        BindingResult bindingResult = mock(BindingResult.class);
-        
-        FieldError fieldError1 = new FieldError("transferRequest", "amount", "Amount must be positive");
-        FieldError fieldError2 = new FieldError("transferRequest", "fromAccountId", "From account ID is required");
-        
-        when(exception.getBindingResult()).thenReturn(bindingResult);
-        when(bindingResult.getAllErrors()).thenReturn(Arrays.asList(fieldError1, fieldError2));
+        MethodArgumentNotValidException exception = validationException(
+                new FieldError("transferRequest", "amount", "Amount must be positive"),
+                new FieldError("transferRequest", "fromAccountId", "From account ID is required"));
 
         // Act
         ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleValidationExceptions(exception);
@@ -219,11 +217,7 @@ class GlobalExceptionHandlerTest {
     @Test
     void handleValidationExceptions_EmptyErrors_ReturnsValidationErrorResponse() {
         // Arrange
-        MethodArgumentNotValidException exception = mock(MethodArgumentNotValidException.class);
-        BindingResult bindingResult = mock(BindingResult.class);
-        
-        when(exception.getBindingResult()).thenReturn(bindingResult);
-        when(bindingResult.getAllErrors()).thenReturn(Arrays.asList());
+        MethodArgumentNotValidException exception = validationException();
 
         // Act
         ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleValidationExceptions(exception);
@@ -240,6 +234,22 @@ class GlobalExceptionHandlerTest {
         Map<String, String> validationErrors = errorResponse.getValidationErrors();
         assertNotNull(validationErrors);
         assertTrue(validationErrors.isEmpty());
+    }
+
+    private MethodArgumentNotValidException validationException(FieldError... fieldErrors) {
+        BindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "transferRequest");
+        Arrays.stream(fieldErrors).forEach(bindingResult::addError);
+
+        try {
+            Method method = GlobalExceptionHandlerTest.class.getDeclaredMethod("validationTarget", Object.class);
+            return new MethodArgumentNotValidException(new MethodParameter(method, 0), bindingResult);
+        } catch (NoSuchMethodException ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+
+    @SuppressWarnings("unused")
+    private void validationTarget(Object request) {
     }
 
     @Test

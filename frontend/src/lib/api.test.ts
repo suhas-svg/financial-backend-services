@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
-import { addRiskCaseNote, claimRiskCase, createRiskCaseFromAlert, getInvestigationSummary, getInvestigationTimeline, searchAuditEvents, searchRiskAlerts, searchRiskCases, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
+import { addRiskCaseNote, claimRiskCase, createRiskCaseFromAlert, exportInvestigationTimelineCsv, getInvestigationSummary, getInvestigationTimeline, searchAuditEvents, searchRiskAlerts, searchRiskCases, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
 import { clearSession, saveSession } from "./session";
 
 function tokenFor(payload: object) {
@@ -184,6 +184,7 @@ describe("apiRequest", () => {
 
     await getInvestigationTimeline({ userId: "customer", transactionId: "txn-1", accountId: "101", alertId: "alert-1", caseId: "case-1" });
     await getInvestigationSummary({ userId: "customer", transactionId: "txn-1" });
+    await exportInvestigationTimelineCsv({ userId: "customer", transactionId: "txn-1", accountId: "101", alertId: "alert-1", caseId: "case-1" });
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/transaction-api/api/investigations/timeline?size=50&sort=createdAt%2Cdesc&userId=customer&transactionId=txn-1&accountId=101&alertId=alert-1&caseId=case-1",
@@ -191,6 +192,10 @@ describe("apiRequest", () => {
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "/transaction-api/api/investigations/summary?userId=customer&transactionId=txn-1",
+      expect.any(Object)
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/transaction-api/api/investigations/export?userId=customer&transactionId=txn-1&accountId=101&alertId=alert-1&caseId=case-1",
       expect.any(Object)
     );
   });
