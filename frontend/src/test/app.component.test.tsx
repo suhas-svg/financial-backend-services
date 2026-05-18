@@ -12,7 +12,15 @@ const sampleAccount = {
   ownerId: "customer",
   accountType: "CHECKING",
   balance: 250,
-  createdAt: "2026-04-28T10:00:00Z"
+  createdAt: "2026-04-28T10:00:00Z",
+  status: "ACTIVE"
+};
+
+const frozenAccount = {
+  ...sampleAccount,
+  id: 202,
+  status: "FROZEN",
+  statusReason: "Fraud review"
 };
 
 function tokenFor(payload: Record<string, unknown>) {
@@ -203,6 +211,23 @@ describe("account forms", () => {
     expect(screen.getByLabelText("Credit limit")).toBeInTheDocument();
     expect(screen.getByLabelText("Due date")).toBeInTheDocument();
   });
+
+  it("shows frozen account warnings on customer account detail", async () => {
+    const user = userEvent.setup();
+    mockFetch((url) => {
+      if (url.includes("/api/accounts")) {
+        return jsonResponse({ ...emptyPage, content: [frozenAccount], totalElements: 1, totalPages: 1 });
+      }
+      return undefined;
+    });
+
+    renderApp("/accounts", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    await user.click(await screen.findByRole("button", { name: "View account 202" }));
+
+    expect(screen.getAllByText("FROZEN").length).toBeGreaterThan(0);
+    expect(screen.getByText("Fraud review")).toBeInTheDocument();
+  });
 });
 
 describe("transaction filters", () => {
@@ -303,6 +328,58 @@ describe("admin audit log", () => {
 
     await user.click(screen.getByRole("button", { name: "View event-1" }));
     expect(screen.getByText("Insufficient funds")).toBeInTheDocument();
+  });
+
+});
+
+describe("admin account status controls", () => {
+  it("freezes account with a required reason", async () => {
+    const user = userEvent.setup();
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/accounts/101/status") && init?.method === "PATCH") {
+        return jsonResponse({ ...sampleAccount, status: "FROZEN", statusReason: "Fraud review" });
+      }
+      return undefined;
+    });
+
+    renderApp("/admin/accounts", tokenFor({ sub: "admin", roles: ["ROLE_ADMIN"] }));
+
+    await screen.findByText("#101");
+    await user.click(screen.getByRole("button", { name: "Freeze account 101" }));
+    await user.click(screen.getByRole("button", { name: "Confirm status update" }));
+    expect(await screen.findByText("Status reason is required")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Status reason"), "Fraud review");
+    await user.click(screen.getByRole("button", { name: "Confirm status update" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) => url.includes("/account-api/api/accounts/101/status")
+        && init?.method === "PATCH"
+        && String(init.body).includes("\"status\":\"FROZEN\"")
+        && String(init.body).includes("Fraud review"))).toBe(true);
+    });
+  });
+});
+
+describe("money movement account holds", () => {
+  it("keeps frozen accounts selectable for deposit but disabled for debits", async () => {
+    mockFetch((url) => {
+      if (url.includes("/api/accounts")) {
+        return jsonResponse({ ...emptyPage, content: [sampleAccount, frozenAccount], totalElements: 2, totalPages: 1 });
+      }
+      return undefined;
+    });
+
+    renderApp("/move-money", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    await screen.findAllByText(/#202 - CHECKING - FROZEN/);
+    const depositSelect = screen.getAllByLabelText("Account")[0];
+    const withdrawSelect = screen.getByLabelText("Withdraw account");
+    const frozenDebitOption = Array.from(withdrawSelect.querySelectorAll("option")).find((option) => option.value === "202");
+
+    expect(depositSelect).toHaveTextContent("#202 - CHECKING - FROZEN");
+    expect(withdrawSelect).toHaveTextContent("#202 - CHECKING - FROZEN");
+    expect(frozenDebitOption).toBeDisabled();
   });
 });
 

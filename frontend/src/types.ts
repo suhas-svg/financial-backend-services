@@ -11,6 +11,7 @@ export type Page<T> = {
 };
 
 export type AccountType = "CHECKING" | "SAVINGS" | "CREDIT";
+export type AccountStatus = "ACTIVE" | "FROZEN";
 
 export type Account = {
   id: number;
@@ -18,6 +19,10 @@ export type Account = {
   balance: number;
   createdAt: string;
   accountType: AccountType;
+  status?: AccountStatus;
+  statusReason?: string;
+  statusUpdatedAt?: string;
+  statusUpdatedBy?: string;
   interestRate?: number;
   creditLimit?: number;
   dueDate?: string;

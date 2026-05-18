@@ -194,6 +194,7 @@ configMap:
       # Redis
       spring.data.redis.host=${REDIS_HOST}
       spring.data.redis.port=${REDIS_PORT:6379}
+      management.health.redis.enabled=${REDIS_HEALTH_ENABLED:true}
 
       # Account service
       account-service.base-url=${ACCOUNT_SERVICE_URL}

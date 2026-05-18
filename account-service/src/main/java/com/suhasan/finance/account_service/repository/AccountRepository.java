@@ -16,6 +16,7 @@
 package com.suhasan.finance.account_service.repository;
 
 import com.suhasan.finance.account_service.entity.Account;
+import com.suhasan.finance.account_service.entity.AccountStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -35,6 +36,14 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     Page<Account> findByAccountType(String accountType, Pageable pageable);
 
     Page<Account> findByOwnerIdAndAccountType(String ownerId, String accountType, Pageable pageable);
+
+    Page<Account> findByStatus(AccountStatus status, Pageable pageable);
+
+    Page<Account> findByOwnerIdAndStatus(String ownerId, AccountStatus status, Pageable pageable);
+
+    Page<Account> findByAccountTypeAndStatus(String accountType, AccountStatus status, Pageable pageable);
+
+    Page<Account> findByOwnerIdAndAccountTypeAndStatus(String ownerId, String accountType, AccountStatus status, Pageable pageable);
 
     Optional<Account> findByIdAndOwnerId(Long id, String ownerId);
 

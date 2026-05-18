@@ -6,6 +6,7 @@ import com.suhasan.finance.account_service.dto.BalanceOperationResponse;
 import com.suhasan.finance.account_service.entity.Account;
 import com.suhasan.finance.account_service.entity.AccountBalanceOperation;
 import com.suhasan.finance.account_service.entity.AccountBalanceOperationId;
+import com.suhasan.finance.account_service.entity.AccountStatus;
 import com.suhasan.finance.account_service.entity.BalanceOperationStatus;
 import com.suhasan.finance.account_service.mapper.AccountMapper;
 import com.suhasan.finance.account_service.repository.AccountBalanceOperationRepository;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -54,6 +56,9 @@ public class AccountService {
     }
 
     public Account create(Account account) {
+        if (account.getStatus() == null) {
+            account.setStatus(AccountStatus.ACTIVE);
+        }
         return creationTimer.record(() -> {
             Account saved = accountRepository.save(account);
             createdCounter.increment();
@@ -78,19 +83,39 @@ public class AccountService {
         return accountRepository.save(existing);
     }
 
+    public Account updateStatus(Long id, AccountStatus status, String reason, String actor) {
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("Status reason is required");
+        }
+        Account existing = findById(id);
+        existing.setStatus(status);
+        existing.setStatusReason(reason.trim());
+        existing.setStatusUpdatedAt(LocalDateTime.now());
+        existing.setStatusUpdatedBy(actor);
+        return accountRepository.save(existing);
+    }
+
     public void delete(Long id) {
         accountRepository.deleteById(id);
     }
 
     @Transactional(readOnly = true)
-    public Page<AccountResponse> listAccounts(String ownerId, String accountType, Pageable pageable) {
+    public Page<AccountResponse> listAccounts(String ownerId, String accountType, AccountStatus status, Pageable pageable) {
         Page<Account> page;
-        if (ownerId != null && accountType != null) {
+        if (ownerId != null && accountType != null && status != null) {
+            page = accountRepository.findByOwnerIdAndAccountTypeAndStatus(ownerId, accountType, status, pageable);
+        } else if (ownerId != null && accountType != null) {
             page = accountRepository.findByOwnerIdAndAccountType(ownerId, accountType, pageable);
+        } else if (ownerId != null && status != null) {
+            page = accountRepository.findByOwnerIdAndStatus(ownerId, status, pageable);
         } else if (ownerId != null) {
             page = accountRepository.findByOwnerId(ownerId, pageable);
+        } else if (accountType != null && status != null) {
+            page = accountRepository.findByAccountTypeAndStatus(accountType, status, pageable);
         } else if (accountType != null) {
             page = accountRepository.findByAccountType(accountType, pageable);
+        } else if (status != null) {
+            page = accountRepository.findByStatus(status, pageable);
         } else {
             page = accountRepository.findAll(pageable);
         }
@@ -124,6 +149,30 @@ public class AccountService {
         BigDecimal currentBalance = account.getBalance();
         BigDecimal newBalance = currentBalance.add(request.getDelta());
         boolean allowNegative = Boolean.TRUE.equals(request.getAllowNegative());
+
+        if (account.getStatus() == AccountStatus.FROZEN && request.getDelta().compareTo(BigDecimal.ZERO) < 0) {
+            AccountBalanceOperation rejectedOperation = AccountBalanceOperation.builder()
+                    .id(operationId)
+                    .transactionId(request.getTransactionId())
+                    .delta(request.getDelta())
+                    .reason(request.getReason())
+                    .allowNegative(allowNegative)
+                    .applied(false)
+                    .resultingBalance(currentBalance)
+                    .status(BalanceOperationStatus.REJECTED)
+                    .build();
+            balanceOperationRepository.save(rejectedOperation);
+
+            return BalanceOperationResponse.builder()
+                    .accountId(accountId)
+                    .operationId(request.getOperationId())
+                    .applied(false)
+                    .newBalance(currentBalance)
+                    .version(account.getVersion())
+                    .status(BalanceOperationStatus.REJECTED)
+                    .message("Account is frozen and cannot be debited")
+                    .build();
+        }
 
         if (!allowNegative && newBalance.compareTo(BigDecimal.ZERO) < 0) {
             AccountBalanceOperation rejectedOperation = AccountBalanceOperation.builder()

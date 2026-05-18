@@ -47,9 +47,13 @@ export function DashboardPage() {
                 <div key={account.id} className="rounded-md border border-line p-3">
                   <div className="flex items-center justify-between">
                     <p className="font-medium">#{account.id}</p>
-                    <StatusBadge value={account.accountType} />
+                    <div className="flex gap-2">
+                      <StatusBadge value={account.accountType} />
+                      <StatusBadge value={account.status ?? "ACTIVE"} />
+                    </div>
                   </div>
                   <p className="mt-2 text-2xl font-semibold">{money(account.balance)}</p>
+                  {account.status === "FROZEN" ? <p className="text-xs text-danger">{account.statusReason || "Debit hold active"}</p> : null}
                   <p className="text-xs text-muted">Opened {compactDate(account.createdAt)}</p>
                 </div>
               ))

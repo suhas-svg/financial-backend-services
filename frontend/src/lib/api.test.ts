@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
-import { addRiskCaseNote, claimRiskCase, createRiskCaseFromAlert, exportInvestigationTimelineCsv, getInvestigationSummary, getInvestigationTimeline, searchAuditEvents, searchRiskAlerts, searchRiskCases, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
+import { addRiskCaseNote, claimRiskCase, createRiskCaseFromAlert, exportInvestigationTimelineCsv, getInvestigationSummary, getInvestigationTimeline, searchAuditEvents, searchRiskAlerts, searchRiskCases, updateAccountStatus, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
 import { clearSession, saveSession } from "./session";
 
 function tokenFor(payload: object) {
@@ -65,6 +65,25 @@ describe("apiRequest", () => {
     await expect(apiRequest("account", "/api/auth/login", { method: "POST", body: { username: "u", password: "p" } })).resolves.toEqual({
       accessToken: "jwt-token"
     });
+  });
+
+  it("patches account status through the account proxy", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: 101, status: "FROZEN" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+
+    await updateAccountStatus(101, { status: "FROZEN", reason: "Fraud review" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/account-api/api/accounts/101/status",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ status: "FROZEN", reason: "Fraud review" })
+      })
+    );
   });
 
   it("maps audit search requests to the transaction proxy", async () => {

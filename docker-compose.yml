@@ -128,6 +128,7 @@ services:
       ACCOUNT_SERVICE_URL: http://account-service:8080
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+      MANAGEMENT_HEALTH_REDIS_ENABLED: true
       JAVA_OPTS: -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+UseStringDeduplication
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
       LOGGING_LEVEL_ROOT: INFO

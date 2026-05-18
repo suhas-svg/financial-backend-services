@@ -20,4 +20,5 @@ public class BalanceOperationResponse {
     private BigDecimal newBalance;
     private Long version;
     private BalanceOperationStatus status;
+    private String message;
 }
