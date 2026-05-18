@@ -1,7 +1,9 @@
 package com.suhasan.finance.account_service.controller;
 
 import com.suhasan.finance.account_service.dto.AccountResponse;
+import com.suhasan.finance.account_service.dto.AccountStatusUpdateRequest;
 import com.suhasan.finance.account_service.entity.Account;
+import com.suhasan.finance.account_service.entity.AccountStatus;
 import com.suhasan.finance.account_service.service.AccountService;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jakarta.validation.Valid;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -39,6 +42,7 @@ public class AccountController {
     public ResponseEntity<Page<AccountResponse>> listAccounts(
             @RequestParam(required = false) String ownerId,
             @RequestParam(required = false) String accountType,
+            @RequestParam(required = false) AccountStatus status,
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable,
             Authentication authentication
     ) {
@@ -46,7 +50,7 @@ public class AccountController {
         if (!isAdmin(authentication) && !isInternalService(authentication)) {
             effectiveOwnerId = authentication.getName();
         }
-        Page<AccountResponse> page = service.listAccounts(effectiveOwnerId, accountType, pageable);
+        Page<AccountResponse> page = service.listAccounts(effectiveOwnerId, accountType, status, pageable);
         return ResponseEntity.ok(page);
     }
 
@@ -80,6 +84,22 @@ public class AccountController {
             account.setOwnerId(existing.getOwnerId());
         }
         Account updated = service.update(id, account);
+        return ResponseEntity.ok(updated);
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<Account> updateStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody AccountStatusUpdateRequest request,
+            Authentication authentication
+    ) {
+        if (!isAdmin(authentication)) {
+            throw new AccessDeniedException("Only admins can update account status");
+        }
+        if (request.getReason() == null || request.getReason().isBlank()) {
+            throw new IllegalArgumentException("Status reason is required");
+        }
+        Account updated = service.updateStatus(id, request.getStatus(), request.getReason(), authentication.getName());
         return ResponseEntity.ok(updated);
     }
 

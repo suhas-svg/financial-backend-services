@@ -17,6 +17,7 @@ public class AccountDto {
     private BigDecimal balance;
     private String accountType;
     private Boolean active;
+    private String status;
     
     // Credit card specific fields
     private BigDecimal creditLimit;
@@ -24,4 +25,8 @@ public class AccountDto {
     
     // Savings account specific fields
     private BigDecimal interestRate;
+
+    public boolean allowsDebits() {
+        return status == null || status.isBlank() || "ACTIVE".equalsIgnoreCase(status);
+    }
 }

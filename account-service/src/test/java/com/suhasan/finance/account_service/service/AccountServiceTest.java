@@ -2,6 +2,9 @@ package com.suhasan.finance.account_service.service;
 
 import com.suhasan.finance.account_service.entity.Account;
 import com.suhasan.finance.account_service.entity.CheckingAccount;
+import com.suhasan.finance.account_service.entity.AccountStatus;
+import com.suhasan.finance.account_service.dto.BalanceOperationRequest;
+import com.suhasan.finance.account_service.dto.BalanceOperationResponse;
 import com.suhasan.finance.account_service.mapper.AccountMapper;
 import com.suhasan.finance.account_service.repository.AccountBalanceOperationRepository;
 import com.suhasan.finance.account_service.repository.AccountRepository;
@@ -75,6 +78,82 @@ public class AccountServiceTest {
         assertThat(result).isNotNull();
         assertThat(result.getId()).isEqualTo(1L);
         verify(accountRepository).save(testAccount);
+    }
+
+    @Test
+    @DisplayName("Should default new accounts to active status")
+    void shouldDefaultNewAccountsToActiveStatus() {
+        when(accountRepository.save(any(Account.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Account result = accountService.create(testAccount);
+
+        assertThat(result.getStatus()).isEqualTo(AccountStatus.ACTIVE);
+    }
+
+    @Test
+    @DisplayName("Should update account status with required reason and actor")
+    void shouldUpdateAccountStatusWithReasonAndActor() {
+        when(accountRepository.findById(1L)).thenReturn(Optional.of(testAccount));
+        when(accountRepository.save(any(Account.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Account result = accountService.updateStatus(1L, AccountStatus.FROZEN, "fraud review", "admin");
+
+        assertThat(result.getStatus()).isEqualTo(AccountStatus.FROZEN);
+        assertThat(result.getStatusReason()).isEqualTo("fraud review");
+        assertThat(result.getStatusUpdatedBy()).isEqualTo("admin");
+        assertThat(result.getStatusUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Should reject blank status reason")
+    void shouldRejectBlankStatusReason() {
+        assertThatThrownBy(() -> accountService.updateStatus(1L, AccountStatus.FROZEN, " ", "admin"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Status reason is required");
+    }
+
+    @Test
+    @DisplayName("Should reject debit balance operation for frozen account")
+    void shouldRejectDebitBalanceOperationForFrozenAccount() {
+        testAccount.setStatus(AccountStatus.FROZEN);
+        when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testAccount));
+
+        BalanceOperationRequest request = BalanceOperationRequest.builder()
+                .operationId("op-debit")
+                .transactionId("tx-1")
+                .delta(BigDecimal.valueOf(-25))
+                .reason("WITHDRAWAL")
+                .allowNegative(false)
+                .build();
+
+        BalanceOperationResponse response = accountService.applyBalanceOperation(1L, request);
+
+        assertThat(response.isApplied()).isFalse();
+        assertThat(response.getStatus()).isEqualTo(com.suhasan.finance.account_service.entity.BalanceOperationStatus.REJECTED);
+        assertThat(response.getMessage()).isEqualTo("Account is frozen and cannot be debited");
+        assertThat(response.getNewBalance()).isEqualByComparingTo("1000.00");
+        verify(accountRepository, never()).save(any(Account.class));
+    }
+
+    @Test
+    @DisplayName("Should allow credit balance operation for frozen account")
+    void shouldAllowCreditBalanceOperationForFrozenAccount() {
+        testAccount.setStatus(AccountStatus.FROZEN);
+        when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testAccount));
+        when(accountRepository.save(any(Account.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BalanceOperationRequest request = BalanceOperationRequest.builder()
+                .operationId("op-credit")
+                .transactionId("tx-2")
+                .delta(BigDecimal.valueOf(25))
+                .reason("DEPOSIT")
+                .allowNegative(true)
+                .build();
+
+        BalanceOperationResponse response = accountService.applyBalanceOperation(1L, request);
+
+        assertThat(response.isApplied()).isTrue();
+        assertThat(response.getNewBalance()).isEqualByComparingTo("1025.00");
     }
 
     @Test

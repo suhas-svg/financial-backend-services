@@ -118,6 +118,16 @@ export function AccountsPage() {
               <dd><StatusBadge value={selected.accountType} /></dd>
             </div>
             <div className="flex justify-between gap-3">
+              <dt className="text-muted">Status</dt>
+              <dd><StatusBadge value={selected.status ?? "ACTIVE"} /></dd>
+            </div>
+            {selected.status === "FROZEN" ? (
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-danger">
+                <p className="font-medium">Debit hold active</p>
+                <p className="text-xs">{selected.statusReason || "Withdrawals and outgoing transfers are disabled for this account."}</p>
+              </div>
+            ) : null}
+            <div className="flex justify-between gap-3">
               <dt className="text-muted">Balance</dt>
               <dd>{money(selected.balance)}</dd>
             </div>
@@ -150,6 +160,7 @@ export function AccountsPage() {
                   <th className="py-2">Account</th>
                   <th>Owner</th>
                   <th>Type</th>
+                  <th>Status</th>
                   <th>Balance</th>
                   <th>Opened</th>
                   <th className="text-right">Action</th>
@@ -162,6 +173,9 @@ export function AccountsPage() {
                     <td>{account.ownerId}</td>
                     <td>
                       <StatusBadge value={account.accountType} />
+                    </td>
+                    <td>
+                      <StatusBadge value={account.status ?? "ACTIVE"} />
                     </td>
                     <td>{money(account.balance)}</td>
                     <td>{compactDate(account.createdAt)}</td>

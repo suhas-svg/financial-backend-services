@@ -26,7 +26,9 @@ financial-backend-services/
 - View dashboard totals, account cards, recent transactions, limits, and personal stats.
 - Create, edit, delete, and filter accounts.
 - Create `CHECKING`, `SAVINGS`, and `CREDIT` accounts with type-specific validation.
+- See frozen accounts with hold warnings and status reasons.
 - Deposit, withdraw, and transfer money.
+- Keep frozen accounts selectable for credits, while debit-source controls are disabled.
 - Generate an `Idempotency-Key` per money-movement submit.
 - Search and filter transaction history.
 - View transaction details and user transaction stats.
@@ -36,6 +38,7 @@ financial-backend-services/
 - Hide admin navigation for normal users.
 - Guard admin routes using `ROLE_ADMIN` from JWT claims.
 - Search accounts across users with owner and account type filters.
+- Filter accounts by lifecycle status and freeze or unfreeze accounts with required reasons.
 - Use existing account create/update/delete flows for admin oversight.
 - Monitor account service health, metrics, deployment information, and manual health checks.
 - Monitor transaction service health, transaction/system stats, alert status, and available metrics.
@@ -54,10 +57,14 @@ financial-backend-services/
   - Authentication and JWT issuance.
   - User registration.
   - Account CRUD.
+  - Account lifecycle status with `ACTIVE` and `FROZEN` states.
+  - Admin-only status updates with reason and updated-by metadata.
+  - Frozen-account debit rejection while preserving deposits and incoming credits.
   - Account type validation for checking, savings, and credit accounts.
   - Health, metrics, and deployment endpoints.
 - Transaction service:
   - Deposit, withdrawal, and transfer endpoints.
+  - Frozen-account debit enforcement before withdrawals and outgoing transfer debits.
   - Transaction history and search.
   - Transaction stats and monitoring endpoints.
   - Idempotency and reversal workflows.
@@ -153,6 +160,8 @@ security.jwt.expiration-in-ms=3600000
 
 For service-to-service calls, keep the same JWT signing configuration across both services.
 
+Redis is optional for manual local JVM runs of `transaction-service`. The default local configuration disables Redis health so core transaction flows can run with only PostgreSQL and account-service. Compose, E2E, and Helm deployment configs explicitly enable Redis health because those environments provision Redis.
+
 For production frontend deployment, use one of these patterns:
 
 - Serve the frontend behind a reverse proxy and route `/account-api` and `/transaction-api` to the Spring services.
@@ -176,14 +185,26 @@ GET    /api/accounts
 POST   /api/accounts
 GET    /api/accounts/{id}
 PUT    /api/accounts/{id}
+PATCH  /api/accounts/{id}/status
 DELETE /api/accounts/{id}
 ```
 
 Admin account oversight uses:
 
 ```http
-GET /api/accounts?ownerId=&accountType=&page=&size=
+GET /api/accounts?ownerId=&accountType=&status=&page=&size=
 ```
+
+`PATCH /api/accounts/{id}/status` requires `ROLE_ADMIN` and accepts:
+
+```json
+{
+  "status": "FROZEN | ACTIVE",
+  "reason": "required status reason"
+}
+```
+
+`FROZEN` blocks debits only: withdrawals and outgoing transfer debits are rejected. Deposits and incoming transfer credits remain allowed.
 
 ### Transactions
 
@@ -343,6 +364,7 @@ The frontend test suite covers:
 - Form schemas for auth, accounts, money movement, and reversals.
 - Login/register success and failure states.
 - Account type-specific fields.
+- Account status badges, frozen warnings, admin status filters, and freeze/unfreeze reason validation.
 - Transaction table filters.
 - Admin navigation visibility.
 - Admin audit log summary, filters, event table, detail panel, and API proxy mapping.
@@ -365,6 +387,8 @@ cd transaction-service
 ```
 
 The transaction-service test suite also covers the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup. Risk alert tests cover admin-only access, filters, summary counts, status updates with reviewer metadata, rule generation, dedupe behavior, and non-risky transaction handling. Risk case tests cover admin-only access, filters, summary counts, create-from-alert, duplicate open-case handling, claim, status updates, linked alert details, and append-only notes. Investigation tests cover admin-only access, search context expansion, mixed-source timeline sorting, summary counts, CSV export headers/content escaping, and empty search results.
+
+Account hold/freeze tests cover default `ACTIVE` accounts, admin-only freeze/unfreeze with required reasons, frozen debit rejection, credit allowance, transaction-service prechecks, backend rejection messages, frontend status rendering, and move-money debit-source disabling.
 
 ## Demo Evidence
 

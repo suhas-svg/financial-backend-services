@@ -69,6 +69,7 @@ public class TransactionServiceImpl implements TransactionService {
             throw new IllegalArgumentException("From account not found");
         }
         ensureAccountOwnedByUser(fromAccount, userId);
+        ensureAccountAllowsDebit(fromAccount, request.getFromAccountId(), userId);
 
         if (!validateTransactionLimits(
                 request.getFromAccountId(), fromAccount.getAccountType(),
@@ -130,7 +131,7 @@ public class TransactionServiceImpl implements TransactionService {
                 transaction.setStatus(TransactionStatus.FAILED);
                 transaction.setProcessedAt(LocalDateTime.now());
                 transactionRepository.save(transaction);
-                throw new IllegalArgumentException("Insufficient funds");
+                throw new IllegalArgumentException(firstNonBlank(debitResult.getMessage(), "Insufficient funds"));
             }
 
             ResilientAccountServiceClient.BalanceOperationResponse creditResult = accountServiceClient
@@ -275,6 +276,7 @@ public class TransactionServiceImpl implements TransactionService {
             throw new IllegalArgumentException("Account not found");
         }
         ensureAccountOwnedByUser(account, userId);
+        ensureAccountAllowsDebit(account, accountId, userId);
 
         if (!validateTransactionLimits(accountId, account.getAccountType(), TransactionType.WITHDRAWAL, amount)) {
             throw new IllegalArgumentException("Transaction exceeds limits");
@@ -321,7 +323,7 @@ public class TransactionServiceImpl implements TransactionService {
                 transaction.setStatus(TransactionStatus.FAILED);
                 transaction.setProcessedAt(LocalDateTime.now());
                 transactionRepository.save(transaction);
-                throw new IllegalArgumentException("Insufficient funds");
+                throw new IllegalArgumentException(firstNonBlank(response.getMessage(), "Insufficient funds"));
             }
             transaction.setFromAccountBalanceAfter(response.getNewBalance());
             transaction.setStatus(TransactionStatus.COMPLETED);
@@ -869,6 +871,20 @@ public class TransactionServiceImpl implements TransactionService {
         if (account.getOwnerId() == null || !account.getOwnerId().equals(userId)) {
             throw new AccessDeniedException("User is not authorized for account " + account.getId());
         }
+    }
+
+    private void ensureAccountAllowsDebit(AccountDto account, String accountId, String userId) {
+        if (account.allowsDebits()) {
+            return;
+        }
+        String message = "Account is frozen and cannot be debited";
+        auditService.logSecurityEvent("ACCOUNT_FROZEN_DEBIT_BLOCKED", userId,
+                message + ": " + accountId, null);
+        throw new IllegalArgumentException(message);
+    }
+
+    private String firstNonBlank(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     private void assertCanAccessAccountScope(String accountId) {

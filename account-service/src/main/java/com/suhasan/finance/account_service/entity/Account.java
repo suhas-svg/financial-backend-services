@@ -5,6 +5,7 @@ import jakarta.validation.constraints.*;
 import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 
@@ -50,7 +51,26 @@ public abstract class Account {
     @Column(nullable = false, updatable = false)
     private LocalDate createdAt = LocalDate.now();
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private AccountStatus status = AccountStatus.ACTIVE;
+
+    @Column(length = 500)
+    private String statusReason;
+
+    private LocalDateTime statusUpdatedAt;
+
+    @Column(length = 100)
+    private String statusUpdatedBy;
+
      /** map the discriminator column so you can query by it */
     @Column(name = "account_type", insertable = false, updatable = false)
     private String accountType;
+
+    @PrePersist
+    void ensureDefaultStatus() {
+        if (status == null) {
+            status = AccountStatus.ACTIVE;
+        }
+    }
 }

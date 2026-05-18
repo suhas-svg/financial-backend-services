@@ -177,6 +177,7 @@ services:
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_DATA_REDIS_PASSWORD: e2e_redis_password
       SPRING_DATA_REDIS_TIMEOUT: 2000ms
+      MANAGEMENT_HEALTH_REDIS_ENABLED: true
       
       # Server Configuration
       SERVER_PORT: 8080

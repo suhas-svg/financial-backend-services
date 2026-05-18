@@ -304,5 +304,11 @@ public class ResilientAccountServiceClient {
         private BigDecimal newBalance;
         private Long version;
         private String status;
+        private String message;
+
+        public BalanceOperationResponse(Long accountId, String operationId, boolean applied,
+                                        BigDecimal newBalance, Long version, String status) {
+            this(accountId, operationId, applied, newBalance, version, status, null);
+        }
     }
 }

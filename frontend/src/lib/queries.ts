@@ -1,4 +1,4 @@
-import type { Account, AuditLogEntry, AuditSummary, InvestigationSummary, InvestigationTimelineItem, Limits, Page, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, Transaction, TransactionStats } from "../types";
+import type { Account, AccountStatus, AuditLogEntry, AuditSummary, InvestigationSummary, InvestigationTimelineItem, Limits, Page, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, Transaction, TransactionStats } from "../types";
 import { apiRequest, toQuery } from "./api";
 import type { AccountValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, TransferValues } from "./schemas";
 import { getSession } from "./session";
@@ -11,7 +11,7 @@ export function register(values: RegisterValues) {
   return apiRequest<{ username: string; roles: string[] }>("account", "/api/auth/register", { method: "POST", body: values });
 }
 
-export function listAccounts(params: { ownerId?: string; accountType?: string; page?: number; size?: number } = {}) {
+export function listAccounts(params: { ownerId?: string; accountType?: string; status?: AccountStatus | ""; page?: number; size?: number } = {}) {
   return apiRequest<Page<Account>>("account", `/api/accounts${toQuery({ size: 20, ...params })}`);
 }
 
@@ -38,6 +38,10 @@ export function updateAccount(id: number, values: AccountValues) {
 
 export function deleteAccount(id: number) {
   return apiRequest<void>("account", `/api/accounts/${id}`, { method: "DELETE" });
+}
+
+export function updateAccountStatus(id: number, values: { status: AccountStatus; reason: string }) {
+  return apiRequest<Account>("account", `/api/accounts/${id}/status`, { method: "PATCH", body: values });
 }
 
 export function getTransactions(page = 0) {

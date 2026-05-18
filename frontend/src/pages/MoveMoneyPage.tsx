@@ -7,14 +7,14 @@ import { createIdempotencyKey } from "../lib/idempotency";
 import { moneyMovementSchema, transferSchema, type MoneyMovementValues, type TransferValues } from "../lib/schemas";
 import { Button, ErrorNotice, Field, Input, Panel, Select } from "../components/ui";
 
-function AccountSelect({ field }: { field: UseFormRegisterReturn }) {
+function AccountSelect({ field, debitSource = false }: { field: UseFormRegisterReturn; debitSource?: boolean }) {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => listAccounts() });
   return (
     <Select {...field}>
       <option value="">Select account</option>
       {accounts.data?.content.map((account) => (
-        <option key={account.id} value={String(account.id)}>
-          #{account.id} - {account.accountType}
+        <option key={account.id} value={String(account.id)} disabled={debitSource && account.status === "FROZEN"}>
+          #{account.id} - {account.accountType}{account.status === "FROZEN" ? " - FROZEN" : ""}
         </option>
       ))}
     </Select>
@@ -50,8 +50,8 @@ export function MoveMoneyPage() {
       <Panel title="Withdraw">
         <form className="grid gap-4" onSubmit={withdrawForm.handleSubmit((values) => withdrawMutation.mutate(values))}>
           <ErrorNotice message={withdrawMutation.error instanceof Error ? withdrawMutation.error.message : undefined} />
-          <Field label="Account" error={withdrawForm.formState.errors.accountId?.message}>
-            <AccountSelect field={withdrawForm.register("accountId")} />
+          <Field label="Withdraw account" error={withdrawForm.formState.errors.accountId?.message}>
+            <AccountSelect field={withdrawForm.register("accountId")} debitSource />
           </Field>
           <MoneyFields form={withdrawForm} />
           <Button type="submit" disabled={withdrawMutation.isPending}>Withdraw</Button>
@@ -61,7 +61,7 @@ export function MoveMoneyPage() {
         <form className="grid gap-4" onSubmit={transferForm.handleSubmit((values) => transferMutation.mutate(values))}>
           <ErrorNotice message={transferMutation.error instanceof Error ? transferMutation.error.message : undefined} />
           <Field label="From account" error={transferForm.formState.errors.fromAccountId?.message}>
-            <AccountSelect field={transferForm.register("fromAccountId")} />
+            <AccountSelect field={transferForm.register("fromAccountId")} debitSource />
           </Field>
           <Field label="To account" error={transferForm.formState.errors.toAccountId?.message}>
             <AccountSelect field={transferForm.register("toAccountId")} />

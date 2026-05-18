@@ -192,6 +192,45 @@ class TransactionServiceImplTest {
         }
 
         @Test
+        void processTransfer_FrozenSourceAccountRejectedBeforeDebit() {
+                fromAccount.setStatus("FROZEN");
+                when(accountServiceClient.getAccount("acc1")).thenReturn(fromAccount);
+
+                IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                                () -> transactionService.processTransfer(transferRequest, userId, null));
+
+                assertEquals("Account is frozen and cannot be debited", exception.getMessage());
+                verify(auditService).logSecurityEvent(eq("ACCOUNT_FROZEN_DEBIT_BLOCKED"), eq(userId),
+                                contains("acc1"), isNull());
+                verify(accountServiceClient, never()).applyBalanceOperation(anyString(), anyString(), any(),
+                                anyString(), anyString(), anyBoolean());
+        }
+
+        @Test
+        void processTransfer_FrozenDestinationAccountAllowedForCredit() {
+                toAccount.setStatus("FROZEN");
+                when(accountServiceClient.getAccount("acc1")).thenReturn(fromAccount);
+                when(accountServiceClient.getAccount("acc2")).thenReturn(toAccount);
+                when(transactionRepository.save(any(Transaction.class))).thenReturn(transaction);
+                when(accountServiceClient.applyBalanceOperation(eq("acc1"), anyString(), eq(BigDecimal.valueOf(-100)),
+                                anyString(), eq("TRANSFER_DEBIT"), eq(false)))
+                                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(1L, "op-debit",
+                                                true,
+                                                BigDecimal.valueOf(900), 1L, "APPLIED", null));
+                when(accountServiceClient.applyBalanceOperation(eq("acc2"), anyString(), eq(BigDecimal.valueOf(100)),
+                                anyString(), eq("TRANSFER_CREDIT"), eq(true)))
+                                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(2L, "op-credit",
+                                                true,
+                                                BigDecimal.valueOf(600), 1L, "APPLIED", null));
+
+                TransactionResponse result = transactionService.processTransfer(transferRequest, userId, null);
+
+                assertNotNull(result);
+                verify(accountServiceClient).applyBalanceOperation(eq("acc2"), anyString(), eq(BigDecimal.valueOf(100)),
+                                anyString(), eq("TRANSFER_CREDIT"), eq(true));
+        }
+
+        @Test
         void processTransfer_TransactionLimitExceeded() {
                 // Arrange
                 transferRequest.setAmount(BigDecimal.valueOf(15000)); // Exceeds basic limit
@@ -252,6 +291,28 @@ class TransactionServiceImplTest {
         }
 
         @Test
+        void processDeposit_FrozenAccountAllowedForCredit() {
+                String accountId = "acc1";
+                BigDecimal amount = BigDecimal.valueOf(200);
+                fromAccount.setStatus("FROZEN");
+
+                when(accountServiceClient.getAccount(accountId)).thenReturn(fromAccount);
+                when(transactionRepository.save(any(Transaction.class))).thenReturn(transaction);
+                when(accountServiceClient.applyBalanceOperation(eq(accountId), anyString(), eq(amount), anyString(),
+                                eq("DEPOSIT"), eq(true)))
+                                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(1L, "op-deposit",
+                                                true,
+                                                BigDecimal.valueOf(1200), 1L, "APPLIED", null));
+
+                TransactionResponse result = transactionService.processDeposit(accountId, amount, "Test deposit",
+                                userId, null);
+
+                assertNotNull(result);
+                verify(accountServiceClient).applyBalanceOperation(eq(accountId), anyString(), eq(amount), anyString(),
+                                eq("DEPOSIT"), eq(true));
+        }
+
+        @Test
         void processWithdrawal_Success() {
                 // Arrange
                 String accountId = "acc1";
@@ -295,6 +356,24 @@ class TransactionServiceImplTest {
                                                 null));
 
                 assertEquals("Insufficient funds", exception.getMessage());
+        }
+
+        @Test
+        void processWithdrawal_FrozenAccountRejectedBeforeDebit() {
+                String accountId = "acc1";
+                BigDecimal amount = BigDecimal.valueOf(200);
+                fromAccount.setStatus("FROZEN");
+                when(accountServiceClient.getAccount(accountId)).thenReturn(fromAccount);
+
+                IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                                () -> transactionService.processWithdrawal(accountId, amount, "Test withdrawal",
+                                                userId, null));
+
+                assertEquals("Account is frozen and cannot be debited", exception.getMessage());
+                verify(auditService).logSecurityEvent(eq("ACCOUNT_FROZEN_DEBIT_BLOCKED"), eq(userId),
+                                contains(accountId), isNull());
+                verify(accountServiceClient, never()).applyBalanceOperation(anyString(), anyString(), any(),
+                                anyString(), anyString(), anyBoolean());
         }
 
         @Test
