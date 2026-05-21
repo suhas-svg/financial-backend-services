@@ -3,13 +3,18 @@ package com.suhasan.finance.account_service.service;
 import com.suhasan.finance.account_service.dto.AccountResponse;
 import com.suhasan.finance.account_service.dto.BalanceOperationRequest;
 import com.suhasan.finance.account_service.dto.BalanceOperationResponse;
+import com.suhasan.finance.account_service.dto.DebitHoldRequest;
+import com.suhasan.finance.account_service.dto.DebitHoldResponse;
 import com.suhasan.finance.account_service.entity.Account;
 import com.suhasan.finance.account_service.entity.AccountBalanceOperation;
 import com.suhasan.finance.account_service.entity.AccountBalanceOperationId;
+import com.suhasan.finance.account_service.entity.AccountDebitHold;
 import com.suhasan.finance.account_service.entity.AccountStatus;
 import com.suhasan.finance.account_service.entity.BalanceOperationStatus;
+import com.suhasan.finance.account_service.entity.DebitHoldStatus;
 import com.suhasan.finance.account_service.mapper.AccountMapper;
 import com.suhasan.finance.account_service.repository.AccountBalanceOperationRepository;
+import com.suhasan.finance.account_service.repository.AccountDebitHoldRepository;
 import com.suhasan.finance.account_service.repository.AccountRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
@@ -30,6 +35,7 @@ public class AccountService {
 
     private final AccountRepository accountRepository;
     private final AccountBalanceOperationRepository balanceOperationRepository;
+    private final AccountDebitHoldRepository debitHoldRepository;
     private final AccountMapper accountMapper;
     private final MeterRegistry meterRegistry;
 
@@ -38,10 +44,12 @@ public class AccountService {
 
     public AccountService(AccountRepository accountRepository,
                           AccountBalanceOperationRepository balanceOperationRepository,
+                          AccountDebitHoldRepository debitHoldRepository,
                           AccountMapper accountMapper,
                           MeterRegistry meterRegistry) {
         this.accountRepository = accountRepository;
         this.balanceOperationRepository = balanceOperationRepository;
+        this.debitHoldRepository = debitHoldRepository;
         this.accountMapper = accountMapper;
         this.meterRegistry = meterRegistry;
         initMetrics();
@@ -59,6 +67,7 @@ public class AccountService {
         if (account.getStatus() == null) {
             account.setStatus(AccountStatus.ACTIVE);
         }
+        normalizeBalances(account);
         return creationTimer.record(() -> {
             Account saved = accountRepository.save(account);
             createdCounter.increment();
@@ -80,6 +89,8 @@ public class AccountService {
     public Account update(Long id, Account updated) {
         Account existing = findById(id);
         existing.setBalance(updated.getBalance());
+        existing.setLedgerBalance(updated.getBalance());
+        existing.setAvailableBalance(updated.getBalance());
         return accountRepository.save(existing);
     }
 
@@ -125,6 +136,8 @@ public class AccountService {
     public void updateBalance(Long id, BigDecimal newBalance) {
         Account existing = findById(id);
         existing.setBalance(newBalance);
+        existing.setLedgerBalance(newBalance);
+        existing.setAvailableBalance(newBalance);
         accountRepository.save(existing);
     }
 
@@ -133,6 +146,7 @@ public class AccountService {
         AccountBalanceOperation existingOperation = balanceOperationRepository.findById(operationId).orElse(null);
         if (existingOperation != null) {
             Account account = findById(accountId);
+            normalizeBalances(account);
             return BalanceOperationResponse.builder()
                     .accountId(accountId)
                     .operationId(request.getOperationId())
@@ -146,8 +160,10 @@ public class AccountService {
         Account account = accountRepository.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new IllegalArgumentException("Account not found: " + accountId));
 
-        BigDecimal currentBalance = account.getBalance();
+        normalizeBalances(account);
+        BigDecimal currentBalance = account.getLedgerBalance();
         BigDecimal newBalance = currentBalance.add(request.getDelta());
+        BigDecimal newAvailableBalance = account.getAvailableBalance().add(request.getDelta());
         boolean allowNegative = Boolean.TRUE.equals(request.getAllowNegative());
 
         if (account.getStatus() == AccountStatus.FROZEN && request.getDelta().compareTo(BigDecimal.ZERO) < 0) {
@@ -174,7 +190,7 @@ public class AccountService {
                     .build();
         }
 
-        if (!allowNegative && newBalance.compareTo(BigDecimal.ZERO) < 0) {
+        if (!allowNegative && newAvailableBalance.compareTo(BigDecimal.ZERO) < 0) {
             AccountBalanceOperation rejectedOperation = AccountBalanceOperation.builder()
                     .id(operationId)
                     .transactionId(request.getTransactionId())
@@ -197,6 +213,8 @@ public class AccountService {
                     .build();
         }
 
+        account.setLedgerBalance(newBalance);
+        account.setAvailableBalance(newAvailableBalance);
         account.setBalance(newBalance);
         Account savedAccount = accountRepository.save(account);
         AccountBalanceOperation appliedOperation = AccountBalanceOperation.builder()
@@ -219,5 +237,142 @@ public class AccountService {
                 .version(savedAccount.getVersion())
                 .status(BalanceOperationStatus.APPLIED)
                 .build();
+    }
+
+    public DebitHoldResponse placeDebitHold(Long accountId, DebitHoldRequest request) {
+        AccountDebitHold existing = debitHoldRepository.findById(request.getHoldId()).orElse(null);
+        if (existing != null) {
+            validateReplayMatchesRequest(accountId, request, existing);
+            Account account = findById(accountId);
+            normalizeBalances(account);
+            return holdResponse(existing, account, existing.getStatus() == DebitHoldStatus.PLACED);
+        }
+
+        Account account = accountRepository.findByIdForUpdate(accountId)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found: " + accountId));
+        normalizeBalances(account);
+
+        if (account.getStatus() == AccountStatus.FROZEN) {
+            return rejectedHoldResponse(request.getHoldId(), account, "Account is frozen and cannot be debited");
+        }
+        if (account.getAvailableBalance().compareTo(request.getAmount()) < 0) {
+            return rejectedHoldResponse(request.getHoldId(), account, "Insufficient available balance");
+        }
+
+        account.setAvailableBalance(account.getAvailableBalance().subtract(request.getAmount()));
+        Account savedAccount = accountRepository.save(account);
+        AccountDebitHold hold = AccountDebitHold.builder()
+                .holdId(request.getHoldId())
+                .accountId(accountId)
+                .transactionId(request.getTransactionId())
+                .amount(request.getAmount())
+                .reason(request.getReason())
+                .status(DebitHoldStatus.PLACED)
+                .build();
+        debitHoldRepository.save(hold);
+        return holdResponse(hold, savedAccount, true);
+    }
+
+    public DebitHoldResponse captureDebitHold(Long accountId, String holdId, String transactionId, String reason) {
+        Account account = accountRepository.findByIdForUpdate(accountId)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found: " + accountId));
+        normalizeBalances(account);
+        AccountDebitHold hold = debitHoldRepository.findById(holdId)
+                .orElseThrow(() -> new IllegalArgumentException("Debit hold not found: " + holdId));
+        validateHoldAccount(accountId, hold);
+        if (hold.getStatus() == DebitHoldStatus.CAPTURED) {
+            return holdResponse(hold, account, true);
+        }
+        if (hold.getStatus() != DebitHoldStatus.PLACED) {
+            return holdResponse(hold, account, false, "Debit hold is not active");
+        }
+
+        account.setLedgerBalance(account.getLedgerBalance().subtract(hold.getAmount()));
+        account.setBalance(account.getLedgerBalance());
+        Account savedAccount = accountRepository.save(account);
+        hold.setStatus(DebitHoldStatus.CAPTURED);
+        hold.setCapturedAt(LocalDateTime.now());
+        hold.setCapturedByTransactionId(transactionId);
+        hold.setReason(reason != null ? reason : hold.getReason());
+        debitHoldRepository.save(hold);
+        return holdResponse(hold, savedAccount, true);
+    }
+
+    public DebitHoldResponse releaseDebitHold(Long accountId, String holdId, String transactionId, String reason) {
+        Account account = accountRepository.findByIdForUpdate(accountId)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found: " + accountId));
+        normalizeBalances(account);
+        AccountDebitHold hold = debitHoldRepository.findById(holdId)
+                .orElseThrow(() -> new IllegalArgumentException("Debit hold not found: " + holdId));
+        validateHoldAccount(accountId, hold);
+        if (hold.getStatus() == DebitHoldStatus.RELEASED) {
+            return holdResponse(hold, account, true);
+        }
+        if (hold.getStatus() != DebitHoldStatus.PLACED) {
+            return holdResponse(hold, account, false, "Debit hold is not active");
+        }
+
+        account.setAvailableBalance(account.getAvailableBalance().add(hold.getAmount()));
+        Account savedAccount = accountRepository.save(account);
+        hold.setStatus(DebitHoldStatus.RELEASED);
+        hold.setReleasedAt(LocalDateTime.now());
+        hold.setReleasedByTransactionId(transactionId);
+        hold.setReleaseReason(reason);
+        debitHoldRepository.save(hold);
+        return holdResponse(hold, savedAccount, true);
+    }
+
+    private void validateHoldAccount(Long accountId, AccountDebitHold hold) {
+        if (!accountId.equals(hold.getAccountId())) {
+            throw new IllegalArgumentException("Debit hold does not belong to account: " + accountId);
+        }
+    }
+
+    private DebitHoldResponse rejectedHoldResponse(String holdId, Account account, String message) {
+        return DebitHoldResponse.builder()
+                .holdId(holdId)
+                .accountId(account.getId())
+                .applied(false)
+                .ledgerBalance(account.getLedgerBalance())
+                .availableBalance(account.getAvailableBalance())
+                .version(account.getVersion())
+                .status(null)
+                .message(message)
+                .build();
+    }
+
+    private DebitHoldResponse holdResponse(AccountDebitHold hold, Account account, boolean applied) {
+        return holdResponse(hold, account, applied, null);
+    }
+
+    private DebitHoldResponse holdResponse(AccountDebitHold hold, Account account, boolean applied, String message) {
+        return DebitHoldResponse.builder()
+                .holdId(hold.getHoldId())
+                .accountId(account.getId())
+                .applied(applied)
+                .ledgerBalance(account.getLedgerBalance())
+                .availableBalance(account.getAvailableBalance())
+                .version(account.getVersion())
+                .status(hold.getStatus())
+                .message(message)
+                .build();
+    }
+
+    private void normalizeBalances(Account account) {
+        if (account.getLedgerBalance() == null) {
+            account.setLedgerBalance(account.getBalance());
+        }
+        if (account.getAvailableBalance() == null) {
+            account.setAvailableBalance(account.getLedgerBalance());
+        }
+        account.setBalance(account.getLedgerBalance());
+    }
+
+    private void validateReplayMatchesRequest(Long accountId, DebitHoldRequest request, AccountDebitHold existing) {
+        if (!accountId.equals(existing.getAccountId())
+                || !request.getTransactionId().equals(existing.getTransactionId())
+                || request.getAmount().compareTo(existing.getAmount()) != 0) {
+            throw new IllegalArgumentException("Debit hold replay does not match original request: " + request.getHoldId());
+        }
     }
 }

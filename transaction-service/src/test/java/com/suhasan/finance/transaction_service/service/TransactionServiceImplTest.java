@@ -80,6 +80,8 @@ class TransactionServiceImplTest {
                 fromAccount = AccountDto.builder()
                                 .id(1L)
                                 .balance(BigDecimal.valueOf(1000))
+                                .ledgerBalance(BigDecimal.valueOf(1000))
+                                .availableBalance(BigDecimal.valueOf(1000))
                                 .accountType("CHECKING")
                                 .availableCredit(BigDecimal.ZERO)
                                 .build();
@@ -87,6 +89,8 @@ class TransactionServiceImplTest {
                 toAccount = AccountDto.builder()
                                 .id(2L)
                                 .balance(BigDecimal.valueOf(500))
+                                .ledgerBalance(BigDecimal.valueOf(500))
+                                .availableBalance(BigDecimal.valueOf(500))
                                 .accountType("SAVINGS")
                                 .availableCredit(BigDecimal.ZERO)
                                 .build();
@@ -115,11 +119,16 @@ class TransactionServiceImplTest {
                 when(accountServiceClient.getAccount("acc1")).thenReturn(fromAccount);
                 when(accountServiceClient.getAccount("acc2")).thenReturn(toAccount);
                 when(transactionRepository.save(any(Transaction.class))).thenReturn(transaction);
-                when(accountServiceClient.applyBalanceOperation(eq("acc1"), anyString(), eq(BigDecimal.valueOf(-100)),
-                                anyString(), eq("TRANSFER_DEBIT"), eq(false)))
-                                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(1L, "op-debit",
-                                                true,
-                                                BigDecimal.valueOf(900), 1L, "APPLIED"));
+                when(accountServiceClient.placeDebitHold(eq("acc1"), anyString(), eq(BigDecimal.valueOf(100)),
+                                anyString(), eq("TRANSFER_HOLD")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-transfer",
+                                                1L, true, BigDecimal.valueOf(1000), BigDecimal.valueOf(900),
+                                                "PLACED", null));
+                when(accountServiceClient.captureDebitHold(eq("acc1"), anyString(), anyString(),
+                                eq("TRANSFER_CAPTURE")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-transfer",
+                                                1L, true, BigDecimal.valueOf(900), BigDecimal.valueOf(900),
+                                                "CAPTURED", null));
                 when(accountServiceClient.applyBalanceOperation(eq("acc2"), anyString(), eq(BigDecimal.valueOf(100)),
                                 anyString(), eq("TRANSFER_CREDIT"), eq(true)))
                                 .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(2L, "op-credit",
@@ -136,9 +145,11 @@ class TransactionServiceImplTest {
                 assertEquals(TransactionStatus.COMPLETED, result.getStatus());
 
                 verify(accountServiceClient).getAccount("acc1");
-                verify(accountServiceClient).applyBalanceOperation(eq("acc1"), anyString(),
-                                eq(BigDecimal.valueOf(-100)),
-                                anyString(), eq("TRANSFER_DEBIT"), eq(false));
+                verify(accountServiceClient).placeDebitHold(eq("acc1"), anyString(),
+                                eq(BigDecimal.valueOf(100)),
+                                anyString(), eq("TRANSFER_HOLD"));
+                verify(accountServiceClient).captureDebitHold(eq("acc1"), anyString(),
+                                anyString(), eq("TRANSFER_CAPTURE"));
                 verify(accountServiceClient).applyBalanceOperation(eq("acc2"), anyString(), eq(BigDecimal.valueOf(100)),
                                 anyString(), eq("TRANSFER_CREDIT"), eq(true));
                 verify(transactionRepository, atLeast(2)).save(any(Transaction.class));
@@ -161,26 +172,66 @@ class TransactionServiceImplTest {
 
         @Test
         void processTransfer_ToAccountNotFound() {
-                // Arrange
                 when(accountServiceClient.getAccount("acc1")).thenReturn(fromAccount);
-                when(accountServiceClient.applyBalanceOperation(eq("acc1"), anyString(), eq(BigDecimal.valueOf(-100)),
-                                anyString(), eq("TRANSFER_DEBIT"), eq(false)))
-                                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(1L, "op-debit",
-                                                true,
-                                                BigDecimal.valueOf(900), 1L, "APPLIED"));
+                when(transactionRepository.save(any(Transaction.class))).thenReturn(transaction);
+                when(accountServiceClient.placeDebitHold(eq("acc1"), anyString(), eq(BigDecimal.valueOf(100)),
+                                anyString(), eq("TRANSFER_HOLD")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-transfer",
+                                                1L, true, BigDecimal.valueOf(1000), BigDecimal.valueOf(900),
+                                                "PLACED", null));
+                when(accountServiceClient.captureDebitHold(eq("acc1"), anyString(), anyString(),
+                                eq("TRANSFER_CAPTURE")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-transfer",
+                                                1L, true, BigDecimal.valueOf(900), BigDecimal.valueOf(900),
+                                                "CAPTURED", null));
                 when(accountServiceClient.applyBalanceOperation(eq("acc2"), anyString(), eq(BigDecimal.valueOf(100)),
                                 anyString(), eq("TRANSFER_CREDIT"), eq(true)))
                                 .thenThrow(new RuntimeException("To account not found"));
 
-                // Act & Assert
                 assertThrows(RuntimeException.class,
                                 () -> transactionService.processTransfer(transferRequest, userId, null));
+                verify(accountServiceClient).applyBalanceOperation(eq("acc1"), anyString(), eq(BigDecimal.valueOf(100)),
+                                anyString(), eq("TRANSFER_COMPENSATION"), eq(true));
+        }
+
+        @Test
+        void processTransfer_CaptureFailureReleasesHoldAndAuditsFailure() {
+                when(accountServiceClient.getAccount("acc1")).thenReturn(fromAccount);
+                when(accountServiceClient.getAccount("acc2")).thenReturn(toAccount);
+                when(transactionRepository.save(any(Transaction.class))).thenReturn(transaction);
+                when(accountServiceClient.placeDebitHold(eq("acc1"), anyString(), eq(BigDecimal.valueOf(100)),
+                                anyString(), eq("TRANSFER_HOLD")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-transfer",
+                                                1L, true, BigDecimal.valueOf(1000), BigDecimal.valueOf(900),
+                                                "PLACED", null));
+                when(accountServiceClient.captureDebitHold(eq("acc1"), anyString(), anyString(),
+                                eq("TRANSFER_CAPTURE")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-transfer",
+                                                1L, false, BigDecimal.valueOf(1000), BigDecimal.valueOf(900),
+                                                "PLACED", "Capture unavailable"));
+                when(accountServiceClient.releaseDebitHold(eq("acc1"), anyString(), anyString(),
+                                eq("TRANSFER_CAPTURE_FAILED")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-transfer",
+                                                1L, true, BigDecimal.valueOf(1000), BigDecimal.valueOf(1000),
+                                                "RELEASED", null));
+
+                RuntimeException exception = assertThrows(RuntimeException.class,
+                                () -> transactionService.processTransfer(transferRequest, userId, null));
+
+                assertTrue(exception.getMessage().contains("Capture unavailable"));
+                verify(accountServiceClient).releaseDebitHold(eq("acc1"), anyString(), anyString(),
+                                eq("TRANSFER_CAPTURE_FAILED"));
+                verify(auditService).logSystemEvent(eq("DEBIT_HOLD_REJECTED"), eq("transaction-service"),
+                                contains("Capture unavailable"), anyMap());
+                verify(auditService).logSystemEvent(eq("DEBIT_HOLD_RELEASED"), eq("transaction-service"),
+                                anyString(), anyMap());
         }
 
         @Test
         void processTransfer_InsufficientFunds() {
                 // Arrange
-                fromAccount.setBalance(BigDecimal.valueOf(50)); // Less than transfer amount
+                fromAccount.setBalance(BigDecimal.valueOf(1000));
+                fromAccount.setAvailableBalance(BigDecimal.valueOf(50)); // Less than transfer amount
                 when(accountServiceClient.getAccount("acc1")).thenReturn(fromAccount);
                 when(accountServiceClient.getAccount("acc2")).thenReturn(toAccount);
 
@@ -189,6 +240,35 @@ class TransactionServiceImplTest {
                                 () -> transactionService.processTransfer(transferRequest, userId, null));
 
                 assertEquals("Insufficient funds", exception.getMessage());
+        }
+
+        @Test
+        void processTransfer_MissingAvailableBalanceFallsBackToBalance() {
+                fromAccount.setAvailableBalance(null);
+                fromAccount.setBalance(BigDecimal.valueOf(1000));
+                when(accountServiceClient.getAccount("acc1")).thenReturn(fromAccount);
+                when(accountServiceClient.getAccount("acc2")).thenReturn(toAccount);
+                when(transactionRepository.save(any(Transaction.class))).thenReturn(transaction);
+                when(accountServiceClient.placeDebitHold(eq("acc1"), anyString(), eq(BigDecimal.valueOf(100)),
+                                anyString(), eq("TRANSFER_HOLD")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-transfer",
+                                                1L, true, BigDecimal.valueOf(1000), BigDecimal.valueOf(900),
+                                                "PLACED", null));
+                when(accountServiceClient.captureDebitHold(eq("acc1"), anyString(), anyString(),
+                                eq("TRANSFER_CAPTURE")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-transfer",
+                                                1L, true, BigDecimal.valueOf(900), BigDecimal.valueOf(900),
+                                                "CAPTURED", null));
+                when(accountServiceClient.applyBalanceOperation(eq("acc2"), anyString(), eq(BigDecimal.valueOf(100)),
+                                anyString(), eq("TRANSFER_CREDIT"), eq(true)))
+                                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(2L, "op-credit",
+                                                true, BigDecimal.valueOf(600), 1L, "APPLIED"));
+
+                TransactionResponse result = transactionService.processTransfer(transferRequest, userId, null);
+
+                assertNotNull(result);
+                verify(accountServiceClient).placeDebitHold(eq("acc1"), anyString(), eq(BigDecimal.valueOf(100)),
+                                anyString(), eq("TRANSFER_HOLD"));
         }
 
         @Test
@@ -212,11 +292,16 @@ class TransactionServiceImplTest {
                 when(accountServiceClient.getAccount("acc1")).thenReturn(fromAccount);
                 when(accountServiceClient.getAccount("acc2")).thenReturn(toAccount);
                 when(transactionRepository.save(any(Transaction.class))).thenReturn(transaction);
-                when(accountServiceClient.applyBalanceOperation(eq("acc1"), anyString(), eq(BigDecimal.valueOf(-100)),
-                                anyString(), eq("TRANSFER_DEBIT"), eq(false)))
-                                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(1L, "op-debit",
-                                                true,
-                                                BigDecimal.valueOf(900), 1L, "APPLIED", null));
+                when(accountServiceClient.placeDebitHold(eq("acc1"), anyString(), eq(BigDecimal.valueOf(100)),
+                                anyString(), eq("TRANSFER_HOLD")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-transfer",
+                                                1L, true, BigDecimal.valueOf(1000), BigDecimal.valueOf(900),
+                                                "PLACED", null));
+                when(accountServiceClient.captureDebitHold(eq("acc1"), anyString(), anyString(),
+                                eq("TRANSFER_CAPTURE")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-transfer",
+                                                1L, true, BigDecimal.valueOf(900), BigDecimal.valueOf(900),
+                                                "CAPTURED", null));
                 when(accountServiceClient.applyBalanceOperation(eq("acc2"), anyString(), eq(BigDecimal.valueOf(100)),
                                 anyString(), eq("TRANSFER_CREDIT"), eq(true)))
                                 .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(2L, "op-credit",
@@ -321,12 +406,16 @@ class TransactionServiceImplTest {
 
                 when(accountServiceClient.getAccount(accountId)).thenReturn(fromAccount);
                 when(transactionRepository.save(any(Transaction.class))).thenReturn(transaction);
-                when(accountServiceClient.applyBalanceOperation(eq(accountId), anyString(), eq(amount.negate()),
-                                anyString(),
-                                eq("WITHDRAWAL"), eq(false)))
-                                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(1L,
-                                                "op-withdraw", true,
-                                                BigDecimal.valueOf(800), 1L, "APPLIED"));
+                when(accountServiceClient.placeDebitHold(eq(accountId), anyString(), eq(amount), anyString(),
+                                eq("WITHDRAWAL_HOLD")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-withdraw",
+                                                1L, true, BigDecimal.valueOf(1000), BigDecimal.valueOf(800),
+                                                "PLACED", null));
+                when(accountServiceClient.captureDebitHold(eq(accountId), anyString(), anyString(),
+                                eq("WITHDRAWAL_CAPTURE")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-withdraw",
+                                                1L, true, BigDecimal.valueOf(800), BigDecimal.valueOf(800),
+                                                "CAPTURED", null));
 
                 // Act
                 TransactionResponse result = transactionService.processWithdrawal(accountId, amount, description,
@@ -335,10 +424,11 @@ class TransactionServiceImplTest {
                 // Assert
                 assertNotNull(result);
                 verify(accountServiceClient).getAccount(accountId);
-                verify(accountServiceClient).applyBalanceOperation(eq(accountId), anyString(), eq(amount.negate()),
-                                anyString(),
-                                eq("WITHDRAWAL"), eq(false));
-                verify(transactionRepository, times(2)).save(any(Transaction.class));
+                verify(accountServiceClient).placeDebitHold(eq(accountId), anyString(), eq(amount), anyString(),
+                                eq("WITHDRAWAL_HOLD"));
+                verify(accountServiceClient).captureDebitHold(eq(accountId), anyString(), anyString(),
+                                eq("WITHDRAWAL_CAPTURE"));
+                verify(transactionRepository, atLeast(4)).save(any(Transaction.class));
         }
 
         @Test
@@ -374,6 +464,39 @@ class TransactionServiceImplTest {
                                 contains(accountId), isNull());
                 verify(accountServiceClient, never()).applyBalanceOperation(anyString(), anyString(), any(),
                                 anyString(), anyString(), anyBoolean());
+        }
+
+        @Test
+        void processWithdrawal_CaptureFailureReleasesHoldAndAuditsFailure() {
+                String accountId = "acc1";
+                BigDecimal amount = BigDecimal.valueOf(200);
+                when(accountServiceClient.getAccount(accountId)).thenReturn(fromAccount);
+                when(transactionRepository.save(any(Transaction.class))).thenReturn(transaction);
+                when(accountServiceClient.placeDebitHold(eq(accountId), anyString(), eq(amount), anyString(),
+                                eq("WITHDRAWAL_HOLD")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-withdraw",
+                                                1L, true, BigDecimal.valueOf(1000), BigDecimal.valueOf(800),
+                                                "PLACED", null));
+                when(accountServiceClient.captureDebitHold(eq(accountId), anyString(), anyString(),
+                                eq("WITHDRAWAL_CAPTURE")))
+                                .thenThrow(new RuntimeException("Capture service unavailable"));
+                when(accountServiceClient.releaseDebitHold(eq(accountId), anyString(), anyString(),
+                                eq("WITHDRAWAL_CAPTURE_FAILED")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-withdraw",
+                                                1L, true, BigDecimal.valueOf(1000), BigDecimal.valueOf(1000),
+                                                "RELEASED", null));
+
+                RuntimeException exception = assertThrows(RuntimeException.class,
+                                () -> transactionService.processWithdrawal(accountId, amount, "Test withdrawal",
+                                                userId, null));
+
+                assertTrue(exception.getMessage().contains("Capture service unavailable"));
+                verify(accountServiceClient).releaseDebitHold(eq(accountId), anyString(), anyString(),
+                                eq("WITHDRAWAL_CAPTURE_FAILED"));
+                verify(auditService).logSystemEvent(eq("DEBIT_HOLD_REJECTED"), eq("transaction-service"),
+                                contains("Capture service unavailable"), anyMap());
+                verify(auditService).logSystemEvent(eq("DEBIT_HOLD_RELEASED"), eq("transaction-service"),
+                                anyString(), anyMap());
         }
 
         @Test

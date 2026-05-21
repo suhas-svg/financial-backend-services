@@ -12,6 +12,8 @@ const sampleAccount = {
   ownerId: "customer",
   accountType: "CHECKING",
   balance: 250,
+  ledgerBalance: 250,
+  availableBalance: 175,
   createdAt: "2026-04-28T10:00:00Z",
   status: "ACTIVE"
 };
@@ -19,6 +21,8 @@ const sampleAccount = {
 const frozenAccount = {
   ...sampleAccount,
   id: 202,
+  ledgerBalance: 250,
+  availableBalance: 250,
   status: "FROZEN",
   statusReason: "Fraud review"
 };
@@ -194,6 +198,16 @@ describe("auth screens", () => {
 });
 
 describe("account forms", () => {
+  it("shows available balance as primary and ledger balance as secondary on dashboard", async () => {
+    mockFetch();
+
+    renderApp("/", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    expect(await screen.findByText("Available balance")).toBeInTheDocument();
+    expect((await screen.findAllByText("$175.00")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Ledger $250.00")).toBeInTheDocument();
+  });
+
   it("renders account type-specific fields", async () => {
     const user = userEvent.setup();
     mockFetch();
@@ -333,6 +347,17 @@ describe("admin audit log", () => {
 });
 
 describe("admin account status controls", () => {
+  it("shows available and ledger balance columns", async () => {
+    mockFetch();
+
+    renderApp("/admin/accounts", tokenFor({ sub: "admin", roles: ["ROLE_ADMIN"] }));
+
+    expect(await screen.findByRole("columnheader", { name: "Available" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Ledger" })).toBeInTheDocument();
+    expect(await screen.findByText("$175.00")).toBeInTheDocument();
+    expect(await screen.findByText("$250.00")).toBeInTheDocument();
+  });
+
   it("freezes account with a required reason", async () => {
     const user = userEvent.setup();
     const { calls } = mockFetch((url, init) => {
@@ -372,14 +397,34 @@ describe("money movement account holds", () => {
 
     renderApp("/move-money", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
 
-    await screen.findAllByText(/#202 - CHECKING - FROZEN/);
+    await screen.findAllByText(/#202 - CHECKING - Available 250.00 - FROZEN/);
     const depositSelect = screen.getAllByLabelText("Account")[0];
     const withdrawSelect = screen.getByLabelText("Withdraw account");
     const frozenDebitOption = Array.from(withdrawSelect.querySelectorAll("option")).find((option) => option.value === "202");
 
-    expect(depositSelect).toHaveTextContent("#202 - CHECKING - FROZEN");
-    expect(withdrawSelect).toHaveTextContent("#202 - CHECKING - FROZEN");
+    expect(depositSelect).toHaveTextContent("#202 - CHECKING - Available 250.00 - FROZEN");
+    expect(withdrawSelect).toHaveTextContent("#202 - CHECKING - Available 250.00 - FROZEN");
     expect(frozenDebitOption).toBeDisabled();
+  });
+
+  it("disables debit source accounts when requested amount exceeds available balance", async () => {
+    const user = userEvent.setup();
+    mockFetch((url) => {
+      if (url.includes("/api/accounts")) {
+        return jsonResponse({ ...emptyPage, content: [sampleAccount], totalElements: 1, totalPages: 1 });
+      }
+      return undefined;
+    });
+
+    renderApp("/move-money", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    await user.clear(screen.getAllByLabelText("Amount")[1]);
+    await user.type(screen.getAllByLabelText("Amount")[1], "200");
+    const withdrawSelect = screen.getByLabelText("Withdraw account");
+    const activeDebitOption = Array.from(withdrawSelect.querySelectorAll("option")).find((option) => option.value === "101");
+
+    expect(activeDebitOption).toBeDisabled();
+    expect(withdrawSelect).toHaveTextContent("#101 - CHECKING - Available 175.00");
   });
 });
 

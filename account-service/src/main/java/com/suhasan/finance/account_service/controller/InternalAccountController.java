@@ -2,6 +2,8 @@ package com.suhasan.finance.account_service.controller;
 
 import com.suhasan.finance.account_service.dto.BalanceOperationRequest;
 import com.suhasan.finance.account_service.dto.BalanceOperationResponse;
+import com.suhasan.finance.account_service.dto.DebitHoldRequest;
+import com.suhasan.finance.account_service.dto.DebitHoldResponse;
 import com.suhasan.finance.account_service.service.AccountService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -40,11 +42,43 @@ public class InternalAccountController {
         return ResponseEntity.ok(accountService.applyBalanceOperation(id, request));
     }
 
+    @PostMapping("/{id}/holds")
+    public ResponseEntity<DebitHoldResponse> placeDebitHold(
+            @PathVariable Long id,
+            @Valid @RequestBody DebitHoldRequest request) {
+        return ResponseEntity.ok(accountService.placeDebitHold(id, request));
+    }
+
+    @PostMapping("/{id}/holds/{holdId}/capture")
+    public ResponseEntity<DebitHoldResponse> captureDebitHold(
+            @PathVariable Long id,
+            @PathVariable String holdId,
+            @Valid @RequestBody HoldTransitionRequest request) {
+        return ResponseEntity.ok(accountService.captureDebitHold(id, holdId, request.getTransactionId(), request.getReason()));
+    }
+
+    @PostMapping("/{id}/holds/{holdId}/release")
+    public ResponseEntity<DebitHoldResponse> releaseDebitHold(
+            @PathVariable Long id,
+            @PathVariable String holdId,
+            @Valid @RequestBody HoldTransitionRequest request) {
+        return ResponseEntity.ok(accountService.releaseDebitHold(id, holdId, request.getTransactionId(), request.getReason()));
+    }
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
     public static class BalanceUpdateRequest {
         @NotNull(message = "Balance is required")
         private BigDecimal balance;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class HoldTransitionRequest {
+        @NotNull(message = "Transaction ID is required")
+        private String transactionId;
+        private String reason;
     }
 }

@@ -12,6 +12,8 @@ public class AccountResponse {
     private Long id;
     private String ownerId;
     private BigDecimal balance;
+    private BigDecimal ledgerBalance;
+    private BigDecimal availableBalance;
     private LocalDate createdAt;
     private String accountType;
     private AccountStatus status;

@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { createAccount, deleteAccount, listAccounts, updateAccount } from "../lib/queries";
 import { accountSchema, type AccountValues } from "../lib/schemas";
 import { compactDate, money } from "../lib/format";
+import { availableBalance, ledgerBalance } from "../lib/accountBalances";
 import type { Account } from "../types";
 import { Button, EmptyState, ErrorNotice, Field, Input, Panel, Select } from "../components/ui";
 import { StatusBadge } from "../components/StatusBadge";
@@ -128,8 +129,12 @@ export function AccountsPage() {
               </div>
             ) : null}
             <div className="flex justify-between gap-3">
-              <dt className="text-muted">Balance</dt>
-              <dd>{money(selected.balance)}</dd>
+              <dt className="text-muted">Available</dt>
+              <dd>{money(availableBalance(selected))}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Ledger</dt>
+              <dd>{money(ledgerBalance(selected))}</dd>
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-muted">Opened</dt>
@@ -161,7 +166,8 @@ export function AccountsPage() {
                   <th>Owner</th>
                   <th>Type</th>
                   <th>Status</th>
-                  <th>Balance</th>
+                  <th>Available</th>
+                  <th>Ledger</th>
                   <th>Opened</th>
                   <th className="text-right">Action</th>
                 </tr>
@@ -177,7 +183,8 @@ export function AccountsPage() {
                     <td>
                       <StatusBadge value={account.status ?? "ACTIVE"} />
                     </td>
-                    <td>{money(account.balance)}</td>
+                    <td>{money(availableBalance(account))}</td>
+                    <td>{money(ledgerBalance(account))}</td>
                     <td>{compactDate(account.createdAt)}</td>
                     <td className="text-right">
                       <div className="flex justify-end gap-2">

@@ -5,8 +5,12 @@ import com.suhasan.finance.account_service.entity.CheckingAccount;
 import com.suhasan.finance.account_service.entity.AccountStatus;
 import com.suhasan.finance.account_service.dto.BalanceOperationRequest;
 import com.suhasan.finance.account_service.dto.BalanceOperationResponse;
+import com.suhasan.finance.account_service.dto.DebitHoldRequest;
+import com.suhasan.finance.account_service.dto.DebitHoldResponse;
+import com.suhasan.finance.account_service.entity.DebitHoldStatus;
 import com.suhasan.finance.account_service.mapper.AccountMapper;
 import com.suhasan.finance.account_service.repository.AccountBalanceOperationRepository;
+import com.suhasan.finance.account_service.repository.AccountDebitHoldRepository;
 import com.suhasan.finance.account_service.repository.AccountRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +43,9 @@ public class AccountServiceTest {
     private AccountBalanceOperationRepository balanceOperationRepository;
 
     @Mock
+    private AccountDebitHoldRepository debitHoldRepository;
+
+    @Mock
     private MeterRegistry meterRegistry;
 
     private AccountService accountService;
@@ -49,15 +56,15 @@ public class AccountServiceTest {
         // Mock the meter registry components with lenient stubbing
         io.micrometer.core.instrument.Counter counter = mock(io.micrometer.core.instrument.Counter.class);
         io.micrometer.core.instrument.Timer timer = mock(io.micrometer.core.instrument.Timer.class);
-        
+
         lenient().when(meterRegistry.counter(anyString())).thenReturn(counter);
         lenient().when(meterRegistry.timer(anyString())).thenReturn(timer);
         lenient().when(timer.record(org.mockito.ArgumentMatchers.<java.util.function.Supplier<Account>>any())).thenAnswer(invocation -> {
             java.util.function.Supplier<Account> supplier = invocation.getArgument(0);
             return supplier.get();
         });
-        
-        accountService = new AccountService(accountRepository, balanceOperationRepository, accountMapper, meterRegistry);
+
+        accountService = new AccountService(accountRepository, balanceOperationRepository, debitHoldRepository, accountMapper, meterRegistry);
 
         testAccount = new CheckingAccount();
         testAccount.setId(1L);
@@ -88,6 +95,8 @@ public class AccountServiceTest {
         Account result = accountService.create(testAccount);
 
         assertThat(result.getStatus()).isEqualTo(AccountStatus.ACTIVE);
+        assertThat(result.getLedgerBalance()).isEqualByComparingTo("1000.00");
+        assertThat(result.getAvailableBalance()).isEqualByComparingTo("1000.00");
     }
 
     @Test
@@ -154,6 +163,206 @@ public class AccountServiceTest {
 
         assertThat(response.isApplied()).isTrue();
         assertThat(response.getNewBalance()).isEqualByComparingTo("1025.00");
+        assertThat(testAccount.getLedgerBalance()).isEqualByComparingTo("1025.00");
+        assertThat(testAccount.getAvailableBalance()).isEqualByComparingTo("1025.00");
+    }
+
+    @Test
+    @DisplayName("Should place debit hold against available balance only")
+    void shouldPlaceDebitHoldAgainstAvailableBalanceOnly() {
+        when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testAccount));
+        when(debitHoldRepository.findById("hold-1")).thenReturn(Optional.empty());
+        when(accountRepository.save(any(Account.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DebitHoldResponse response = accountService.placeDebitHold(1L, DebitHoldRequest.builder()
+                .holdId("hold-1")
+                .transactionId("tx-1")
+                .amount(BigDecimal.valueOf(250))
+                .reason("WITHDRAWAL")
+                .build());
+
+        assertThat(response.isApplied()).isTrue();
+        assertThat(response.getStatus()).isEqualTo(DebitHoldStatus.PLACED);
+        assertThat(response.getLedgerBalance()).isEqualByComparingTo("1000.00");
+        assertThat(response.getAvailableBalance()).isEqualByComparingTo("750.00");
+    }
+
+    @Test
+    @DisplayName("Should capture debit hold against ledger balance only")
+    void shouldCaptureDebitHoldAgainstLedgerBalanceOnly() {
+        testAccount.setAvailableBalance(BigDecimal.valueOf(750));
+        com.suhasan.finance.account_service.entity.AccountDebitHold hold = com.suhasan.finance.account_service.entity.AccountDebitHold.builder()
+                .holdId("hold-1")
+                .accountId(1L)
+                .transactionId("tx-1")
+                .amount(BigDecimal.valueOf(250))
+                .status(DebitHoldStatus.PLACED)
+                .build();
+        when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testAccount));
+        when(debitHoldRepository.findById("hold-1")).thenReturn(Optional.of(hold));
+        when(accountRepository.save(any(Account.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DebitHoldResponse response = accountService.captureDebitHold(1L, "hold-1", "tx-1", "WITHDRAWAL_CAPTURE");
+
+        assertThat(response.isApplied()).isTrue();
+        assertThat(response.getStatus()).isEqualTo(DebitHoldStatus.CAPTURED);
+        assertThat(response.getLedgerBalance()).isEqualByComparingTo("750.00");
+        assertThat(response.getAvailableBalance()).isEqualByComparingTo("750.00");
+    }
+
+    @Test
+    @DisplayName("Should release debit hold back to available balance")
+    void shouldReleaseDebitHoldBackToAvailableBalance() {
+        testAccount.setAvailableBalance(BigDecimal.valueOf(750));
+        com.suhasan.finance.account_service.entity.AccountDebitHold hold = com.suhasan.finance.account_service.entity.AccountDebitHold.builder()
+                .holdId("hold-1")
+                .accountId(1L)
+                .transactionId("tx-1")
+                .amount(BigDecimal.valueOf(250))
+                .status(DebitHoldStatus.PLACED)
+                .build();
+        when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testAccount));
+        when(debitHoldRepository.findById("hold-1")).thenReturn(Optional.of(hold));
+        when(accountRepository.save(any(Account.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        DebitHoldResponse response = accountService.releaseDebitHold(1L, "hold-1", "tx-1", "WITHDRAWAL_RELEASE");
+
+        assertThat(response.isApplied()).isTrue();
+        assertThat(response.getStatus()).isEqualTo(DebitHoldStatus.RELEASED);
+        assertThat(response.getLedgerBalance()).isEqualByComparingTo("1000.00");
+        assertThat(response.getAvailableBalance()).isEqualByComparingTo("1000.00");
+    }
+
+    @Test
+    @DisplayName("Should reject debit hold when available balance is insufficient")
+    void shouldRejectDebitHoldWhenAvailableBalanceIsInsufficient() {
+        testAccount.setAvailableBalance(BigDecimal.valueOf(50));
+        when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testAccount));
+        when(debitHoldRepository.findById("hold-1")).thenReturn(Optional.empty());
+
+        DebitHoldResponse response = accountService.placeDebitHold(1L, DebitHoldRequest.builder()
+                .holdId("hold-1")
+                .transactionId("tx-1")
+                .amount(BigDecimal.valueOf(250))
+                .reason("WITHDRAWAL")
+                .build());
+
+        assertThat(response.isApplied()).isFalse();
+        assertThat(response.getStatus()).isNull();
+        assertThat(response.getMessage()).isEqualTo("Insufficient available balance");
+    }
+
+    @Test
+    @DisplayName("Should reject debit hold for frozen account")
+    void shouldRejectDebitHoldForFrozenAccount() {
+        testAccount.setStatus(AccountStatus.FROZEN);
+        when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testAccount));
+        when(debitHoldRepository.findById("hold-1")).thenReturn(Optional.empty());
+
+        DebitHoldResponse response = accountService.placeDebitHold(1L, DebitHoldRequest.builder()
+                .holdId("hold-1")
+                .transactionId("tx-1")
+                .amount(BigDecimal.valueOf(250))
+                .reason("WITHDRAWAL")
+                .build());
+
+        assertThat(response.isApplied()).isFalse();
+        assertThat(response.getStatus()).isNull();
+        assertThat(response.getMessage()).isEqualTo("Account is frozen and cannot be debited");
+    }
+
+    @Test
+    @DisplayName("Should return existing hold for matching place replay")
+    void shouldReturnExistingHoldForMatchingPlaceReplay() {
+        testAccount.setAvailableBalance(BigDecimal.valueOf(750));
+        com.suhasan.finance.account_service.entity.AccountDebitHold hold = com.suhasan.finance.account_service.entity.AccountDebitHold.builder()
+                .holdId("hold-1")
+                .accountId(1L)
+                .transactionId("tx-1")
+                .amount(BigDecimal.valueOf(250))
+                .status(DebitHoldStatus.PLACED)
+                .build();
+        when(debitHoldRepository.findById("hold-1")).thenReturn(Optional.of(hold));
+        when(accountRepository.findById(1L)).thenReturn(Optional.of(testAccount));
+
+        DebitHoldResponse response = accountService.placeDebitHold(1L, DebitHoldRequest.builder()
+                .holdId("hold-1")
+                .transactionId("tx-1")
+                .amount(BigDecimal.valueOf(250))
+                .reason("WITHDRAWAL")
+                .build());
+
+        assertThat(response.isApplied()).isTrue();
+        assertThat(response.getStatus()).isEqualTo(DebitHoldStatus.PLACED);
+        assertThat(response.getAvailableBalance()).isEqualByComparingTo("750.00");
+        verify(accountRepository, never()).save(any(Account.class));
+    }
+
+    @Test
+    @DisplayName("Should reject mismatched place replay")
+    void shouldRejectMismatchedPlaceReplay() {
+        com.suhasan.finance.account_service.entity.AccountDebitHold hold = com.suhasan.finance.account_service.entity.AccountDebitHold.builder()
+                .holdId("hold-1")
+                .accountId(1L)
+                .transactionId("tx-1")
+                .amount(BigDecimal.valueOf(250))
+                .status(DebitHoldStatus.PLACED)
+                .build();
+        when(debitHoldRepository.findById("hold-1")).thenReturn(Optional.of(hold));
+
+        assertThatThrownBy(() -> accountService.placeDebitHold(2L, DebitHoldRequest.builder()
+                .holdId("hold-1")
+                .transactionId("tx-1")
+                .amount(BigDecimal.valueOf(250))
+                .reason("WITHDRAWAL")
+                .build()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Debit hold replay does not match original request");
+    }
+
+    @Test
+    @DisplayName("Should return captured hold for duplicate capture")
+    void shouldReturnCapturedHoldForDuplicateCapture() {
+        testAccount.setLedgerBalance(BigDecimal.valueOf(750));
+        testAccount.setAvailableBalance(BigDecimal.valueOf(750));
+        com.suhasan.finance.account_service.entity.AccountDebitHold hold = com.suhasan.finance.account_service.entity.AccountDebitHold.builder()
+                .holdId("hold-1")
+                .accountId(1L)
+                .transactionId("tx-1")
+                .amount(BigDecimal.valueOf(250))
+                .status(DebitHoldStatus.CAPTURED)
+                .build();
+        when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testAccount));
+        when(debitHoldRepository.findById("hold-1")).thenReturn(Optional.of(hold));
+
+        DebitHoldResponse response = accountService.captureDebitHold(1L, "hold-1", "tx-1", "WITHDRAWAL_CAPTURE");
+
+        assertThat(response.isApplied()).isTrue();
+        assertThat(response.getStatus()).isEqualTo(DebitHoldStatus.CAPTURED);
+        assertThat(response.getLedgerBalance()).isEqualByComparingTo("750.00");
+        verify(accountRepository, never()).save(any(Account.class));
+    }
+
+    @Test
+    @DisplayName("Should return released hold for duplicate release")
+    void shouldReturnReleasedHoldForDuplicateRelease() {
+        testAccount.setAvailableBalance(BigDecimal.valueOf(1000));
+        com.suhasan.finance.account_service.entity.AccountDebitHold hold = com.suhasan.finance.account_service.entity.AccountDebitHold.builder()
+                .holdId("hold-1")
+                .accountId(1L)
+                .transactionId("tx-1")
+                .amount(BigDecimal.valueOf(250))
+                .status(DebitHoldStatus.RELEASED)
+                .build();
+        when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testAccount));
+        when(debitHoldRepository.findById("hold-1")).thenReturn(Optional.of(hold));
+
+        DebitHoldResponse response = accountService.releaseDebitHold(1L, "hold-1", "tx-1", "WITHDRAWAL_RELEASE");
+
+        assertThat(response.isApplied()).isTrue();
+        assertThat(response.getStatus()).isEqualTo(DebitHoldStatus.RELEASED);
+        assertThat(response.getAvailableBalance()).isEqualByComparingTo("1000.00");
+        verify(accountRepository, never()).save(any(Account.class));
     }
 
     @Test

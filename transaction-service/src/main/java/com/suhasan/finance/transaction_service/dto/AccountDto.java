@@ -11,22 +11,38 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 @Builder
 public class AccountDto {
-    
+
     private Long id;
     private String ownerId;
     private BigDecimal balance;
+    private BigDecimal ledgerBalance;
+    private BigDecimal availableBalance;
     private String accountType;
     private Boolean active;
     private String status;
-    
+
     // Credit card specific fields
     private BigDecimal creditLimit;
     private BigDecimal availableCredit;
-    
+
     // Savings account specific fields
     private BigDecimal interestRate;
 
     public boolean allowsDebits() {
         return status == null || status.isBlank() || "ACTIVE".equalsIgnoreCase(status);
+    }
+
+    public BigDecimal spendableBalance() {
+        if (availableBalance != null) {
+            return availableBalance;
+        }
+        return balance != null ? balance : BigDecimal.ZERO;
+    }
+
+    public BigDecimal ledgerBalanceOrBalance() {
+        if (ledgerBalance != null) {
+            return ledgerBalance;
+        }
+        return balance != null ? balance : BigDecimal.ZERO;
     }
 }

@@ -91,6 +91,10 @@ public interface AccountMapper {
         expression = "java(entity.getAccountType())"
       ),
       @Mapping(
+        target = "balance",
+        expression = "java(entity.getLedgerBalance())"
+      ),
+      @Mapping(
         target = "interestRate",
         expression = "java(entity instanceof SavingsAccount ? ((SavingsAccount)entity).getInterestRate() : null)"
       ),

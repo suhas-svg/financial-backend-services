@@ -36,7 +36,7 @@ public abstract class Account {
     @Version
     @Column(nullable = false)
     private Long version;
-    
+
 
     @NotNull(message = "Owner ID cannot be null")
     @NotBlank(message = "Owner ID cannot be blank")
@@ -47,6 +47,16 @@ public abstract class Account {
     @PositiveOrZero(message = "Balance must be zero or positive")
     @Column(nullable = false)
     private BigDecimal balance;
+
+    @NotNull(message = "Ledger balance cannot be null")
+    @PositiveOrZero(message = "Ledger balance must be zero or positive")
+    @Column(name = "ledger_balance", nullable = false)
+    private BigDecimal ledgerBalance;
+
+    @NotNull(message = "Available balance cannot be null")
+    @PositiveOrZero(message = "Available balance must be zero or positive")
+    @Column(name = "available_balance", nullable = false)
+    private BigDecimal availableBalance;
 
     @Column(nullable = false, updatable = false)
     private LocalDate createdAt = LocalDate.now();
@@ -68,9 +78,36 @@ public abstract class Account {
     private String accountType;
 
     @PrePersist
-    void ensureDefaultStatus() {
+    void ensureDefaults() {
         if (status == null) {
             status = AccountStatus.ACTIVE;
+        }
+        ensureBalanceAliases();
+    }
+
+    @PreUpdate
+    void ensureBalanceAliases() {
+        if (ledgerBalance == null) {
+            ledgerBalance = balance;
+        }
+        if (balance == null) {
+            balance = ledgerBalance;
+        }
+        if (availableBalance == null) {
+            availableBalance = ledgerBalance;
+        }
+        balance = ledgerBalance;
+    }
+
+    public BigDecimal getBalance() {
+        return ledgerBalance != null ? ledgerBalance : balance;
+    }
+
+    public void setBalance(BigDecimal balance) {
+        this.balance = balance;
+        this.ledgerBalance = balance;
+        if (this.availableBalance == null) {
+            this.availableBalance = balance;
         }
     }
 }
