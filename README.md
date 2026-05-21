@@ -8,12 +8,12 @@ The backend provides account management, authentication, transaction processing,
 
 ```text
 financial-backend-services/
-├── account-service/          # Spring Boot account/auth service on port 8080
-├── transaction-service/      # Spring Boot transaction service on port 8081
-├── frontend/                 # React + Vite + TypeScript financial console
-├── docker-compose.codex.yml  # Local verification compose file used during this work
-├── .github/workflows/        # PR validation and CI checks
-└── README.md
+|-- account-service/          # Spring Boot account/auth service on port 8080
+|-- transaction-service/      # Spring Boot transaction service on port 8081
+|-- frontend/                 # React + Vite + TypeScript financial console
+|-- docker-compose.codex.yml  # Local verification compose file used during this work
+|-- .github/workflows/        # PR validation and CI checks
+`-- README.md
 ```
 
 ## Main Features
@@ -26,8 +26,10 @@ financial-backend-services/
 - View dashboard totals, account cards, recent transactions, limits, and personal stats.
 - Create, edit, delete, and filter accounts.
 - Create `CHECKING`, `SAVINGS`, and `CREDIT` accounts with type-specific validation.
+- See available balance as the primary spendable amount and ledger balance as secondary detail.
 - See frozen accounts with hold warnings and status reasons.
 - Deposit, withdraw, and transfer money.
+- Use available-balance validation for withdrawals and outgoing transfer sources.
 - Keep frozen accounts selectable for credits, while debit-source controls are disabled.
 - Generate an `Idempotency-Key` per money-movement submit.
 - Search and filter transaction history.
@@ -39,6 +41,7 @@ financial-backend-services/
 - Guard admin routes using `ROLE_ADMIN` from JWT claims.
 - Search accounts across users with owner and account type filters.
 - Filter accounts by lifecycle status and freeze or unfreeze accounts with required reasons.
+- Review both available and ledger balances in account oversight.
 - Use existing account create/update/delete flows for admin oversight.
 - Monitor account service health, metrics, deployment information, and manual health checks.
 - Monitor transaction service health, transaction/system stats, alert status, and available metrics.
@@ -59,12 +62,18 @@ financial-backend-services/
   - Account CRUD.
   - Account lifecycle status with `ACTIVE` and `FROZEN` states.
   - Admin-only status updates with reason and updated-by metadata.
+  - Ledger balance, available balance, and account debit hold ownership.
+  - Debit hold placement, capture, and release with idempotent hold IDs.
   - Frozen-account debit rejection while preserving deposits and incoming credits.
+  - Positive balance operations update both ledger and available balances.
   - Account type validation for checking, savings, and credit accounts.
   - Health, metrics, and deployment endpoints.
 - Transaction service:
   - Deposit, withdrawal, and transfer endpoints.
   - Frozen-account debit enforcement before withdrawals and outgoing transfer debits.
+  - Pending debit authorization flow for withdrawals and outgoing transfers.
+  - Debit hold placement and capture before completing debit transactions.
+  - Debit hold release or compensation paths for failed debit orchestration.
   - Transaction history and search.
   - Transaction stats and monitoring endpoints.
   - Idempotency and reversal workflows.
@@ -206,6 +215,54 @@ GET /api/accounts?ownerId=&accountType=&status=&page=&size=
 
 `FROZEN` blocks debits only: withdrawals and outgoing transfer debits are rejected. Deposits and incoming transfer credits remain allowed.
 
+### Internal Account Balance And Holds
+
+`account-service` owns all balance state. Public account JSON keeps `balance` as a compatibility alias for `ledgerBalance`, while newer clients can read both:
+
+```json
+{
+  "balance": 800.00,
+  "ledgerBalance": 800.00,
+  "availableBalance": 800.00
+}
+```
+
+Debit holds reserve spendable funds before a debit completes:
+
+- `PLACED`: decreases `availableBalance` only.
+- `CAPTURED`: decreases `ledgerBalance`; available stays unchanged because funds were already reserved.
+- `RELEASED`: restores `availableBalance`; ledger stays unchanged.
+
+Internal service-to-service endpoints require `ROLE_INTERNAL_SERVICE` or `ROLE_ADMIN`:
+
+```http
+POST /api/internal/accounts/{id}/holds
+POST /api/internal/accounts/{id}/holds/{holdId}/capture
+POST /api/internal/accounts/{id}/holds/{holdId}/release
+```
+
+Place hold body:
+
+```json
+{
+  "holdId": "transaction-id:hold",
+  "transactionId": "transaction-id",
+  "amount": 200.00,
+  "reason": "WITHDRAWAL_HOLD"
+}
+```
+
+Capture and release body:
+
+```json
+{
+  "transactionId": "transaction-id",
+  "reason": "WITHDRAWAL_CAPTURE"
+}
+```
+
+Hold placement is rejected when the account is `FROZEN` or `availableBalance` is too low. Duplicate place/capture/release requests are idempotent when they match the original hold data.
+
 ### Transactions
 
 ```http
@@ -218,6 +275,17 @@ POST /api/transactions/withdraw
 POST /api/transactions/transfer
 POST /api/transactions/{transactionId}/reverse
 ```
+
+Debit transaction behavior:
+
+- Deposits use no hold and increase both ledger and available balances.
+- Withdrawals use `place hold -> capture hold -> complete transaction`.
+- Outgoing transfers use holds on the source account, then credit the destination account.
+- Incoming transfer credits may target a frozen account because credits are allowed.
+- If hold placement or capture fails, the transaction is marked `FAILED` and the failure is audited.
+- If destination credit fails after source capture, transaction-service uses the existing compensation path to credit the source account back.
+
+Processing states include `HOLD_PLACED`, `HOLD_CAPTURED`, and `HOLD_RELEASED`. Audit events include `DEBIT_HOLD_PLACED`, `DEBIT_HOLD_CAPTURED`, `DEBIT_HOLD_RELEASED`, and `DEBIT_HOLD_REJECTED`.
 
 ### Monitoring
 
@@ -365,6 +433,10 @@ The frontend test suite covers:
 - Login/register success and failure states.
 - Account type-specific fields.
 - Account status badges, frozen warnings, admin status filters, and freeze/unfreeze reason validation.
+- Available balance as the primary dashboard/account-card balance.
+- Ledger and available balance display in customer and admin account views.
+- Move Money debit-source disabling based on frozen status and insufficient available balance.
+- Deposit and incoming-credit destination behavior remaining selectable for frozen or held accounts.
 - Transaction table filters.
 - Admin navigation visibility.
 - Admin audit log summary, filters, event table, detail panel, and API proxy mapping.
@@ -389,6 +461,20 @@ cd transaction-service
 The transaction-service test suite also covers the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup. Risk alert tests cover admin-only access, filters, summary counts, status updates with reviewer metadata, rule generation, dedupe behavior, and non-risky transaction handling. Risk case tests cover admin-only access, filters, summary counts, create-from-alert, duplicate open-case handling, claim, status updates, linked alert details, and append-only notes. Investigation tests cover admin-only access, search context expansion, mixed-source timeline sorting, summary counts, CSV export headers/content escaping, and empty search results.
 
 Account hold/freeze tests cover default `ACTIVE` accounts, admin-only freeze/unfreeze with required reasons, frozen debit rejection, credit allowance, transaction-service prechecks, backend rejection messages, frontend status rendering, and move-money debit-source disabling.
+
+Pending debit authorization tests cover account ledger/available initialization, migration backfill, hold placement/capture/release balance effects, idempotent hold transitions, frozen and insufficient-available hold rejection, deposit balance updates, withdrawal and transfer hold orchestration, failed hold audit behavior, compensation after destination credit failure, backward-compatible account DTO handling, and frontend available-balance rendering and validation.
+
+## Live Demo Summary
+
+The pending debit authorization feature was verified against the local end-to-end stack with the real frontend and both backend services:
+
+- Created a customer account with `$1,000.00`.
+- Placed an internal debit hold for `$150.00`.
+- Confirmed the UI showed `Available $850.00` and `Ledger $1,000.00`.
+- Confirmed the withdraw source was disabled for a `$900.00` debit because available balance was only `$850.00`.
+- Released the hold and confirmed available returned to `$1,000.00`.
+- Completed a `$200.00` withdrawal through the UI and confirmed both available and ledger became `$800.00`.
+- Confirmed the transaction history showed a completed withdrawal.
 
 ## Demo Evidence
 
@@ -427,4 +513,3 @@ transaction-service/mvnw
 - Frontend-specific setup: `frontend/README.md`
 - Transaction history API notes: `transaction-service/TRANSACTION-HISTORY-API.md`
 - Monitoring and observability notes: `transaction-service/MONITORING-OBSERVABILITY-GUIDE.md`
-
