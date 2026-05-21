@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { listAccounts, getLimits, getTransactions, getUserStats } from "../lib/queries";
 import { compactDate, money, percent } from "../lib/format";
+import { availableBalance, ledgerBalance } from "../lib/accountBalances";
 import { EmptyState, Panel, Stat } from "../components/ui";
 import { StatusBadge } from "../components/StatusBadge";
 
@@ -12,7 +13,7 @@ export function DashboardPage() {
   const transactions = useQuery({ queryKey: ["transactions", 0], queryFn: () => getTransactions(0) });
   const stats = useQuery({ queryKey: ["stats", "user"], queryFn: getUserStats });
   const limits = useQuery({ queryKey: ["limits"], queryFn: getLimits });
-  const totalBalance = accounts.data?.content.reduce((sum, account) => sum + Number(account.balance), 0) ?? 0;
+  const totalBalance = accounts.data?.content.reduce((sum, account) => sum + availableBalance(account), 0) ?? 0;
   const chartData = Object.entries(stats.data?.transactionAmountsByType ?? {}).map(([name, value]) => ({ name, value }));
 
   return (
@@ -34,7 +35,7 @@ export function DashboardPage() {
         </div>
       </div>
       <div className="grid gap-3 md:grid-cols-4">
-        <Stat label="Total balance" value={money(totalBalance)} />
+        <Stat label="Available balance" value={money(totalBalance)} />
         <Stat label="Transactions" value={stats.data?.totalTransactions ?? 0} />
         <Stat label="Success rate" value={percent(stats.data?.successRate)} />
         <Stat label="Single limit" value={money(limits.data?.singleTransactionLimit, limits.data?.currency)} />
@@ -52,7 +53,8 @@ export function DashboardPage() {
                       <StatusBadge value={account.status ?? "ACTIVE"} />
                     </div>
                   </div>
-                  <p className="mt-2 text-2xl font-semibold">{money(account.balance)}</p>
+                  <p className="mt-2 text-2xl font-semibold">{money(availableBalance(account))}</p>
+                  <p className="text-xs text-muted">Ledger {money(ledgerBalance(account))}</p>
                   {account.status === "FROZEN" ? <p className="text-xs text-danger">{account.statusReason || "Debit hold active"}</p> : null}
                   <p className="text-xs text-muted">Opened {compactDate(account.createdAt)}</p>
                 </div>

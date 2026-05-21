@@ -173,6 +173,94 @@ public class ResilientAccountServiceClient {
                 .transformDeferred(TimeLimiterOperator.of(accountServiceTimeLimiter));
     }
 
+    @CacheEvict(value = "account:validation", key = "#accountId")
+    public DebitHoldResponse placeDebitHold(String accountId,
+                                            String holdId,
+                                            BigDecimal amount,
+                                            String transactionId,
+                                            String reason) {
+        try {
+            return placeDebitHoldAsync(accountId, holdId, amount, transactionId, reason).block();
+        } catch (Exception e) {
+            throw mapServiceException("debit hold placement", e);
+        }
+    }
+
+    private Mono<DebitHoldResponse> placeDebitHoldAsync(String accountId,
+                                                        String holdId,
+                                                        BigDecimal amount,
+                                                        String transactionId,
+                                                        String reason) {
+        String serviceToken = generateInternalServiceToken();
+        DebitHoldRequest request = new DebitHoldRequest(holdId, transactionId, amount, reason);
+        return Mono.fromCallable(() -> {
+                    WebClient webClient = webClientBuilder.baseUrl(accountServiceBaseUrl).build();
+                    return webClient.post()
+                            .uri("/api/internal/accounts/{id}/holds", accountId)
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceToken)
+                            .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                            .bodyValue(request)
+                            .retrieve()
+                            .bodyToMono(DebitHoldResponse.class)
+                            .timeout(Duration.ofMillis(timeout))
+                            .block();
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .transformDeferred(RetryOperator.of(accountServiceRetry))
+                .transformDeferred(CircuitBreakerOperator.of(accountServiceCircuitBreaker))
+                .transformDeferred(TimeLimiterOperator.of(accountServiceTimeLimiter));
+    }
+
+    @CacheEvict(value = "account:validation", key = "#accountId")
+    public DebitHoldResponse captureDebitHold(String accountId,
+                                              String holdId,
+                                              String transactionId,
+                                              String reason) {
+        try {
+            return transitionDebitHoldAsync(accountId, holdId, transactionId, reason, true).block();
+        } catch (Exception e) {
+            throw mapServiceException("debit hold capture", e);
+        }
+    }
+
+    @CacheEvict(value = "account:validation", key = "#accountId")
+    public DebitHoldResponse releaseDebitHold(String accountId,
+                                              String holdId,
+                                              String transactionId,
+                                              String reason) {
+        try {
+            return transitionDebitHoldAsync(accountId, holdId, transactionId, reason, false).block();
+        } catch (Exception e) {
+            throw mapServiceException("debit hold release", e);
+        }
+    }
+
+    private Mono<DebitHoldResponse> transitionDebitHoldAsync(String accountId,
+                                                             String holdId,
+                                                             String transactionId,
+                                                             String reason,
+                                                             boolean capture) {
+        String serviceToken = generateInternalServiceToken();
+        HoldTransitionRequest request = new HoldTransitionRequest(transactionId, reason);
+        String action = capture ? "capture" : "release";
+        return Mono.fromCallable(() -> {
+                    WebClient webClient = webClientBuilder.baseUrl(accountServiceBaseUrl).build();
+                    return webClient.post()
+                            .uri("/api/internal/accounts/{id}/holds/{holdId}/{action}", accountId, holdId, action)
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceToken)
+                            .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                            .bodyValue(request)
+                            .retrieve()
+                            .bodyToMono(DebitHoldResponse.class)
+                            .timeout(Duration.ofMillis(timeout))
+                            .block();
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .transformDeferred(RetryOperator.of(accountServiceRetry))
+                .transformDeferred(CircuitBreakerOperator.of(accountServiceCircuitBreaker))
+                .transformDeferred(TimeLimiterOperator.of(accountServiceTimeLimiter));
+    }
+
     public boolean validateAccount(String accountId) {
         try {
             AccountDto account = getAccount(accountId);
@@ -199,7 +287,7 @@ public class ResilientAccountServiceClient {
             BigDecimal availableCredit = account.getAvailableCredit();
             return availableCredit != null && availableCredit.compareTo(amount) >= 0;
         }
-        return account.getBalance().compareTo(amount) >= 0;
+        return account.spendableBalance().compareTo(amount) >= 0;
     }
 
     public boolean checkHealth() {
@@ -309,6 +397,44 @@ public class ResilientAccountServiceClient {
         public BalanceOperationResponse(Long accountId, String operationId, boolean applied,
                                         BigDecimal newBalance, Long version, String status) {
             this(accountId, operationId, applied, newBalance, version, status, null);
+        }
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class DebitHoldRequest {
+        private String holdId;
+        private String transactionId;
+        private BigDecimal amount;
+        private String reason;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class HoldTransitionRequest {
+        private String transactionId;
+        private String reason;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class DebitHoldResponse {
+        private String holdId;
+        private Long accountId;
+        private boolean applied;
+        private BigDecimal ledgerBalance;
+        private BigDecimal availableBalance;
+        private Long version;
+        private String status;
+        private String message;
+
+        public DebitHoldResponse(String holdId, Long accountId, boolean applied,
+                                 BigDecimal ledgerBalance, BigDecimal availableBalance,
+                                 String status, String message) {
+            this(holdId, accountId, applied, ledgerBalance, availableBalance, null, status, message);
         }
     }
 }

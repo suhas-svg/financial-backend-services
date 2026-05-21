@@ -2,6 +2,9 @@ package com.suhasan.finance.transaction_service.entity;
 
 public enum TransactionProcessingState {
     INITIATED("Transaction has been created and processing started"),
+    HOLD_PLACED("Debit authorization hold has been placed"),
+    HOLD_CAPTURED("Debit authorization hold has been captured"),
+    HOLD_RELEASED("Debit authorization hold has been released"),
     DEBIT_APPLIED("Debit side of transaction has been applied"),
     CREDIT_APPLIED("Credit side of transaction has been applied"),
     COMPLETED("Transaction processing completed"),

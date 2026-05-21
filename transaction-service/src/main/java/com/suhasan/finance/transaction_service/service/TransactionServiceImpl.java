@@ -33,6 +33,7 @@ import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -77,7 +78,7 @@ public class TransactionServiceImpl implements TransactionService {
             throw new IllegalArgumentException("Transaction exceeds limits");
         }
 
-        if (fromAccount.getBalance().compareTo(request.getAmount()) < 0) {
+        if (fromAccount.spendableBalance().compareTo(request.getAmount()) < 0) {
             throw new IllegalArgumentException("Insufficient funds");
         }
 
@@ -94,7 +95,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .reference(request.getReference())
                 .idempotencyKey(normalizedIdempotencyKey)
                 .createdBy(userId)
-                .fromAccountBalanceBefore(fromAccount.getBalance())
+                .fromAccountBalanceBefore(fromAccount.ledgerBalanceOrBalance())
                 .build();
         try {
             transaction = transactionRepository.save(transaction);
@@ -113,26 +114,46 @@ public class TransactionServiceImpl implements TransactionService {
                 request.getFromAccountId(), request.getToAccountId(), request.getAmount(), userId);
         metricsService.recordTransactionInitiated(TransactionType.TRANSFER);
 
-        boolean debitApplied = false;
+        boolean holdPlaced = false;
+        boolean holdCaptured = false;
+        String holdId = transaction.getTransactionId() + ":hold";
         try {
-            ResilientAccountServiceClient.BalanceOperationResponse debitResult = accountServiceClient
-                    .applyBalanceOperation(
+            ResilientAccountServiceClient.DebitHoldResponse holdResult = accountServiceClient
+                    .placeDebitHold(
                             request.getFromAccountId(),
-                            transactionId + ":debit",
-                            request.getAmount().negate(),
-                            transactionId,
-                            "TRANSFER_DEBIT",
-                            false);
-            debitApplied = debitResult.isApplied();
-            transaction.setFromAccountBalanceAfter(debitResult.getNewBalance());
-            transaction.setProcessingState(TransactionProcessingState.DEBIT_APPLIED);
+                            holdId,
+                            request.getAmount(),
+                            transaction.getTransactionId(),
+                            "TRANSFER_HOLD");
+            transaction.setProcessingState(TransactionProcessingState.HOLD_PLACED);
             transactionRepository.save(transaction);
-            if (!debitResult.isApplied()) {
+            if (!holdResult.isApplied()) {
                 transaction.setStatus(TransactionStatus.FAILED);
                 transaction.setProcessedAt(LocalDateTime.now());
                 transactionRepository.save(transaction);
-                throw new IllegalArgumentException(firstNonBlank(debitResult.getMessage(), "Insufficient funds"));
+                logDebitHoldEvent("DEBIT_HOLD_REJECTED", transaction, firstNonBlank(holdResult.getMessage(), "Insufficient funds"));
+                throw new IllegalArgumentException(firstNonBlank(holdResult.getMessage(), "Insufficient funds"));
             }
+            holdPlaced = true;
+            logDebitHoldEvent("DEBIT_HOLD_PLACED", transaction, null);
+
+            ResilientAccountServiceClient.DebitHoldResponse captureResult = accountServiceClient
+                    .captureDebitHold(
+                            request.getFromAccountId(),
+                            holdId,
+                            transaction.getTransactionId(),
+                            "TRANSFER_CAPTURE");
+            if (!captureResult.isApplied()) {
+                transaction.setStatus(TransactionStatus.FAILED);
+                transaction.setProcessedAt(LocalDateTime.now());
+                transactionRepository.save(transaction);
+                throw new IllegalArgumentException(firstNonBlank(captureResult.getMessage(), "Debit hold capture failed"));
+            }
+            holdCaptured = true;
+            transaction.setFromAccountBalanceAfter(captureResult.getLedgerBalance());
+            transaction.setProcessingState(TransactionProcessingState.HOLD_CAPTURED);
+            transactionRepository.save(transaction);
+            logDebitHoldEvent("DEBIT_HOLD_CAPTURED", transaction, null);
 
             ResilientAccountServiceClient.BalanceOperationResponse creditResult = accountServiceClient
                     .applyBalanceOperation(
@@ -157,7 +178,7 @@ public class TransactionServiceImpl implements TransactionService {
                     TransactionStatus.COMPLETED, request.getAmount(), processingTime);
             return mapToResponse(transaction);
         } catch (Exception e) {
-            if (debitApplied) {
+            if (holdCaptured) {
                 try {
                     accountServiceClient.applyBalanceOperation(
                             request.getFromAccountId(),
@@ -169,9 +190,17 @@ public class TransactionServiceImpl implements TransactionService {
                     transaction.setProcessingState(TransactionProcessingState.COMPENSATED);
                     transaction.setStatus(TransactionStatus.FAILED);
                 } catch (Exception compensationError) {
-                    transaction.setProcessingState(TransactionProcessingState.MANUAL_ACTION_REQUIRED);
-                    transaction.setStatus(TransactionStatus.FAILED_REQUIRES_MANUAL_ACTION);
+                transaction.setProcessingState(TransactionProcessingState.MANUAL_ACTION_REQUIRED);
+                transaction.setStatus(TransactionStatus.FAILED_REQUIRES_MANUAL_ACTION);
                 }
+            } else if (holdPlaced) {
+                releasePlacedHoldAfterFailure(
+                        request.getFromAccountId(),
+                        holdId,
+                        transaction,
+                        "TRANSFER_CAPTURE_FAILED",
+                        e.getMessage());
+                transaction.setStatus(TransactionStatus.FAILED);
             } else {
                 transaction.setStatus(TransactionStatus.FAILED);
             }
@@ -220,7 +249,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .reference(reference)
                 .idempotencyKey(normalizedIdempotencyKey)
                 .createdBy(userId)
-                .toAccountBalanceBefore(account.getBalance())
+                .toAccountBalanceBefore(account.ledgerBalanceOrBalance())
                 .build();
         try {
             transaction = transactionRepository.save(transaction);
@@ -281,7 +310,7 @@ public class TransactionServiceImpl implements TransactionService {
         if (!validateTransactionLimits(accountId, account.getAccountType(), TransactionType.WITHDRAWAL, amount)) {
             throw new IllegalArgumentException("Transaction exceeds limits");
         }
-        if (account.getBalance().compareTo(amount) < 0) {
+        if (account.spendableBalance().compareTo(amount) < 0) {
             throw new IllegalArgumentException("Insufficient funds");
         }
 
@@ -297,7 +326,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .reference(reference)
                 .idempotencyKey(normalizedIdempotencyKey)
                 .createdBy(userId)
-                .fromAccountBalanceBefore(account.getBalance())
+                .fromAccountBalanceBefore(account.ledgerBalanceOrBalance())
                 .build();
         try {
             transaction = transactionRepository.save(transaction);
@@ -310,30 +339,52 @@ public class TransactionServiceImpl implements TransactionService {
                             "Idempotency conflict but record not found — manual review required"));
         }
 
+        boolean holdPlaced = false;
+        boolean holdCaptured = false;
+        String holdId = transaction.getTransactionId() + ":hold";
         try {
-            ResilientAccountServiceClient.BalanceOperationResponse response = accountServiceClient
-                    .applyBalanceOperation(
+            ResilientAccountServiceClient.DebitHoldResponse hold = accountServiceClient
+                    .placeDebitHold(
                             accountId,
-                            transaction.getTransactionId() + ":withdrawal",
-                            amount.negate(),
+                            holdId,
+                            amount,
                             transaction.getTransactionId(),
-                            "WITHDRAWAL",
-                            false);
-            if (!response.isApplied()) {
+                            "WITHDRAWAL_HOLD");
+            transaction.setProcessingState(TransactionProcessingState.HOLD_PLACED);
+            transactionRepository.save(transaction);
+            if (!hold.isApplied()) {
                 transaction.setStatus(TransactionStatus.FAILED);
                 transaction.setProcessedAt(LocalDateTime.now());
                 transactionRepository.save(transaction);
-                throw new IllegalArgumentException(firstNonBlank(response.getMessage(), "Insufficient funds"));
+                logDebitHoldEvent("DEBIT_HOLD_REJECTED", transaction, firstNonBlank(hold.getMessage(), "Insufficient funds"));
+                throw new IllegalArgumentException(firstNonBlank(hold.getMessage(), "Insufficient funds"));
             }
-            transaction.setFromAccountBalanceAfter(response.getNewBalance());
+            holdPlaced = true;
+            logDebitHoldEvent("DEBIT_HOLD_PLACED", transaction, null);
+            ResilientAccountServiceClient.DebitHoldResponse capture = accountServiceClient
+                    .captureDebitHold(accountId, holdId, transaction.getTransactionId(), "WITHDRAWAL_CAPTURE");
+            if (!capture.isApplied()) {
+                transaction.setStatus(TransactionStatus.FAILED);
+                transaction.setProcessedAt(LocalDateTime.now());
+                transactionRepository.save(transaction);
+                throw new IllegalArgumentException(firstNonBlank(capture.getMessage(), "Debit hold capture failed"));
+            }
+            holdCaptured = true;
+            transaction.setFromAccountBalanceAfter(capture.getLedgerBalance());
             transaction.setStatus(TransactionStatus.COMPLETED);
             transaction.setProcessedBy("SYSTEM");
             transaction.setProcessedAt(LocalDateTime.now());
+            transaction.setProcessingState(TransactionProcessingState.HOLD_CAPTURED);
+            transactionRepository.save(transaction);
+            logDebitHoldEvent("DEBIT_HOLD_CAPTURED", transaction, null);
             transaction.setProcessingState(TransactionProcessingState.COMPLETED);
             transaction = transactionRepository.save(transaction);
             riskEvaluationService.evaluateCompletedTransaction(transaction);
             return mapToResponse(transaction);
         } catch (Exception e) {
+            if (holdPlaced && !holdCaptured) {
+                releasePlacedHoldAfterFailure(accountId, holdId, transaction, "WITHDRAWAL_CAPTURE_FAILED", e.getMessage());
+            }
             if (transaction.getStatus() != TransactionStatus.COMPLETED) {
                 transaction.setStatus(TransactionStatus.FAILED);
                 transaction.setProcessedAt(LocalDateTime.now());
@@ -885,6 +936,36 @@ public class TransactionServiceImpl implements TransactionService {
 
     private String firstNonBlank(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private void logDebitHoldEvent(String eventType, Transaction transaction, String message) {
+        auditService.logSystemEvent(eventType, "transaction-service",
+                firstNonBlank(message, eventType + " for transaction " + transaction.getTransactionId()),
+                Map.of(
+                        "transactionId", transaction.getTransactionId(),
+                        "fromAccountId", firstNonBlank(transaction.getFromAccountId(), ""),
+                        "toAccountId", firstNonBlank(transaction.getToAccountId(), ""),
+                        "amount", transaction.getAmount() != null ? transaction.getAmount().toPlainString() : ""));
+    }
+
+    private void releasePlacedHoldAfterFailure(String accountId, String holdId, Transaction transaction,
+                                               String reason, String failureMessage) {
+        logDebitHoldEvent("DEBIT_HOLD_REJECTED", transaction,
+                firstNonBlank(failureMessage, "Debit hold capture failed"));
+        try {
+            ResilientAccountServiceClient.DebitHoldResponse releaseResult = accountServiceClient.releaseDebitHold(
+                    accountId,
+                    holdId,
+                    transaction.getTransactionId(),
+                    reason);
+            if (releaseResult.isApplied()) {
+                transaction.setProcessingState(TransactionProcessingState.HOLD_RELEASED);
+                logDebitHoldEvent("DEBIT_HOLD_RELEASED", transaction, null);
+            }
+        } catch (Exception releaseError) {
+            log.warn("Debit hold release failed for transaction {} and hold {}: {}",
+                    transaction.getTransactionId(), holdId, releaseError.getMessage());
+        }
     }
 
     private void assertCanAccessAccountScope(String accountId) {

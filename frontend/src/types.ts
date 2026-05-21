@@ -17,6 +17,8 @@ export type Account = {
   id: number;
   ownerId: string;
   balance: number;
+  ledgerBalance?: number;
+  availableBalance?: number;
   createdAt: string;
   accountType: AccountType;
   status?: AccountStatus;

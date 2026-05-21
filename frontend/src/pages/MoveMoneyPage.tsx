@@ -4,17 +4,18 @@ import type { UseFormRegisterReturn } from "react-hook-form";
 import { useForm } from "react-hook-form";
 import { deposit, listAccounts, transfer, withdraw } from "../lib/queries";
 import { createIdempotencyKey } from "../lib/idempotency";
+import { availableBalance, canDebit } from "../lib/accountBalances";
 import { moneyMovementSchema, transferSchema, type MoneyMovementValues, type TransferValues } from "../lib/schemas";
 import { Button, ErrorNotice, Field, Input, Panel, Select } from "../components/ui";
 
-function AccountSelect({ field, debitSource = false }: { field: UseFormRegisterReturn; debitSource?: boolean }) {
+function AccountSelect({ field, debitSource = false, amount = 0 }: { field: UseFormRegisterReturn; debitSource?: boolean; amount?: number }) {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => listAccounts() });
   return (
     <Select {...field}>
       <option value="">Select account</option>
       {accounts.data?.content.map((account) => (
-        <option key={account.id} value={String(account.id)} disabled={debitSource && account.status === "FROZEN"}>
-          #{account.id} - {account.accountType}{account.status === "FROZEN" ? " - FROZEN" : ""}
+        <option key={account.id} value={String(account.id)} disabled={debitSource && !canDebit(account, amount)}>
+          #{account.id} - {account.accountType} - Available {availableBalance(account).toFixed(2)}{account.status === "FROZEN" ? " - FROZEN" : ""}
         </option>
       ))}
     </Select>
@@ -26,6 +27,8 @@ export function MoveMoneyPage() {
   const depositForm = useForm<MoneyMovementValues>({ resolver: zodResolver(moneyMovementSchema), defaultValues: { accountId: "", amount: 0, currency: "USD", description: "", reference: "" } });
   const withdrawForm = useForm<MoneyMovementValues>({ resolver: zodResolver(moneyMovementSchema), defaultValues: { accountId: "", amount: 0, currency: "USD", description: "", reference: "" } });
   const transferForm = useForm<TransferValues>({ resolver: zodResolver(transferSchema), defaultValues: { fromAccountId: "", toAccountId: "", amount: 0, currency: "USD", description: "", reference: "" } });
+  const withdrawAmount = Number(withdrawForm.watch("amount") || 0);
+  const transferAmount = Number(transferForm.watch("amount") || 0);
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["accounts"] });
     queryClient.invalidateQueries({ queryKey: ["transactions"] });
@@ -51,7 +54,7 @@ export function MoveMoneyPage() {
         <form className="grid gap-4" onSubmit={withdrawForm.handleSubmit((values) => withdrawMutation.mutate(values))}>
           <ErrorNotice message={withdrawMutation.error instanceof Error ? withdrawMutation.error.message : undefined} />
           <Field label="Withdraw account" error={withdrawForm.formState.errors.accountId?.message}>
-            <AccountSelect field={withdrawForm.register("accountId")} debitSource />
+            <AccountSelect field={withdrawForm.register("accountId")} debitSource amount={withdrawAmount} />
           </Field>
           <MoneyFields form={withdrawForm} />
           <Button type="submit" disabled={withdrawMutation.isPending}>Withdraw</Button>
@@ -61,7 +64,7 @@ export function MoveMoneyPage() {
         <form className="grid gap-4" onSubmit={transferForm.handleSubmit((values) => transferMutation.mutate(values))}>
           <ErrorNotice message={transferMutation.error instanceof Error ? transferMutation.error.message : undefined} />
           <Field label="From account" error={transferForm.formState.errors.fromAccountId?.message}>
-            <AccountSelect field={transferForm.register("fromAccountId")} debitSource />
+            <AccountSelect field={transferForm.register("fromAccountId")} debitSource amount={transferAmount} />
           </Field>
           <Field label="To account" error={transferForm.formState.errors.toAccountId?.message}>
             <AccountSelect field={transferForm.register("toAccountId")} />

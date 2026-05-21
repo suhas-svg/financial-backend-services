@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { createAccount, deleteAccount, listAccounts, updateAccount, updateAccountStatus } from "../lib/queries";
 import { accountSchema, type AccountValues } from "../lib/schemas";
 import { compactDate, money } from "../lib/format";
+import { availableBalance, ledgerBalance } from "../lib/accountBalances";
 import type { Account } from "../types";
 import { Button, ErrorNotice, Field, Input, Panel, Select } from "../components/ui";
 import { StatusBadge } from "../components/StatusBadge";
@@ -179,7 +180,8 @@ export function AdminAccountsPage() {
                 <th>Owner</th>
                 <th>Type</th>
                 <th>Status</th>
-                <th>Balance</th>
+                <th>Available</th>
+                <th>Ledger</th>
                 <th>Opened</th>
                 <th className="text-right">Actions</th>
               </tr>
@@ -195,7 +197,8 @@ export function AdminAccountsPage() {
                   <td>
                     <StatusBadge value={account.status ?? "ACTIVE"} />
                   </td>
-                  <td>{money(account.balance)}</td>
+                  <td>{money(availableBalance(account))}</td>
+                  <td>{money(ledgerBalance(account))}</td>
                   <td>{compactDate(account.createdAt)}</td>
                   <td className="text-right">
                     <div className="flex justify-end gap-2">

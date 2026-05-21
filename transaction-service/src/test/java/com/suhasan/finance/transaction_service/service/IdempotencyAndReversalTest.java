@@ -173,9 +173,12 @@ class IdempotencyAndReversalTest {
                                         .thenReturn(accountDto(ACCOUNT_B, BigDecimal.valueOf(500)));
                         var savedTx = completedTransfer(null);
                         when(transactionRepository.save(any())).thenReturn(savedTx);
-                        when(accountServiceClient.applyBalanceOperation(eq(ACCOUNT_A), anyString(),
-                                        eq(BigDecimal.valueOf(-100)), anyString(), eq("TRANSFER_DEBIT"), eq(false)))
-                                        .thenReturn(balanceOpResponse(ACCOUNT_A));
+                        when(accountServiceClient.placeDebitHold(eq(ACCOUNT_A), anyString(),
+                                        eq(BigDecimal.valueOf(100)), anyString(), eq("TRANSFER_HOLD")))
+                                        .thenReturn(debitHoldResponse(ACCOUNT_A, "PLACED"));
+                        when(accountServiceClient.captureDebitHold(eq(ACCOUNT_A), anyString(), anyString(),
+                                        eq("TRANSFER_CAPTURE")))
+                                        .thenReturn(debitHoldResponse(ACCOUNT_A, "CAPTURED"));
                         when(accountServiceClient.applyBalanceOperation(eq(ACCOUNT_B), anyString(),
                                         eq(BigDecimal.valueOf(100)), anyString(), eq("TRANSFER_CREDIT"), eq(true)))
                                         .thenReturn(balanceOpResponse(ACCOUNT_B));
@@ -495,6 +498,8 @@ class IdempotencyAndReversalTest {
                 return com.suhasan.finance.transaction_service.dto.AccountDto.builder()
                                 .id((long) id.hashCode())
                                 .balance(balance)
+                                .ledgerBalance(balance)
+                                .availableBalance(balance)
                                 .accountType("CHECKING")
                                 .availableCredit(BigDecimal.ZERO)
                                 .build();
@@ -530,5 +535,11 @@ class IdempotencyAndReversalTest {
                 return new ResilientAccountServiceClient.BalanceOperationResponse(
                                 (long) accountId.hashCode(), "op-" + accountId, true,
                                 BigDecimal.valueOf(900), 1L, "APPLIED");
+        }
+
+        private ResilientAccountServiceClient.DebitHoldResponse debitHoldResponse(String accountId, String status) {
+                return new ResilientAccountServiceClient.DebitHoldResponse(
+                                "hold-" + accountId, (long) accountId.hashCode(), true,
+                                BigDecimal.valueOf(900), BigDecimal.valueOf(900), status, null);
         }
 }
