@@ -261,23 +261,27 @@ describe("transaction filters", () => {
   });
 });
 
-describe("admin navigation", () => {
-  it("appears only for ROLE_ADMIN users", async () => {
+describe("customer shell navigation", () => {
+  it("shows the customer shell for authenticated users", async () => {
     mockFetch();
     const { unmount } = renderApp("/", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+    expect(await screen.findByRole("link", { name: "Financial Console" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Accounts" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Move Money" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Transactions" })).toBeInTheDocument();
     expect(screen.queryByText("Operations")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Admin Accounts" })).not.toBeInTheDocument();
     unmount();
 
     renderApp("/", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
-    expect(await screen.findByText("Operations")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Admin Accounts" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Monitoring" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Ops Transactions" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Audit Log" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Risk Alerts" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Risk Cases" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Investigations" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Financial Console" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Accounts" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Move Money" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Transactions" })).toBeInTheDocument();
+    expect(screen.queryByText("Operations")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Admin Accounts" })).not.toBeInTheDocument();
   });
 
   it("redirects non-admin users away from admin routes", async () => {

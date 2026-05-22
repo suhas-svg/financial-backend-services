@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import { AppLayout } from "./components/AppLayout";
+import { CustomerLayout } from "./components/CustomerLayout";
 import { RequireAuth } from "./components/RequireAuth";
 import { AccountsPage } from "./pages/AccountsPage";
 import { AdminAccountsPage } from "./pages/AdminAccountsPage";
@@ -21,7 +21,7 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route element={<RequireAuth />}>
-        <Route element={<AppLayout />}>
+        <Route element={<CustomerLayout />}>
           <Route index element={<DashboardPage />} />
           <Route path="accounts" element={<AccountsPage />} />
           <Route path="move-money" element={<MoveMoneyPage />} />
