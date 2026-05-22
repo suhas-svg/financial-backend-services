@@ -284,6 +284,31 @@ describe("customer shell navigation", () => {
     expect(screen.queryByRole("link", { name: "Admin Accounts" })).not.toBeInTheDocument();
   });
 
+  it("shows the admin operations shell for admin users at the admin overview", async () => {
+    mockFetch();
+    renderApp("/admin", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
+
+    expect(await screen.findByRole("link", { name: "Operations Console" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Operations overview" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Overview" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Admin Accounts" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Monitoring" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ops Transactions" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Audit Log" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Risk Alerts" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Risk Cases" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Investigations" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Move Money" })).not.toBeInTheDocument();
+  });
+
+  it("redirects non-admin users from the admin overview to the customer dashboard", async () => {
+    mockFetch();
+    renderApp("/admin", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Operations overview" })).not.toBeInTheDocument();
+  });
+
   it("redirects non-admin users away from admin routes", async () => {
     mockFetch();
     renderApp("/admin/monitoring", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
