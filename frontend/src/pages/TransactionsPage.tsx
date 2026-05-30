@@ -4,9 +4,9 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { compactDate, money } from "../lib/format";
 import { createIdempotencyKey } from "../lib/idempotency";
-import { getReversalStatus, getReversals, getTransaction, getTransactions, reverseTransaction, searchTransactions } from "../lib/queries";
-import { reversalSchema, type ReversalValues } from "../lib/schemas";
-import type { Transaction } from "../types";
+import { createDispute, getReversalStatus, getReversals, getTransaction, getTransactions, listDisputes, reverseTransaction, searchTransactions } from "../lib/queries";
+import { disputeSchema, reversalSchema, type DisputeValues, type ReversalValues } from "../lib/schemas";
+import type { Transaction, TransactionDispute } from "../types";
 import { StatusBadge } from "../components/StatusBadge";
 import { Button, EmptyState, ErrorNotice, Field, Input, Panel, Select } from "../components/ui";
 
@@ -105,7 +105,18 @@ export function TransactionDetail({ transaction, allowReverse = false }: { trans
     queryFn: () => getReversals(transaction.transactionId),
     enabled: allowReverse
   });
+  const disputes = useQuery({
+    queryKey: ["disputes"],
+    queryFn: () => listDisputes(0),
+    enabled: !allowReverse
+  });
   const form = useForm<ReversalValues>({ resolver: zodResolver(reversalSchema), defaultValues: { reason: "", reference: "" } });
+  const disputeForm = useForm<DisputeValues>({
+    resolver: zodResolver(disputeSchema),
+    defaultValues: { reasonCode: "UNAUTHORIZED", description: "" }
+  });
+  const [showDisputeForm, setShowDisputeForm] = useState(false);
+  const [submittedDispute, setSubmittedDispute] = useState<TransactionDispute | null>(null);
   const mutation = useMutation({
     mutationFn: (values: ReversalValues) => reverseTransaction(transaction.transactionId, values, createIdempotencyKey("reverse")),
     onSuccess: () => {
@@ -114,6 +125,18 @@ export function TransactionDetail({ transaction, allowReverse = false }: { trans
       form.reset({ reason: "", reference: "" });
     }
   });
+  const disputeMutation = useMutation({
+    mutationFn: (values: DisputeValues) => createDispute(transaction.transactionId, values),
+    onSuccess: (dispute) => {
+      setSubmittedDispute(dispute);
+      setShowDisputeForm(false);
+      disputeForm.reset({ reasonCode: "UNAUTHORIZED", description: "" });
+      queryClient.invalidateQueries({ queryKey: ["disputes"] });
+      queryClient.invalidateQueries({ queryKey: ["transaction", transaction.transactionId] });
+    }
+  });
+  const existingDispute = submittedDispute ?? disputes.data?.content.find((dispute) => dispute.transactionId === transaction.transactionId) ?? null;
+  const canDispute = !allowReverse && transaction.status === "COMPLETED" && isWithinDays(transaction.createdAt, 60) && !existingDispute;
   return (
     <div className="grid gap-4 text-sm">
       <dl className="grid grid-cols-2 gap-3">
@@ -127,6 +150,45 @@ export function TransactionDetail({ transaction, allowReverse = false }: { trans
         <Info label="Processed" value={compactDate(transaction.processedAt)} />
       </dl>
       <p className="text-muted">{transaction.description || "No description"}</p>
+      {existingDispute ? (
+        <div className="grid gap-2 rounded-md border border-line bg-white p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-medium">{existingDispute.disputeNumber}</p>
+            <StatusBadge value={existingDispute.status} />
+          </div>
+          <p className="text-xs text-muted">{existingDispute.reasonCode}</p>
+          {existingDispute.resolutionNote ? <p className="text-sm">{existingDispute.resolutionNote}</p> : null}
+        </div>
+      ) : null}
+      {canDispute ? (
+        <div className="grid gap-3 border-t border-line pt-4">
+          {!showDisputeForm ? <Button variant="secondary" onClick={() => setShowDisputeForm(true)}>Dispute transaction</Button> : null}
+          {showDisputeForm ? (
+            <form className="grid gap-3" onSubmit={disputeForm.handleSubmit((values) => disputeMutation.mutate(values))}>
+              <ErrorNotice message={disputeMutation.error instanceof Error ? disputeMutation.error.message : undefined} />
+              <Field label="Dispute reason" error={disputeForm.formState.errors.reasonCode?.message}>
+                <Select {...disputeForm.register("reasonCode")}>
+                  <option value="UNAUTHORIZED">Unauthorized</option>
+                  <option value="DUPLICATE">Duplicate</option>
+                  <option value="INCORRECT_AMOUNT">Incorrect amount</option>
+                  <option value="SERVICE_NOT_RECEIVED">Service not received</option>
+                  <option value="OTHER">Other</option>
+                </Select>
+              </Field>
+              <Field label="Explanation" error={disputeForm.formState.errors.description?.message}>
+                <textarea
+                  {...disputeForm.register("description")}
+                  className="min-h-24 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand"
+                />
+              </Field>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={disputeMutation.isPending}>Submit dispute</Button>
+                <Button type="button" variant="ghost" onClick={() => setShowDisputeForm(false)}>Cancel</Button>
+              </div>
+            </form>
+          ) : null}
+        </div>
+      ) : null}
       {allowReverse ? (
         <>
           <div className="grid gap-3 border-t border-line pt-4">
@@ -157,6 +219,11 @@ export function TransactionDetail({ transaction, allowReverse = false }: { trans
       ) : null}
     </div>
   );
+}
+
+function isWithinDays(value: string | undefined, days: number) {
+  if (!value) return false;
+  return Date.now() - new Date(value).getTime() <= days * 24 * 60 * 60 * 1000;
 }
 
 function Info({ label, value }: { label: string; value: React.ReactNode }) {

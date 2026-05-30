@@ -1,6 +1,6 @@
-import type { Account, AccountStatus, AuditLogEntry, AuditSummary, InvestigationSummary, InvestigationTimelineItem, Limits, Page, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, Transaction, TransactionStats } from "../types";
+import type { Account, AccountStatus, AuditLogEntry, AuditSummary, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, Limits, Page, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, Transaction, TransactionDispute, TransactionStats } from "../types";
 import { apiRequest, toQuery } from "./api";
-import type { AccountValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, TransferValues } from "./schemas";
+import type { AccountValues, DisputeNoteValues, DisputeStatusValues, DisputeValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, TransferValues } from "./schemas";
 import { getSession } from "./session";
 
 export function login(values: LoginValues) {
@@ -94,6 +94,37 @@ export function getReversalStatus(transactionId: string) {
 
 export function getReversals(transactionId: string) {
   return apiRequest<Transaction[]>("transaction", `/api/transactions/${transactionId}/reversals`);
+}
+
+export function createDispute(transactionId: string, values: DisputeValues) {
+  return apiRequest<TransactionDispute>("transaction", "/api/disputes", {
+    method: "POST",
+    body: { transactionId, ...values }
+  });
+}
+
+export function listDisputes(page = 0) {
+  return apiRequest<Page<TransactionDispute>>("transaction", `/api/disputes${toQuery({ page, size: 20, sort: "createdAt,desc" })}`);
+}
+
+export function searchAdminDisputes(params: Record<string, string | number | undefined>) {
+  return apiRequest<Page<TransactionDispute>>("transaction", `/api/disputes/admin${toQuery({ size: 20, sort: "createdAt,desc", ...params })}`);
+}
+
+export function getDisputeSummary(params: Record<string, string | undefined> = {}) {
+  return apiRequest<DisputeSummary>("transaction", `/api/disputes/admin/summary${toQuery(params)}`);
+}
+
+export function claimDispute(disputeId: string) {
+  return apiRequest<TransactionDispute>("transaction", `/api/disputes/admin/${disputeId}/claim`, { method: "PATCH" });
+}
+
+export function updateDisputeStatus(disputeId: string, values: DisputeStatusValues) {
+  return apiRequest<TransactionDispute>("transaction", `/api/disputes/admin/${disputeId}/status`, { method: "PATCH", body: values });
+}
+
+export function addDisputeNote(disputeId: string, values: DisputeNoteValues) {
+  return apiRequest<TransactionDispute>("transaction", `/api/disputes/admin/${disputeId}/notes`, { method: "POST", body: values });
 }
 
 export function getAccountHealth() {

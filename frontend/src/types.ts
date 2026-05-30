@@ -32,6 +32,8 @@ export type Account = {
 
 export type TransactionType = "DEPOSIT" | "WITHDRAWAL" | "TRANSFER" | "REVERSAL" | string;
 export type TransactionStatus = "COMPLETED" | "PENDING" | "FAILED" | "REVERSED" | string;
+export type DisputeStatus = "OPEN" | "IN_REVIEW" | "APPROVED" | "DENIED" | "CLOSED";
+export type DisputeReasonCode = "UNAUTHORIZED" | "DUPLICATE" | "INCORRECT_AMOUNT" | "SERVICE_NOT_RECEIVED" | "OTHER";
 
 export type Transaction = {
   transactionId: string;
@@ -116,6 +118,41 @@ export type AuditSummary = {
   securityEvents: number;
 };
 
+export type TransactionDisputeNote = {
+  noteId: string;
+  author: string;
+  note: string;
+  createdAt: string;
+};
+
+export type TransactionDispute = {
+  disputeId: string;
+  disputeNumber: string;
+  transactionId: string;
+  userId: string;
+  status: DisputeStatus;
+  reasonCode: DisputeReasonCode;
+  description: string;
+  assignedTo?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt?: string;
+  claimedAt?: string;
+  closedAt?: string;
+  resolutionNote?: string;
+  notes?: TransactionDisputeNote[];
+};
+
+export type DisputeSummary = {
+  totalDisputes: number;
+  openDisputes: number;
+  inReviewDisputes: number;
+  approvedDisputes: number;
+  deniedDisputes: number;
+  closedDisputes: number;
+  unassignedDisputes: number;
+};
+
 export type RiskAlertStatus = "OPEN" | "REVIEWED" | "DISMISSED" | "ESCALATED";
 export type RiskAlertSeverity = "MEDIUM" | "HIGH";
 export type RiskAlertType = "HIGH_VALUE_TRANSFER" | "REPEATED_FAILURES" | "RAPID_TRANSFERS" | "REVERSAL_HEAVY_ACTIVITY";
@@ -188,7 +225,7 @@ export type RiskCaseSummary = {
   unassignedCases: number;
 };
 
-export type InvestigationItemType = "TRANSACTION" | "AUDIT_EVENT" | "RISK_ALERT" | "RISK_CASE" | "CASE_NOTE";
+export type InvestigationItemType = "TRANSACTION" | "AUDIT_EVENT" | "RISK_ALERT" | "RISK_CASE" | "CASE_NOTE" | "DISPUTE" | "DISPUTE_NOTE";
 
 export type InvestigationTimelineItem = {
   itemId: string;
@@ -213,6 +250,8 @@ export type InvestigationSummary = {
   auditEvents: number;
   riskAlerts: number;
   riskCases: number;
+  disputes?: number;
+  disputeNotes?: number;
   failures: number;
   reversals: number;
   highSeverityItems: number;

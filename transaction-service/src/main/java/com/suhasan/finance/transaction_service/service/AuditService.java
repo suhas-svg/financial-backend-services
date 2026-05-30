@@ -169,6 +169,28 @@ public class AuditService {
         }
     }
     
+    public void logDisputeEvent(String action, String disputeId, String transactionId, String userId, String details) {
+        try {
+            MDC.put("disputeId", disputeId);
+            MDC.put("transactionId", transactionId);
+            MDC.put("userId", userId);
+            MDC.put("auditAction", action);
+
+            AUDIT_LOGGER.info("Dispute event: {} dispute {} transaction {}", action, disputeId, transactionId);
+            persist(AuditLogEntry.builder()
+                    .eventType("DISPUTE")
+                    .action(action)
+                    .outcome("SUCCESS")
+                    .transactionId(transactionId)
+                    .userId(userId)
+                    .details(details)
+                    .metadata("{\"disputeId\":\"" + sanitizeJsonValue(disputeId) + "\"}")
+                    .build());
+        } finally {
+            MDC.clear();
+        }
+    }
+
     /**
      * Log account validation
      */

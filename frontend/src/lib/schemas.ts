@@ -55,9 +55,26 @@ export const reversalSchema = z.object({
   reference: z.string().max(100).optional()
 });
 
+export const disputeSchema = z.object({
+  reasonCode: z.enum(["UNAUTHORIZED", "DUPLICATE", "INCORRECT_AMOUNT", "SERVICE_NOT_RECEIVED", "OTHER"]),
+  description: z.string().min(10, "Explanation must be at least 10 characters").max(1000)
+});
+
+export const disputeStatusSchema = z.object({
+  status: z.enum(["OPEN", "IN_REVIEW", "APPROVED", "DENIED", "CLOSED"]),
+  resolutionNote: z.string().max(1000).optional()
+});
+
+export const disputeNoteSchema = z.object({
+  note: z.string().min(1, "Note is required").max(1000)
+});
+
 export type LoginValues = z.infer<typeof loginSchema>;
 export type RegisterValues = z.infer<typeof registerSchema>;
 export type AccountValues = z.infer<typeof accountSchema>;
 export type MoneyMovementValues = z.infer<typeof moneyMovementSchema>;
 export type TransferValues = z.infer<typeof transferSchema>;
 export type ReversalValues = z.infer<typeof reversalSchema>;
+export type DisputeValues = z.infer<typeof disputeSchema>;
+export type DisputeStatusValues = z.infer<typeof disputeStatusSchema>;
+export type DisputeNoteValues = z.infer<typeof disputeNoteSchema>;

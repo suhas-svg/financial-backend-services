@@ -34,6 +34,8 @@ financial-backend-services/
 - Generate an `Idempotency-Key` per money-movement submit.
 - Search and filter transaction history.
 - View transaction details and user transaction stats.
+- Dispute eligible completed transactions from the last 60 days.
+- Review submitted disputes and resolution notes in the customer dispute history.
 
 ### Admin/Ops App
 
@@ -50,6 +52,7 @@ financial-backend-services/
 - View reversal-related status panels.
 - Review the transaction-service audit log with admin-only summary counters, filters, event search, and selected-event details.
 - Review transaction risk alerts with summary counters, filters, detail inspection, and review/dismiss/escalate actions.
+- Review customer transaction disputes with summary counters, filters, claim/status actions, and internal notes.
 - Reconstruct investigation context across transactions, audit events, risk alerts, risk cases, and case notes.
 - Print investigation reports with current filters, key findings, and a timeline preview.
 - Export investigation timelines as admin-only CSV files using the same investigation filters used by the timeline view.
@@ -81,6 +84,7 @@ financial-backend-services/
   - Admin-only audit log search, detail, and summary APIs.
   - Persistent risk alert review queue for conservative transaction risk rules.
   - Admin-only risk alert search, detail, summary, and status update APIs.
+  - Customer dispute submission and admin-only dispute queue APIs.
   - Admin-only investigation timeline, summary, and CSV export APIs.
   - Account-service integration for balance updates.
 
@@ -396,9 +400,60 @@ Example create/status/note bodies:
 }
 ```
 
+### Transaction Disputes
+
+Customers can dispute their own `COMPLETED` transactions from the last 60 days. Version 1 creates operational dispute records only: approving a dispute does not automatically reverse, refund, lock, or move money.
+
+Customer dispute APIs use the `/transaction-api/api/disputes/*` frontend proxy and require an authenticated user:
+
+```http
+POST /api/disputes
+GET  /api/disputes?page=&size=
+GET  /api/disputes/{disputeId}
+```
+
+`POST /api/disputes` accepts:
+
+```json
+{
+  "transactionId": "transaction-id",
+  "reasonCode": "UNAUTHORIZED",
+  "description": "Customer explanation with enough detail for review."
+}
+```
+
+Supported reason codes are `UNAUTHORIZED`, `DUPLICATE`, `INCORRECT_AMOUNT`, `SERVICE_NOT_RECEIVED`, and `OTHER`. The backend rejects disputes for non-owned transactions, non-`COMPLETED` transactions, transactions older than 60 days, and transactions that already have an active dispute.
+
+Admin dispute APIs require `ROLE_ADMIN` or `ROLE_INTERNAL_SERVICE`:
+
+```http
+GET   /api/disputes/admin?page=&size=&status=&userId=&transactionId=&reasonCode=&assignedTo=&from=&to=
+GET   /api/disputes/admin/summary?from=&to=
+PATCH /api/disputes/admin/{disputeId}/claim
+PATCH /api/disputes/admin/{disputeId}/status
+POST  /api/disputes/admin/{disputeId}/notes
+```
+
+Dispute statuses are `OPEN`, `IN_REVIEW`, `APPROVED`, `DENIED`, and `CLOSED`. Claiming a dispute assigns it to the current admin and moves `OPEN` disputes to `IN_REVIEW`. `APPROVED`, `DENIED`, and `CLOSED` set `closedAt`. Notes are internal, append-only admin notes.
+
+Example status and note bodies:
+
+```json
+{
+  "status": "APPROVED",
+  "resolutionNote": "Customer claim accepted after review."
+}
+```
+
+```json
+{
+  "note": "Reviewed transaction logs and customer account history."
+}
+```
+
 ### Investigation Timeline
 
-The admin Investigations page is a read-only workspace for reconstructing what happened across transaction, audit, risk alert, and risk case records. Admins can search by user, transaction, account, alert, or case identifiers and review a single chronological timeline with linked metadata.
+The admin Investigations page is a read-only workspace for reconstructing what happened across transaction, audit, risk alert, risk case, and dispute records. Admins can search by user, transaction, account, alert, or case identifiers and review a single chronological timeline with linked metadata.
 
 Investigation APIs use the `/transaction-api/api/investigations/*` frontend proxy and require `ROLE_ADMIN` or `ROLE_INTERNAL_SERVICE`.
 
@@ -408,7 +463,7 @@ GET /api/investigations/summary?userId=&transactionId=&accountId=&alertId=&caseI
 GET /api/investigations/export?userId=&transactionId=&accountId=&alertId=&caseId=&from=&to=
 ```
 
-Timeline items include `TRANSACTION`, `AUDIT_EVENT`, `RISK_ALERT`, `RISK_CASE`, and `CASE_NOTE` records. Searches by `caseId` expand to the case user, transaction, and linked alert context; searches by `alertId` expand to the alert user and transaction context.
+Timeline items include `TRANSACTION`, `AUDIT_EVENT`, `RISK_ALERT`, `RISK_CASE`, `CASE_NOTE`, `DISPUTE`, and `DISPUTE_NOTE` records. Searches by `caseId` expand to the case user, transaction, and linked alert context; searches by `alertId` expand to the alert user and transaction context. Searches by `userId` or `transactionId` include matching disputes and dispute notes.
 
 The page also builds a report panel from the current filters. It summarizes the report scope, flags high-severity investigation activity, previews the first timeline items, and supports browser printing through the `Print report` action. `GET /api/investigations/export` returns a `text/csv` attachment named `investigation-export.csv` with the same filtered timeline data and escaped metadata JSON for offline review.
 
@@ -438,10 +493,12 @@ The frontend test suite covers:
 - Move Money debit-source disabling based on frozen status and insufficient available balance.
 - Deposit and incoming-credit destination behavior remaining selectable for frozen or held accounts.
 - Transaction table filters.
+- Customer dispute submission, validation, history, and resolution note display.
 - Admin navigation visibility.
 - Admin audit log summary, filters, event table, detail panel, and API proxy mapping.
 - Admin risk alert summary, filters, queue table, detail panel, status actions, and API proxy mapping.
 - Admin risk case summary, filters, queue table, detail panel, claim/status/note actions, create-from-alert action, and API proxy mapping.
+- Admin dispute summary, filters, queue table, detail panel, claim/status/note actions, and API proxy mapping.
 - Admin investigation summary, search controls, report preview, print action, CSV export flow, mixed-source timeline, detail panel, and API proxy mapping.
 - Customer and admin Playwright flows.
 
@@ -458,7 +515,7 @@ cd transaction-service
 .\mvnw.cmd -q -Dtest=TransactionServiceHardeningTest test
 ```
 
-The transaction-service test suite also covers the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup. Risk alert tests cover admin-only access, filters, summary counts, status updates with reviewer metadata, rule generation, dedupe behavior, and non-risky transaction handling. Risk case tests cover admin-only access, filters, summary counts, create-from-alert, duplicate open-case handling, claim, status updates, linked alert details, and append-only notes. Investigation tests cover admin-only access, search context expansion, mixed-source timeline sorting, summary counts, CSV export headers/content escaping, and empty search results.
+The transaction-service test suite also covers the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup. Risk alert tests cover admin-only access, filters, summary counts, status updates with reviewer metadata, rule generation, dedupe behavior, and non-risky transaction handling. Risk case tests cover admin-only access, filters, summary counts, create-from-alert, duplicate open-case handling, claim, status updates, linked alert details, and append-only notes. Dispute tests cover customer ownership checks, completed/60-day eligibility, duplicate active-dispute rejection, admin listing, claim, status updates, internal notes, and investigation timeline/summary integration. Investigation tests cover admin-only access, search context expansion, mixed-source timeline sorting, summary counts, CSV export headers/content escaping, and empty search results.
 
 Account hold/freeze tests cover default `ACTIVE` accounts, admin-only freeze/unfreeze with required reasons, frozen debit rejection, credit allowance, transaction-service prechecks, backend rejection messages, frontend status rendering, and move-money debit-source disabling.
 
