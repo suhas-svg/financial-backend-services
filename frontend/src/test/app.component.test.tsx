@@ -110,8 +110,14 @@ function mockFetch(handler?: (url: string, init?: RequestInit) => Promise<Respon
     if (url.includes("/api/risk/cases")) {
       return jsonResponse(emptyPage);
     }
+    if (url.includes("/api/disputes/admin/summary")) {
+      return jsonResponse({ totalDisputes: 0, openDisputes: 0, inReviewDisputes: 0, approvedDisputes: 0, deniedDisputes: 0, closedDisputes: 0, unassignedDisputes: 0 });
+    }
+    if (url.includes("/api/disputes")) {
+      return jsonResponse(emptyPage);
+    }
     if (url.includes("/api/investigations/summary")) {
-      return jsonResponse({ transactions: 0, auditEvents: 0, riskAlerts: 0, riskCases: 0, failures: 0, reversals: 0, highSeverityItems: 0 });
+      return jsonResponse({ transactions: 0, auditEvents: 0, riskAlerts: 0, riskCases: 0, disputes: 0, disputeNotes: 0, failures: 0, reversals: 0, highSeverityItems: 0 });
     }
     if (url.includes("/api/investigations/timeline")) {
       return jsonResponse(emptyPage);
@@ -259,6 +265,64 @@ describe("transaction filters", () => {
       expect(calls.some(({ url }) => url.includes("/transaction-api/api/transactions/search") && url.includes("accountId=101") && url.includes("type=DEPOSIT") && url.includes("status=COMPLETED"))).toBe(true);
     });
   });
+
+  it("lets customers dispute eligible completed transactions from detail", async () => {
+    const user = userEvent.setup();
+    const transaction = sampleTransaction();
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/transactions/txn-1")) {
+        return jsonResponse(transaction);
+      }
+      if (url.includes("/api/transactions")) {
+        return jsonResponse({ ...emptyPage, content: [transaction], totalElements: 1, totalPages: 1 });
+      }
+      if (url.includes("/api/disputes") && init?.method === "POST") {
+        return jsonResponse(sampleDispute(), 201);
+      }
+      if (url.includes("/api/disputes")) {
+        return jsonResponse({ ...emptyPage, content: [], totalElements: 0 });
+      }
+      return undefined;
+    });
+
+    renderApp("/transactions", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    await user.click(await screen.findByText("txn-1"));
+    expect(await screen.findByRole("button", { name: "Dispute transaction" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Dispute transaction" }));
+    await user.selectOptions(screen.getByLabelText("Dispute reason"), "UNAUTHORIZED");
+    await user.type(screen.getByLabelText("Explanation"), "I did not authorize this transaction.");
+    await user.click(screen.getByRole("button", { name: "Submit dispute" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) =>
+        url.includes("/transaction-api/api/disputes")
+        && init?.method === "POST"
+        && String(init.body).includes("\"transactionId\":\"txn-1\"")
+        && String(init.body).includes("\"reasonCode\":\"UNAUTHORIZED\"")
+      )).toBe(true);
+    });
+    expect(await screen.findByText("DP-20260530-0001")).toBeInTheDocument();
+  });
+});
+
+describe("customer disputes", () => {
+  it("lists submitted disputes and resolution notes", async () => {
+    mockFetch((url) => {
+      if (url.includes("/api/disputes")) {
+        return jsonResponse({ ...emptyPage, content: [sampleDispute({ status: "APPROVED", resolutionNote: "Customer claim accepted." })], totalElements: 1, totalPages: 1 });
+      }
+      return undefined;
+    });
+
+    renderApp("/disputes", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    expect(await screen.findByRole("heading", { name: "Disputes" })).toBeInTheDocument();
+    expect(await screen.findByText("DP-20260530-0001")).toBeInTheDocument();
+    expect(screen.getByText("APPROVED")).toBeInTheDocument();
+    expect(screen.getByText("Customer claim accepted.")).toBeInTheDocument();
+  });
 });
 
 describe("customer shell navigation", () => {
@@ -270,6 +334,7 @@ describe("customer shell navigation", () => {
     expect(screen.getByRole("link", { name: "Accounts" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Move Money" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Transactions" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Disputes" })).toBeInTheDocument();
     expect(screen.queryByText("Operations")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Admin Accounts" })).not.toBeInTheDocument();
     unmount();
@@ -280,6 +345,7 @@ describe("customer shell navigation", () => {
     expect(screen.getByRole("link", { name: "Accounts" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Move Money" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Transactions" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Disputes" })).toBeInTheDocument();
     expect(screen.queryByText("Operations")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Admin Accounts" })).not.toBeInTheDocument();
   });
@@ -297,6 +363,7 @@ describe("customer shell navigation", () => {
     expect(screen.getByRole("link", { name: "Audit Log" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Risk Alerts" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Risk Cases" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Disputes" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Investigations" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Move Money" })).not.toBeInTheDocument();
   });
@@ -653,6 +720,69 @@ describe("admin risk cases", () => {
   });
 });
 
+describe("admin disputes", () => {
+  it("renders queue filters, claim, status update, and notes", async () => {
+    const user = userEvent.setup();
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/disputes/admin/summary")) {
+        return jsonResponse({ totalDisputes: 5, openDisputes: 2, inReviewDisputes: 1, approvedDisputes: 1, deniedDisputes: 1, closedDisputes: 0, unassignedDisputes: 2 });
+      }
+      if (url.includes("/api/disputes/admin/dispute-1/claim") && init?.method === "PATCH") {
+        return jsonResponse(sampleDispute({ status: "IN_REVIEW", assignedTo: "ops", claimedAt: "2026-05-30T11:00:00" }));
+      }
+      if (url.includes("/api/disputes/admin/dispute-1/status") && init?.method === "PATCH") {
+        return jsonResponse(sampleDispute({ status: "APPROVED", resolutionNote: "Customer claim accepted.", closedAt: "2026-05-30T12:00:00" }));
+      }
+      if (url.includes("/api/disputes/admin/dispute-1/notes") && init?.method === "POST") {
+        return jsonResponse(sampleDispute({ notes: [{ noteId: "note-1", author: "ops", note: "Reviewed transaction logs.", createdAt: "2026-05-30T11:30:00" }] }));
+      }
+      if (url.includes("/api/disputes/admin")) {
+        return jsonResponse({ ...emptyPage, content: [sampleDispute()], totalElements: 1, totalPages: 1 });
+      }
+      return undefined;
+    });
+
+    renderApp("/admin/disputes", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
+
+    expect(await screen.findByRole("heading", { name: "Disputes" })).toBeInTheDocument();
+    expect(await screen.findByText("5")).toBeInTheDocument();
+    expect(screen.getByText("DP-20260530-0001")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("User ID"), "customer");
+    await user.type(screen.getByPlaceholderText("Transaction ID"), "txn-1");
+    await user.selectOptions(screen.getByDisplayValue("All status"), "OPEN");
+    await user.selectOptions(screen.getByDisplayValue("All reasons"), "UNAUTHORIZED");
+
+    await waitFor(() => {
+      expect(calls.some(({ url }) =>
+        url.includes("/transaction-api/api/disputes/admin")
+        && url.includes("userId=customer")
+        && url.includes("transactionId=txn-1")
+        && url.includes("status=OPEN")
+        && url.includes("reasonCode=UNAUTHORIZED")
+      )).toBe(true);
+    });
+
+    await user.click(screen.getByRole("button", { name: "View DP-20260530-0001" }));
+    await user.click(screen.getByRole("button", { name: "Claim dispute" }));
+    await user.type(screen.getByPlaceholderText("Internal note"), "Reviewed transaction logs.");
+    await user.click(screen.getByRole("button", { name: "Add note" }));
+    expect(await screen.findByText("Reviewed transaction logs.")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Resolution note"), "Customer claim accepted.");
+    await user.click(screen.getByRole("button", { name: "Approve dispute" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) =>
+        url.includes("/transaction-api/api/disputes/admin/dispute-1/status")
+        && init?.method === "PATCH"
+        && String(init.body).includes("\"status\":\"APPROVED\"")
+        && String(init.body).includes("Customer claim accepted.")
+      )).toBe(true);
+    });
+  });
+});
+
 describe("admin investigations", () => {
   it("renders summary, search controls, timeline items, and selected item details", async () => {
     const user = userEvent.setup();
@@ -853,6 +983,41 @@ function sampleRiskCase(overrides: Record<string, unknown> = {}) {
         createdAt: "2026-05-09T10:15:30"
       }
     ],
+    notes: [],
+    ...overrides
+  };
+}
+
+function sampleTransaction(overrides: Record<string, unknown> = {}) {
+  return {
+    transactionId: "txn-1",
+    fromAccountId: "101",
+    toAccountId: "202",
+    amount: 42.5,
+    currency: "USD",
+    type: "TRANSFER",
+    status: "COMPLETED",
+    description: "Card purchase",
+    createdBy: "customer",
+    createdAt: "2026-05-20T10:00:00",
+    processedAt: "2026-05-20T10:00:05",
+    ...overrides
+  };
+}
+
+function sampleDispute(overrides: Record<string, unknown> = {}) {
+  return {
+    disputeId: "dispute-1",
+    disputeNumber: "DP-20260530-0001",
+    transactionId: "txn-1",
+    userId: "customer",
+    status: "OPEN",
+    reasonCode: "UNAUTHORIZED",
+    description: "I did not authorize this transaction.",
+    assignedTo: undefined,
+    createdBy: "customer",
+    createdAt: "2026-05-30T10:00:00",
+    updatedAt: "2026-05-30T10:00:00",
     notes: [],
     ...overrides
   };

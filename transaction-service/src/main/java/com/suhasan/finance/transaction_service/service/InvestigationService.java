@@ -12,11 +12,14 @@ import com.suhasan.finance.transaction_service.entity.RiskCase;
 import com.suhasan.finance.transaction_service.entity.RiskCaseNote;
 import com.suhasan.finance.transaction_service.entity.RiskCasePriority;
 import com.suhasan.finance.transaction_service.entity.Transaction;
+import com.suhasan.finance.transaction_service.entity.TransactionDispute;
+import com.suhasan.finance.transaction_service.entity.TransactionDisputeNote;
 import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
 import com.suhasan.finance.transaction_service.repository.AuditLogEntryRepository;
 import com.suhasan.finance.transaction_service.repository.RiskAlertRepository;
 import com.suhasan.finance.transaction_service.repository.RiskCaseRepository;
+import com.suhasan.finance.transaction_service.repository.TransactionDisputeRepository;
 import com.suhasan.finance.transaction_service.repository.TransactionRepository;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +53,7 @@ public class InvestigationService {
     private final AuditLogEntryRepository auditLogEntryRepository;
     private final RiskAlertRepository riskAlertRepository;
     private final RiskCaseRepository riskCaseRepository;
+    private final TransactionDisputeRepository disputeRepository;
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
@@ -70,20 +74,22 @@ public class InvestigationService {
     public InvestigationSummaryResponse getSummary(InvestigationFilter filter) {
         InvestigationContext context = resolveContext(filter);
         if (!context.hasCriteria()) {
-            return new InvestigationSummaryResponse(0, 0, 0, 0, 0, 0, 0);
+            return new InvestigationSummaryResponse(0, 0, 0, 0, 0, 0, 0, 0, 0);
         }
         List<Transaction> transactions = transactionRepository.findAll(transactionSpec(context));
         List<AuditLogEntry> audits = auditLogEntryRepository.findAll(auditSpec(context));
         List<RiskAlert> alerts = riskAlertRepository.findAll(alertSpec(context));
         List<RiskCase> cases = riskCaseRepository.findAll(caseSpec(context));
+        List<TransactionDispute> disputes = disputeRepository.findAll(disputeSpec(context));
 
         long failures = transactions.stream().filter(transaction -> transaction.getStatus() == TransactionStatus.FAILED).count()
                 + audits.stream().filter(audit -> "FAILURE".equalsIgnoreCase(audit.getOutcome())).count();
         long reversals = transactions.stream().filter(transaction -> transaction.getType() == TransactionType.REVERSAL).count();
         long highSeverity = alerts.stream().filter(alert -> alert.getSeverity() == RiskAlertSeverity.HIGH).count()
                 + cases.stream().filter(riskCase -> riskCase.getPriority() == RiskCasePriority.HIGH || riskCase.getPriority() == RiskCasePriority.CRITICAL).count();
+        long disputeNotes = disputes.stream().mapToLong(dispute -> dispute.getNotes().size()).sum();
 
-        return new InvestigationSummaryResponse(transactions.size(), audits.size(), alerts.size(), cases.size(), failures, reversals, highSeverity);
+        return new InvestigationSummaryResponse(transactions.size(), audits.size(), alerts.size(), cases.size(), disputes.size(), disputeNotes, failures, reversals, highSeverity);
     }
 
     @Transactional(readOnly = true)
@@ -105,6 +111,10 @@ public class InvestigationService {
         riskCaseRepository.findAll(caseSpec(context)).forEach(riskCase -> {
             items.add(toCaseItem(riskCase));
             riskCase.getNotes().forEach(note -> items.add(toCaseNoteItem(riskCase, note)));
+        });
+        disputeRepository.findAll(disputeSpec(context)).forEach(dispute -> {
+            items.add(toDisputeItem(dispute));
+            dispute.getNotes().forEach(note -> items.add(toDisputeNoteItem(dispute, note)));
         });
         return items;
     }
@@ -192,6 +202,19 @@ public class InvestigationService {
             if (!context.alertIds.isEmpty()) {
                 criteria.add(root.get("primaryAlertId").in(context.alertIds));
             }
+            if (!context.userIds.isEmpty()) {
+                criteria.add(root.get("userId").in(context.userIds));
+            }
+            if (!context.transactionIds.isEmpty()) {
+                criteria.add(root.get("transactionId").in(context.transactionIds));
+            }
+            return withDateRange(context, anyMatch(criteria, cb), root.get("createdAt"), cb);
+        };
+    }
+
+    private Specification<TransactionDispute> disputeSpec(InvestigationContext context) {
+        return (root, query, cb) -> {
+            List<Predicate> criteria = new ArrayList<>();
             if (!context.userIds.isEmpty()) {
                 criteria.add(root.get("userId").in(context.userIds));
             }
@@ -319,6 +342,37 @@ public class InvestigationService {
                 .caseId(riskCase.getCaseId())
                 .createdAt(note.getCreatedAt())
                 .metadata(metadata("author", note.getAuthor(), "caseNumber", riskCase.getCaseNumber()))
+                .build();
+    }
+
+    private InvestigationTimelineItemResponse toDisputeItem(TransactionDispute dispute) {
+        return InvestigationTimelineItemResponse.builder()
+                .itemId(dispute.getDisputeId())
+                .itemType("DISPUTE")
+                .title(dispute.getDisputeNumber())
+                .description(dispute.getDescription())
+                .severity(name(dispute.getReasonCode()))
+                .status(name(dispute.getStatus()))
+                .userId(dispute.getUserId())
+                .transactionId(dispute.getTransactionId())
+                .createdAt(dispute.getCreatedAt())
+                .metadata(metadata(
+                        "assignedTo", dispute.getAssignedTo(),
+                        "createdBy", dispute.getCreatedBy(),
+                        "resolutionNote", dispute.getResolutionNote()))
+                .build();
+    }
+
+    private InvestigationTimelineItemResponse toDisputeNoteItem(TransactionDispute dispute, TransactionDisputeNote note) {
+        return InvestigationTimelineItemResponse.builder()
+                .itemId(note.getNoteId())
+                .itemType("DISPUTE_NOTE")
+                .title("Dispute note")
+                .description(note.getNote())
+                .userId(dispute.getUserId())
+                .transactionId(dispute.getTransactionId())
+                .createdAt(note.getCreatedAt())
+                .metadata(metadata("author", note.getAuthor(), "disputeNumber", dispute.getDisputeNumber()))
                 .build();
     }
 

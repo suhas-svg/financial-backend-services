@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
-import { Activity, ClipboardList, FolderKanban, Gauge, Landmark, LogOut, Search, Shield, ShieldAlert } from "lucide-react";
+import { Activity, CircleHelp, ClipboardList, FolderKanban, Gauge, Landmark, LogOut, Search, Shield, ShieldAlert } from "lucide-react";
 import clsx from "clsx";
 import { Button } from "./ui";
 import { useAuth } from "../state/useAuth";
@@ -12,6 +12,7 @@ const adminItems = [
   { to: "/admin/audit-log", label: "Audit Log", icon: ClipboardList },
   { to: "/admin/risk-alerts", label: "Risk Alerts", icon: ShieldAlert },
   { to: "/admin/risk-cases", label: "Risk Cases", icon: FolderKanban },
+  { to: "/admin/disputes", label: "Disputes", icon: CircleHelp },
   { to: "/admin/investigations", label: "Investigations", icon: Search }
 ];
 

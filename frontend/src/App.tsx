@@ -8,9 +8,11 @@ import { AdminAuditLogPage } from "./pages/AdminAuditLogPage";
 import { AdminInvestigationsPage } from "./pages/AdminInvestigationsPage";
 import { AdminMonitoringPage } from "./pages/AdminMonitoringPage";
 import { AdminOverviewPage } from "./pages/AdminOverviewPage";
+import { AdminDisputesPage } from "./pages/AdminDisputesPage";
 import { AdminRiskAlertsPage } from "./pages/AdminRiskAlertsPage";
 import { AdminRiskCasesPage } from "./pages/AdminRiskCasesPage";
 import { AdminTransactionsPage } from "./pages/AdminTransactionsPage";
+import { DisputesPage } from "./pages/DisputesPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MoveMoneyPage } from "./pages/MoveMoneyPage";
@@ -28,6 +30,7 @@ export function App() {
           <Route path="accounts" element={<AccountsPage />} />
           <Route path="move-money" element={<MoveMoneyPage />} />
           <Route path="transactions" element={<TransactionsPage />} />
+          <Route path="disputes" element={<DisputesPage />} />
         </Route>
         <Route element={<RequireAuth admin />}>
           <Route path="admin" element={<AdminLayout />}>
@@ -38,6 +41,7 @@ export function App() {
             <Route path="audit-log" element={<AdminAuditLogPage />} />
             <Route path="risk-alerts" element={<AdminRiskAlertsPage />} />
             <Route path="risk-cases" element={<AdminRiskCasesPage />} />
+            <Route path="disputes" element={<AdminDisputesPage />} />
             <Route path="investigations" element={<AdminInvestigationsPage />} />
           </Route>
         </Route>

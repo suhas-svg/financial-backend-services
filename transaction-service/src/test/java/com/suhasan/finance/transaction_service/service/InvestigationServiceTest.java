@@ -14,11 +14,16 @@ import com.suhasan.finance.transaction_service.entity.RiskCaseNote;
 import com.suhasan.finance.transaction_service.entity.RiskCasePriority;
 import com.suhasan.finance.transaction_service.entity.RiskCaseStatus;
 import com.suhasan.finance.transaction_service.entity.Transaction;
+import com.suhasan.finance.transaction_service.entity.DisputeReasonCode;
+import com.suhasan.finance.transaction_service.entity.DisputeStatus;
+import com.suhasan.finance.transaction_service.entity.TransactionDispute;
+import com.suhasan.finance.transaction_service.entity.TransactionDisputeNote;
 import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
 import com.suhasan.finance.transaction_service.repository.AuditLogEntryRepository;
 import com.suhasan.finance.transaction_service.repository.RiskAlertRepository;
 import com.suhasan.finance.transaction_service.repository.RiskCaseRepository;
+import com.suhasan.finance.transaction_service.repository.TransactionDisputeRepository;
 import com.suhasan.finance.transaction_service.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,6 +38,7 @@ import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -56,6 +62,9 @@ class InvestigationServiceTest {
     @Mock
     private RiskCaseRepository riskCaseRepository;
 
+    @Mock
+    private TransactionDisputeRepository disputeRepository;
+
     private InvestigationService investigationService;
 
     @BeforeEach
@@ -65,6 +74,7 @@ class InvestigationServiceTest {
                 auditLogEntryRepository,
                 riskAlertRepository,
                 riskCaseRepository,
+                disputeRepository,
                 new ObjectMapper());
     }
 
@@ -77,16 +87,18 @@ class InvestigationServiceTest {
         when(auditLogEntryRepository.findAll(any(Specification.class))).thenReturn(List.of(audit()));
         when(riskAlertRepository.findAll(any(Specification.class))).thenReturn(List.of(alert));
         when(riskCaseRepository.findAll(any(Specification.class))).thenReturn(List.of(riskCase));
+        when(disputeRepository.findAll(any(Specification.class))).thenReturn(List.of(dispute()));
 
         Page<InvestigationTimelineItemResponse> result = investigationService.getTimeline(
                 InvestigationFilter.builder().caseId("case-1").build(),
                 PageRequest.of(0, 50, Sort.by(Sort.Direction.DESC, "createdAt")));
 
-        assertThat(result.getTotalElements()).isEqualTo(5);
+        assertThat(result.getTotalElements()).isEqualTo(7);
         assertThat(result.getContent()).extracting(InvestigationTimelineItemResponse::getItemType)
-                .containsExactly("CASE_NOTE", "RISK_CASE", "RISK_ALERT", "AUDIT_EVENT", "TRANSACTION");
+                .containsExactly("CASE_NOTE", "DISPUTE_NOTE", "RISK_CASE", "DISPUTE", "RISK_ALERT", "AUDIT_EVENT", "TRANSACTION");
         assertThat(result.getContent().get(0).getCaseId()).isEqualTo("case-1");
-        assertThat(result.getContent().get(2).getAlertId()).isEqualTo("alert-1");
+        assertThat(result.getContent().get(3).getTransactionId()).isEqualTo("txn-1");
+        assertThat(result.getContent().get(4).getAlertId()).isEqualTo("alert-1");
 
         ArgumentCaptor<Specification<Transaction>> transactionSpec = ArgumentCaptor.forClass(Specification.class);
         verify(transactionRepository).findAll(transactionSpec.capture());
@@ -98,6 +110,7 @@ class InvestigationServiceTest {
         when(auditLogEntryRepository.findAll(any(Specification.class))).thenReturn(List.of());
         when(riskAlertRepository.findAll(any(Specification.class))).thenReturn(List.of());
         when(riskCaseRepository.findAll(any(Specification.class))).thenReturn(List.of());
+        when(disputeRepository.findAll(any(Specification.class))).thenReturn(List.of());
 
         Page<InvestigationTimelineItemResponse> result = investigationService.getTimeline(
                 InvestigationFilter.builder().userId("missing").build(),
@@ -116,6 +129,7 @@ class InvestigationServiceTest {
         when(auditLogEntryRepository.findAll(any(Specification.class))).thenReturn(List.of(audit(), failedAudit()));
         when(riskAlertRepository.findAll(any(Specification.class))).thenReturn(List.of(alert));
         when(riskCaseRepository.findAll(any(Specification.class))).thenReturn(List.of(riskCase));
+        when(disputeRepository.findAll(any(Specification.class))).thenReturn(List.of(dispute()));
 
         InvestigationSummaryResponse summary = investigationService.getSummary(
                 InvestigationFilter.builder().alertId("alert-1").build());
@@ -124,6 +138,8 @@ class InvestigationServiceTest {
         assertThat(summary.getAuditEvents()).isEqualTo(2);
         assertThat(summary.getRiskAlerts()).isEqualTo(1);
         assertThat(summary.getRiskCases()).isEqualTo(1);
+        assertThat(summary.getDisputes()).isEqualTo(1);
+        assertThat(summary.getDisputeNotes()).isEqualTo(1);
         assertThat(summary.getFailures()).isEqualTo(2);
         assertThat(summary.getReversals()).isEqualTo(1);
         assertThat(summary.getHighSeverityItems()).isEqualTo(2);
@@ -138,6 +154,7 @@ class InvestigationServiceTest {
         when(auditLogEntryRepository.findAll(any(Specification.class))).thenReturn(List.of(audit()));
         when(riskAlertRepository.findAll(any(Specification.class))).thenReturn(List.of(alert));
         when(riskCaseRepository.findAll(any(Specification.class))).thenReturn(List.of(riskCase));
+        when(disputeRepository.findAll(any(Specification.class))).thenReturn(List.of(dispute()));
 
         String csv = investigationService.exportTimelineCsv(
                 InvestigationFilter.builder().caseId("case-1").build());
@@ -148,6 +165,8 @@ class InvestigationServiceTest {
         assertThat(csv).contains("alert-1,RISK_ALERT");
         assertThat(csv).contains("case-1,RISK_CASE");
         assertThat(csv).contains("CASE_NOTE");
+        assertThat(csv).contains("dispute-1,DISPUTE");
+        assertThat(csv).contains("dispute-note-1,DISPUTE_NOTE");
         assertThat(csv).contains("\"{\"\"type\"\":\"\"TRANSFER\"\"");
     }
 
@@ -278,5 +297,30 @@ class InvestigationServiceTest {
                 .build();
         riskCase.setNotes(List.of(note));
         return riskCase;
+    }
+
+    private TransactionDispute dispute() {
+        TransactionDispute dispute = TransactionDispute.builder()
+                .disputeId("dispute-1")
+                .disputeNumber("DP-20260510-0001")
+                .transactionId("txn-1")
+                .userId("customer")
+                .status(DisputeStatus.IN_REVIEW)
+                .reasonCode(DisputeReasonCode.UNAUTHORIZED)
+                .description("Customer reported unauthorized transfer")
+                .assignedTo("ops")
+                .createdBy("customer")
+                .createdAt(LocalDateTime.parse("2026-05-10T10:03:00"))
+                .updatedAt(LocalDateTime.parse("2026-05-10T10:03:00"))
+                .notes(new ArrayList<>())
+                .build();
+        dispute.getNotes().add(TransactionDisputeNote.builder()
+                .noteId("dispute-note-1")
+                .dispute(dispute)
+                .author("ops")
+                .note("Requested customer confirmation")
+                .createdAt(LocalDateTime.parse("2026-05-10T10:04:00"))
+                .build());
+        return dispute;
     }
 }
