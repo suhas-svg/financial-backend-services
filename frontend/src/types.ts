@@ -30,6 +30,34 @@ export type Account = {
   dueDate?: string;
 };
 
+export type NotificationType = "TRANSACTION_COMPLETED" | "TRANSACTION_FAILED" | "ACCOUNT_FROZEN" | "ACCOUNT_UNFROZEN" | "DISPUTE_CREATED" | "DISPUTE_STATUS_UPDATED";
+export type NotificationSeverity = "INFO" | "SUCCESS" | "WARNING" | "CRITICAL";
+export type NotificationStatus = "UNREAD" | "READ";
+export type NotificationSourceType = "ACCOUNT" | "TRANSACTION" | "DISPUTE";
+
+export type Notification = {
+  notificationId: number;
+  userId: string;
+  type: NotificationType;
+  severity: NotificationSeverity;
+  status: NotificationStatus;
+  title: string;
+  message: string;
+  sourceType: NotificationSourceType;
+  sourceId: string;
+  dedupeKey: string;
+  createdAt: string;
+  readAt?: string;
+};
+
+export type NotificationSummary = {
+  total: number;
+  unread: number;
+  bySeverity: Partial<Record<NotificationSeverity, number>>;
+  byType: Partial<Record<NotificationType, number>>;
+  bySourceType: Partial<Record<NotificationSourceType, number>>;
+};
+
 export type TransactionType = "DEPOSIT" | "WITHDRAWAL" | "TRANSFER" | "REVERSAL" | string;
 export type TransactionStatus = "COMPLETED" | "PENDING" | "FAILED" | "REVERSED" | string;
 export type DisputeStatus = "OPEN" | "IN_REVIEW" | "APPROVED" | "DENIED" | "CLOSED";

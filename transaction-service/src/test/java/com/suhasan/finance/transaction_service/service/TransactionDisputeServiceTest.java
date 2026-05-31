@@ -1,5 +1,6 @@
 package com.suhasan.finance.transaction_service.service;
 
+import com.suhasan.finance.transaction_service.client.ResilientAccountServiceClient;
 import com.suhasan.finance.transaction_service.dto.DisputeCreateRequest;
 import com.suhasan.finance.transaction_service.dto.DisputeNoteRequest;
 import com.suhasan.finance.transaction_service.dto.DisputeStatusUpdateRequest;
@@ -31,6 +32,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -49,11 +51,14 @@ class TransactionDisputeServiceTest {
     @Mock
     private AuditService auditService;
 
+    @Mock
+    private ResilientAccountServiceClient accountServiceClient;
+
     private TransactionDisputeService disputeService;
 
     @BeforeEach
     void setUp() {
-        disputeService = new TransactionDisputeService(disputeRepository, noteRepository, transactionRepository, auditService);
+        disputeService = new TransactionDisputeService(disputeRepository, noteRepository, transactionRepository, auditService, accountServiceClient);
     }
 
     @Test
@@ -73,6 +78,25 @@ class TransactionDisputeServiceTest {
         assertThat(result.getStatus()).isEqualTo(DisputeStatus.OPEN);
         assertThat(result.getReasonCode()).isEqualTo(DisputeReasonCode.UNAUTHORIZED);
         assertThat(result.getDisputeNumber()).startsWith("DP-");
+        verify(auditService).logDisputeEvent("DISPUTE_CREATED", result.getDisputeId(), "txn-1", "customer", "I did not authorize this transaction.");
+        verify(accountServiceClient).createNotification(any(ResilientAccountServiceClient.NotificationRequest.class));
+    }
+
+    @Test
+    void createDispute_DoesNotFailWhenNotificationEmissionFails() {
+        Transaction transaction = transaction("txn-1", "customer", TransactionStatus.COMPLETED, LocalDateTime.now().minusDays(5));
+        when(transactionRepository.findById("txn-1")).thenReturn(Optional.of(transaction));
+        when(disputeRepository.existsActiveByTransactionId("txn-1")).thenReturn(false);
+        when(disputeRepository.countByCreatedAtBetween(any(), any())).thenReturn(0L);
+        when(disputeRepository.save(any(TransactionDispute.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(new RuntimeException("account service down"))
+                .when(accountServiceClient).createNotification(any(ResilientAccountServiceClient.NotificationRequest.class));
+
+        TransactionDisputeResponse result = disputeService.createDispute(
+                new DisputeCreateRequest("txn-1", DisputeReasonCode.UNAUTHORIZED, "I did not authorize this transaction."),
+                "customer");
+
+        assertThat(result.getStatus()).isEqualTo(DisputeStatus.OPEN);
         verify(auditService).logDisputeEvent("DISPUTE_CREATED", result.getDisputeId(), "txn-1", "customer", "I did not authorize this transaction.");
     }
 

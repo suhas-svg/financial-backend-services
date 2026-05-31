@@ -11,6 +11,7 @@ import io.github.resilience4j.timelimiter.TimeLimiter;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
@@ -298,6 +299,24 @@ public class ResilientAccountServiceClient {
         }
     }
 
+    public void createNotification(NotificationRequest request) {
+        String serviceToken = generateInternalServiceToken();
+        try {
+            WebClient webClient = webClientBuilder.baseUrl(accountServiceBaseUrl).build();
+            webClient.post()
+                    .uri("/api/internal/notifications")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceToken)
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .bodyValue(request)
+                    .retrieve()
+                    .bodyToMono(Void.class)
+                    .timeout(Duration.ofMillis(timeout))
+                    .block();
+        } catch (Exception e) {
+            throw mapServiceException("notification creation", e);
+        }
+    }
+
     private Mono<Boolean> checkHealthAsync() {
         WebClient webClient = webClientBuilder.baseUrl(accountServiceBaseUrl).build();
         return webClient.get()
@@ -416,6 +435,21 @@ public class ResilientAccountServiceClient {
     public static class HoldTransitionRequest {
         private String transactionId;
         private String reason;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class NotificationRequest {
+        private String userId;
+        private String type;
+        private String severity;
+        private String title;
+        private String message;
+        private String sourceType;
+        private String sourceId;
+        private String dedupeKey;
     }
 
     @Data

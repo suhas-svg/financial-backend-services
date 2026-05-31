@@ -1,18 +1,21 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
-import { ArrowLeftRight, Banknote, CircleHelp, Gauge, Landmark, LogOut, WalletCards } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowLeftRight, Banknote, Bell, CircleHelp, Gauge, Landmark, LogOut, WalletCards } from "lucide-react";
 import clsx from "clsx";
 import { Button } from "./ui";
 import { useAuth } from "../state/useAuth";
+import { getNotificationSummary } from "../lib/queries";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: Gauge },
   { to: "/accounts", label: "Accounts", icon: WalletCards },
   { to: "/move-money", label: "Move Money", icon: ArrowLeftRight },
   { to: "/transactions", label: "Transactions", icon: Banknote },
-  { to: "/disputes", label: "Disputes", icon: CircleHelp }
+  { to: "/disputes", label: "Disputes", icon: CircleHelp },
+  { to: "/notifications", label: "Notifications", icon: Bell }
 ];
 
-function NavigationLink({ to, label, icon: Icon }: { to: string; label: string; icon: React.ComponentType<{ className?: string }> }) {
+function NavigationLink({ to, label, icon: Icon, badge }: { to: string; label: string; icon: React.ComponentType<{ className?: string }>; badge?: number }) {
   return (
     <NavLink
       to={to}
@@ -25,12 +28,15 @@ function NavigationLink({ to, label, icon: Icon }: { to: string; label: string; 
     >
       <Icon className="h-4 w-4" />
       <span>{label}</span>
+      {badge ? <span aria-hidden="true" className="ml-auto rounded-full bg-danger px-2 py-0.5 text-xs font-semibold text-white">{badge}</span> : null}
     </NavLink>
   );
 }
 
 export function CustomerLayout() {
   const { session, logout } = useAuth();
+  const summary = useQuery({ queryKey: ["notification-summary"], queryFn: getNotificationSummary });
+  const unread = summary.data?.unread ?? 0;
 
   return (
     <div className="min-h-screen bg-slate-100 text-ink">
@@ -41,7 +47,7 @@ export function CustomerLayout() {
         </Link>
         <nav className="mt-6 grid gap-1">
           {navItems.map((item) => (
-            <NavigationLink key={item.to} {...item} />
+            <NavigationLink key={item.to} {...item} badge={item.to === "/notifications" ? unread : undefined} />
           ))}
         </nav>
       </aside>
