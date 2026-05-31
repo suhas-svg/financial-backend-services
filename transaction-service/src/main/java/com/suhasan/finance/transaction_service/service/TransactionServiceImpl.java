@@ -176,6 +176,7 @@ public class TransactionServiceImpl implements TransactionService {
             riskEvaluationService.evaluateCompletedTransaction(transaction);
             metricsService.recordTransactionCompleted(TransactionType.TRANSFER,
                     TransactionStatus.COMPLETED, request.getAmount(), processingTime);
+            emitTransactionNotification(transaction);
             return mapToResponse(transaction);
         } catch (Exception e) {
             if (holdCaptured) {
@@ -211,6 +212,7 @@ public class TransactionServiceImpl implements TransactionService {
                     userId, e.getMessage(), "PROCESSING_ERROR");
             riskEvaluationService.evaluateFailedTransaction(transaction);
             metricsService.recordTransactionFailed(TransactionType.TRANSFER, "PROCESSING_ERROR");
+            emitTransactionNotification(transaction);
             throw new RuntimeException("Transfer failed: " + e.getMessage());
         }
     }
@@ -278,12 +280,14 @@ public class TransactionServiceImpl implements TransactionService {
             transaction.setProcessingState(TransactionProcessingState.COMPLETED);
             transaction = transactionRepository.save(transaction);
             riskEvaluationService.evaluateCompletedTransaction(transaction);
+            emitTransactionNotification(transaction);
             return mapToResponse(transaction);
         } catch (Exception e) {
             transaction.setStatus(TransactionStatus.FAILED);
             transaction.setProcessedAt(LocalDateTime.now());
             transactionRepository.save(transaction);
             riskEvaluationService.evaluateFailedTransaction(transaction);
+            emitTransactionNotification(transaction);
             throw new RuntimeException("Deposit failed: " + e.getMessage());
         }
     }
@@ -380,6 +384,7 @@ public class TransactionServiceImpl implements TransactionService {
             transaction.setProcessingState(TransactionProcessingState.COMPLETED);
             transaction = transactionRepository.save(transaction);
             riskEvaluationService.evaluateCompletedTransaction(transaction);
+            emitTransactionNotification(transaction);
             return mapToResponse(transaction);
         } catch (Exception e) {
             if (holdPlaced && !holdCaptured) {
@@ -390,6 +395,7 @@ public class TransactionServiceImpl implements TransactionService {
                 transaction.setProcessedAt(LocalDateTime.now());
                 transactionRepository.save(transaction);
                 riskEvaluationService.evaluateFailedTransaction(transaction);
+                emitTransactionNotification(transaction);
             }
             throw new RuntimeException("Withdrawal failed: " + e.getMessage());
         }
@@ -1024,6 +1030,39 @@ public class TransactionServiceImpl implements TransactionService {
 
     private boolean isExternalAccount(String accountId) {
         return accountId != null && "EXTERNAL".equalsIgnoreCase(accountId.trim());
+    }
+
+    private void emitTransactionNotification(Transaction transaction) {
+        if (transaction == null
+                || transaction.getStatus() == null
+                || (transaction.getStatus() != TransactionStatus.COMPLETED && transaction.getStatus() != TransactionStatus.FAILED)) {
+            return;
+        }
+        try {
+            boolean completed = transaction.getStatus() == TransactionStatus.COMPLETED;
+            accountServiceClient.createNotification(ResilientAccountServiceClient.NotificationRequest.builder()
+                    .userId(transaction.getCreatedBy())
+                    .type(completed ? "TRANSACTION_COMPLETED" : "TRANSACTION_FAILED")
+                    .severity(completed ? "SUCCESS" : "WARNING")
+                    .title(completed ? "Transaction completed" : "Transaction failed")
+                    .message(transactionMessage(transaction, completed))
+                    .sourceType("TRANSACTION")
+                    .sourceId(transaction.getTransactionId())
+                    .dedupeKey("transaction:%s:%s".formatted(transaction.getTransactionId(), transaction.getStatus()))
+                    .build());
+        } catch (RuntimeException e) {
+            log.warn("Failed to create transaction notification for transaction {}: {}",
+                    transaction.getTransactionId(), e.getMessage());
+        }
+    }
+
+    private String transactionMessage(Transaction transaction, boolean completed) {
+        String status = completed ? "completed" : "failed";
+        return "%s %s for %s %s.".formatted(
+                transaction.getType(),
+                status,
+                transaction.getCurrency(),
+                transaction.getAmount());
     }
 
     private TransactionResponse mapToResponse(Transaction transaction) {

@@ -36,6 +36,7 @@ financial-backend-services/
 - View transaction details and user transaction stats.
 - Dispute eligible completed transactions from the last 60 days.
 - Review submitted disputes and resolution notes in the customer dispute history.
+- Review in-app notifications, unread counts, and message state for account, transaction, and dispute events.
 
 ### Admin/Ops App
 
@@ -71,6 +72,8 @@ financial-backend-services/
   - Positive balance operations update both ledger and available balances.
   - Account type validation for checking, savings, and credit accounts.
   - Health, metrics, and deployment endpoints.
+  - Customer notification APIs for listing, summary counts, marking one read, and marking all read.
+  - Internal/admin notification creation API secured to `ROLE_ADMIN` and `ROLE_INTERNAL_SERVICE`.
 - Transaction service:
   - Deposit, withdrawal, and transfer endpoints.
   - Frozen-account debit enforcement before withdrawals and outgoing transfer debits.
@@ -87,6 +90,26 @@ financial-backend-services/
   - Customer dispute submission and admin-only dispute queue APIs.
   - Admin-only investigation timeline, summary, and CSV export APIs.
   - Account-service integration for balance updates.
+  - Best-effort account-service notification emission for completed/failed transfer outcomes and dispute lifecycle updates.
+
+## Notification Center
+
+The v1 notification center is in-app only. It does not send email, SMS, push notifications, replies, or attachments.
+
+Customer API:
+
+- `GET /api/notifications?page=&size=&status=&type=&sourceType=&from=&to=`
+- `GET /api/notifications/summary`
+- `PATCH /api/notifications/{notificationId}/read`
+- `PATCH /api/notifications/read-all`
+
+Internal creation API:
+
+- `POST /api/internal/notifications`
+
+Notification records are customer-owned in `account-service`. Customer endpoints always use the authenticated user, while internal/admin callers may create notifications for any `userId`. The internal endpoint requires `ROLE_ADMIN` or `ROLE_INTERNAL_SERVICE`.
+
+Event sources currently create notifications for account freeze/unfreeze, transfer completion/failure, dispute creation, and dispute status changes to `APPROVED`, `DENIED`, or `CLOSED`. Source workflows treat notification delivery as best-effort: failures are logged and do not roll back money movement, account status changes, or dispute updates. Dedupe keys keep repeated source events from creating duplicate inbox rows.
 
 ## Technology Stack
 

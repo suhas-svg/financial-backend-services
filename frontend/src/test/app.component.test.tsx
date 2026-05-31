@@ -83,6 +83,12 @@ function mockFetch(handler?: (url: string, init?: RequestInit) => Promise<Respon
     if (url.includes("/api/accounts")) {
       return jsonResponse({ ...emptyPage, content: [sampleAccount], totalElements: 1, totalPages: 1 });
     }
+    if (url.includes("/api/notifications/summary")) {
+      return jsonResponse({ total: 0, unread: 0, bySeverity: {}, byType: {}, bySourceType: {} });
+    }
+    if (url.includes("/api/notifications")) {
+      return jsonResponse(emptyPage);
+    }
     if (url.includes("/api/transactions/user/stats")) {
       return jsonResponse({ totalTransactions: 0, successRate: 0, transactionCountsByType: {} });
     }
@@ -335,6 +341,7 @@ describe("customer shell navigation", () => {
     expect(screen.getByRole("link", { name: "Move Money" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Transactions" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Disputes" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.queryByText("Operations")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Admin Accounts" })).not.toBeInTheDocument();
     unmount();
@@ -346,6 +353,7 @@ describe("customer shell navigation", () => {
     expect(screen.getByRole("link", { name: "Move Money" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Transactions" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Disputes" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.queryByText("Operations")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Admin Accounts" })).not.toBeInTheDocument();
   });
@@ -382,6 +390,61 @@ describe("customer shell navigation", () => {
 
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Monitoring" })).not.toBeInTheDocument();
+  });
+});
+
+describe("customer notifications", () => {
+  it("shows unread badge and marks notifications read", async () => {
+    const user = userEvent.setup();
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/notifications/summary")) {
+        return jsonResponse({ total: 2, unread: 1, bySeverity: { SUCCESS: 1 }, byType: { TRANSACTION_COMPLETED: 1 }, bySourceType: { TRANSACTION: 1 } });
+      }
+      if (url.includes("/api/notifications/1/read") && init?.method === "PATCH") {
+        return jsonResponse({ notificationId: 1, status: "READ" });
+      }
+      if (url.includes("/api/notifications/read-all") && init?.method === "PATCH") {
+        return jsonResponse({ updated: 1 });
+      }
+      if (url.includes("/api/notifications")) {
+        return jsonResponse({
+          ...emptyPage,
+          content: [
+            {
+              notificationId: 1,
+              userId: "customer",
+              type: "TRANSACTION_COMPLETED",
+              severity: "SUCCESS",
+              status: "UNREAD",
+              title: "Transaction completed",
+              message: "TRANSFER completed for USD 100.00.",
+              sourceType: "TRANSACTION",
+              sourceId: "txn-1",
+              dedupeKey: "transaction:txn-1:COMPLETED",
+              createdAt: "2026-05-30T10:00:00Z"
+            }
+          ],
+          totalElements: 1,
+          totalPages: 1
+        });
+      }
+      return undefined;
+    });
+
+    renderApp("/notifications", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    expect(await screen.findByRole("heading", { name: "Notifications" })).toBeInTheDocument();
+    expect(await screen.findByText("Transaction completed")).toBeInTheDocument();
+    expect(screen.getByText("1 unread")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Status"), "UNREAD");
+    await user.selectOptions(screen.getByLabelText("Type"), "TRANSACTION_COMPLETED");
+    expect(calls.some(({ url }) => url.includes("/account-api/api/notifications") && url.includes("status=UNREAD") && url.includes("type=TRANSACTION_COMPLETED"))).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: "Mark read" }));
+    await waitFor(() => expect(calls.some(({ url, init }) => url.includes("/account-api/api/notifications/1/read") && init?.method === "PATCH")).toBe(true));
+
+    await user.click(screen.getByRole("button", { name: "Mark all read" }));
+    await waitFor(() => expect(calls.some(({ url, init }) => url.includes("/account-api/api/notifications/read-all") && init?.method === "PATCH")).toBe(true));
   });
 });
 

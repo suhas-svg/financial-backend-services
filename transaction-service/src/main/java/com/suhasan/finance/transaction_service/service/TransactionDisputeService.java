@@ -1,5 +1,6 @@
 package com.suhasan.finance.transaction_service.service;
 
+import com.suhasan.finance.transaction_service.client.ResilientAccountServiceClient;
 import com.suhasan.finance.transaction_service.dto.DisputeCreateRequest;
 import com.suhasan.finance.transaction_service.dto.DisputeFilter;
 import com.suhasan.finance.transaction_service.dto.DisputeNoteRequest;
@@ -16,6 +17,7 @@ import com.suhasan.finance.transaction_service.repository.TransactionDisputeRepo
 import com.suhasan.finance.transaction_service.repository.TransactionRepository;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -30,6 +32,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class TransactionDisputeService {
 
     private static final DateTimeFormatter DISPUTE_DAY = DateTimeFormatter.BASIC_ISO_DATE;
@@ -39,6 +42,7 @@ public class TransactionDisputeService {
     private final TransactionDisputeNoteRepository noteRepository;
     private final TransactionRepository transactionRepository;
     private final AuditService auditService;
+    private final ResilientAccountServiceClient accountServiceClient;
 
     @Transactional
     public TransactionDisputeResponse createDispute(DisputeCreateRequest request, String userId) {
@@ -70,6 +74,7 @@ public class TransactionDisputeService {
                 .build();
         TransactionDispute saved = disputeRepository.save(dispute);
         auditService.logDisputeEvent("DISPUTE_CREATED", saved.getDisputeId(), saved.getTransactionId(), userId, saved.getDescription());
+        emitDisputeCreatedNotification(saved);
         return toResponse(saved);
     }
 
@@ -144,6 +149,7 @@ public class TransactionDisputeService {
         }
         TransactionDispute saved = disputeRepository.save(dispute);
         auditService.logDisputeEvent("DISPUTE_STATUS_UPDATED", saved.getDisputeId(), saved.getTransactionId(), admin, request.getStatus().name());
+        emitDisputeStatusNotification(saved);
         return toResponse(saved);
     }
 
@@ -246,5 +252,47 @@ public class TransactionDisputeService {
 
     private String trimOrNull(String value) {
         return hasText(value) ? value.trim() : null;
+    }
+
+    private void emitDisputeCreatedNotification(TransactionDispute dispute) {
+        try {
+            accountServiceClient.createNotification(ResilientAccountServiceClient.NotificationRequest.builder()
+                    .userId(dispute.getUserId())
+                    .type("DISPUTE_CREATED")
+                    .severity("INFO")
+                    .title("Dispute submitted")
+                    .message("Your dispute %s has been submitted for review.".formatted(dispute.getDisputeNumber()))
+                    .sourceType("DISPUTE")
+                    .sourceId(dispute.getDisputeId())
+                    .dedupeKey("dispute:%s:created".formatted(dispute.getDisputeId()))
+                    .build());
+        } catch (RuntimeException e) {
+            log.warn("Failed to create dispute notification for dispute {}: {}", dispute.getDisputeId(), e.getMessage());
+        }
+    }
+
+    private void emitDisputeStatusNotification(TransactionDispute dispute) {
+        if (dispute.getStatus() != DisputeStatus.APPROVED
+                && dispute.getStatus() != DisputeStatus.DENIED
+                && dispute.getStatus() != DisputeStatus.CLOSED) {
+            return;
+        }
+        try {
+            accountServiceClient.createNotification(ResilientAccountServiceClient.NotificationRequest.builder()
+                    .userId(dispute.getUserId())
+                    .type("DISPUTE_STATUS_UPDATED")
+                    .severity(dispute.getStatus() == DisputeStatus.APPROVED ? "SUCCESS" : "WARNING")
+                    .title("Dispute status updated")
+                    .message("Your dispute %s is now %s.%s".formatted(
+                            dispute.getDisputeNumber(),
+                            dispute.getStatus(),
+                            hasText(dispute.getResolutionNote()) ? " " + dispute.getResolutionNote() : ""))
+                    .sourceType("DISPUTE")
+                    .sourceId(dispute.getDisputeId())
+                    .dedupeKey("dispute:%s:status:%s".formatted(dispute.getDisputeId(), dispute.getStatus()))
+                    .build());
+        } catch (RuntimeException e) {
+            log.warn("Failed to create dispute status notification for dispute {}: {}", dispute.getDisputeId(), e.getMessage());
+        }
     }
 }

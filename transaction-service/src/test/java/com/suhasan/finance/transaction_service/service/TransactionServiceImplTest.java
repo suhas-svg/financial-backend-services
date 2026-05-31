@@ -152,10 +152,41 @@ class TransactionServiceImplTest {
                                 anyString(), eq("TRANSFER_CAPTURE"));
                 verify(accountServiceClient).applyBalanceOperation(eq("acc2"), anyString(), eq(BigDecimal.valueOf(100)),
                                 anyString(), eq("TRANSFER_CREDIT"), eq(true));
+                verify(accountServiceClient).createNotification(any(ResilientAccountServiceClient.NotificationRequest.class));
                 verify(transactionRepository, atLeast(2)).save(any(Transaction.class));
                 verify(auditService).logTransactionInitiated(anyString(), eq(TransactionType.TRANSFER),
                                 eq("acc1"), eq("acc2"), eq(BigDecimal.valueOf(100)), eq(userId));
                 verify(metricsService).recordTransactionInitiated(TransactionType.TRANSFER);
+        }
+
+        @Test
+        void processTransfer_NotificationFailureDoesNotFailCompletedTransfer() {
+                when(accountServiceClient.getAccount("acc1")).thenReturn(fromAccount);
+                when(accountServiceClient.getAccount("acc2")).thenReturn(toAccount);
+                when(transactionRepository.save(any(Transaction.class))).thenReturn(transaction);
+                when(accountServiceClient.placeDebitHold(eq("acc1"), anyString(), eq(BigDecimal.valueOf(100)),
+                                anyString(), eq("TRANSFER_HOLD")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-transfer",
+                                                1L, true, BigDecimal.valueOf(1000), BigDecimal.valueOf(900),
+                                                "PLACED", null));
+                when(accountServiceClient.captureDebitHold(eq("acc1"), anyString(), anyString(),
+                                eq("TRANSFER_CAPTURE")))
+                                .thenReturn(new ResilientAccountServiceClient.DebitHoldResponse("hold-transfer",
+                                                1L, true, BigDecimal.valueOf(900), BigDecimal.valueOf(900),
+                                                "CAPTURED", null));
+                when(accountServiceClient.applyBalanceOperation(eq("acc2"), anyString(), eq(BigDecimal.valueOf(100)),
+                                anyString(), eq("TRANSFER_CREDIT"), eq(true)))
+                                .thenReturn(new ResilientAccountServiceClient.BalanceOperationResponse(2L, "op-credit",
+                                                true,
+                                                BigDecimal.valueOf(600), 1L, "APPLIED"));
+                doThrow(new RuntimeException("account service down"))
+                                .when(accountServiceClient)
+                                .createNotification(any(ResilientAccountServiceClient.NotificationRequest.class));
+
+                TransactionResponse result = transactionService.processTransfer(transferRequest, userId, null);
+
+                assertNotNull(result);
+                assertEquals(TransactionStatus.COMPLETED, result.getStatus());
         }
 
         @Test

@@ -1,4 +1,4 @@
-import type { Account, AccountStatus, AuditLogEntry, AuditSummary, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, Limits, Page, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, Transaction, TransactionDispute, TransactionStats } from "../types";
+import type { Account, AccountStatus, AuditLogEntry, AuditSummary, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, Limits, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, Page, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, Transaction, TransactionDispute, TransactionStats } from "../types";
 import { apiRequest, toQuery } from "./api";
 import type { AccountValues, DisputeNoteValues, DisputeStatusValues, DisputeValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, TransferValues } from "./schemas";
 import { getSession } from "./session";
@@ -42,6 +42,29 @@ export function deleteAccount(id: number) {
 
 export function updateAccountStatus(id: number, values: { status: AccountStatus; reason: string }) {
   return apiRequest<Account>("account", `/api/accounts/${id}/status`, { method: "PATCH", body: values });
+}
+
+export function listNotifications(params: {
+  status?: NotificationStatus | "";
+  type?: NotificationType | "";
+  severity?: NotificationSeverity | "";
+  sourceType?: NotificationSourceType | "";
+  page?: number;
+  size?: number;
+} = {}) {
+  return apiRequest<Page<Notification>>("account", `/api/notifications${toQuery({ page: 0, size: 20, sort: "createdAt,desc", ...params })}`);
+}
+
+export function getNotificationSummary() {
+  return apiRequest<NotificationSummary>("account", "/api/notifications/summary");
+}
+
+export function markNotificationRead(notificationId: number) {
+  return apiRequest<Notification>("account", `/api/notifications/${notificationId}/read`, { method: "PATCH" });
+}
+
+export function markAllNotificationsRead() {
+  return apiRequest<{ updated: number }>("account", "/api/notifications/read-all", { method: "PATCH" });
 }
 
 export function getTransactions(page = 0) {

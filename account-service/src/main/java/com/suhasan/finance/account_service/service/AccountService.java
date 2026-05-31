@@ -5,6 +5,7 @@ import com.suhasan.finance.account_service.dto.BalanceOperationRequest;
 import com.suhasan.finance.account_service.dto.BalanceOperationResponse;
 import com.suhasan.finance.account_service.dto.DebitHoldRequest;
 import com.suhasan.finance.account_service.dto.DebitHoldResponse;
+import com.suhasan.finance.account_service.dto.NotificationCreateRequest;
 import com.suhasan.finance.account_service.entity.Account;
 import com.suhasan.finance.account_service.entity.AccountBalanceOperation;
 import com.suhasan.finance.account_service.entity.AccountBalanceOperationId;
@@ -12,6 +13,9 @@ import com.suhasan.finance.account_service.entity.AccountDebitHold;
 import com.suhasan.finance.account_service.entity.AccountStatus;
 import com.suhasan.finance.account_service.entity.BalanceOperationStatus;
 import com.suhasan.finance.account_service.entity.DebitHoldStatus;
+import com.suhasan.finance.account_service.entity.NotificationSeverity;
+import com.suhasan.finance.account_service.entity.NotificationSourceType;
+import com.suhasan.finance.account_service.entity.NotificationType;
 import com.suhasan.finance.account_service.mapper.AccountMapper;
 import com.suhasan.finance.account_service.repository.AccountBalanceOperationRepository;
 import com.suhasan.finance.account_service.repository.AccountDebitHoldRepository;
@@ -22,8 +26,10 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -31,6 +37,7 @@ import java.util.List;
 
 @Service
 @Transactional
+@Slf4j
 public class AccountService {
 
     private final AccountRepository accountRepository;
@@ -38,6 +45,7 @@ public class AccountService {
     private final AccountDebitHoldRepository debitHoldRepository;
     private final AccountMapper accountMapper;
     private final MeterRegistry meterRegistry;
+    private NotificationService notificationService;
 
     private Counter createdCounter;
     private Timer creationTimer;
@@ -53,6 +61,11 @@ public class AccountService {
         this.accountMapper = accountMapper;
         this.meterRegistry = meterRegistry;
         initMetrics();
+    }
+
+    @Autowired
+    void setNotificationService(NotificationService notificationService) {
+        this.notificationService = notificationService;
     }
 
     private void initMetrics() {
@@ -103,7 +116,9 @@ public class AccountService {
         existing.setStatusReason(reason.trim());
         existing.setStatusUpdatedAt(LocalDateTime.now());
         existing.setStatusUpdatedBy(actor);
-        return accountRepository.save(existing);
+        Account saved = accountRepository.save(existing);
+        emitAccountStatusNotification(saved);
+        return saved;
     }
 
     public void delete(Long id) {
@@ -373,6 +388,40 @@ public class AccountService {
                 || !request.getTransactionId().equals(existing.getTransactionId())
                 || request.getAmount().compareTo(existing.getAmount()) != 0) {
             throw new IllegalArgumentException("Debit hold replay does not match original request: " + request.getHoldId());
+        }
+    }
+
+    private void emitAccountStatusNotification(Account account) {
+        if (notificationService == null || account.getStatus() == null) {
+            return;
+        }
+        NotificationType type;
+        NotificationSeverity severity;
+        String title;
+        if (account.getStatus() == AccountStatus.FROZEN) {
+            type = NotificationType.ACCOUNT_FROZEN;
+            severity = NotificationSeverity.CRITICAL;
+            title = "Account frozen";
+        } else if (account.getStatus() == AccountStatus.ACTIVE) {
+            type = NotificationType.ACCOUNT_UNFROZEN;
+            severity = NotificationSeverity.SUCCESS;
+            title = "Account unfrozen";
+        } else {
+            return;
+        }
+        try {
+            notificationService.createInternal(NotificationCreateRequest.builder()
+                    .userId(account.getOwnerId())
+                    .type(type)
+                    .severity(severity)
+                    .title(title)
+                    .message(account.getStatusReason())
+                    .sourceType(NotificationSourceType.ACCOUNT)
+                    .sourceId(String.valueOf(account.getId()))
+                    .dedupeKey("account-status:%s:%s:%s".formatted(account.getId(), account.getStatus(), account.getStatusUpdatedAt()))
+                    .build());
+        } catch (RuntimeException e) {
+            log.warn("Failed to create account status notification for account {}: {}", account.getId(), e.getMessage());
         }
     }
 }
