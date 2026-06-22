@@ -11,7 +11,6 @@ import com.suhasan.finance.transaction_service.repository.RiskAlertRepository;
 import com.suhasan.finance.transaction_service.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -31,7 +30,7 @@ public class RiskEvaluationService {
     private final RiskAlertRepository riskAlertRepository;
     private final TransactionRepository transactionRepository;
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void evaluateCompletedTransaction(Transaction transaction) {
         if (transaction == null || transaction.getStatus() != TransactionStatus.COMPLETED) {
             return;
@@ -40,7 +39,7 @@ public class RiskEvaluationService {
         evaluateRapidTransfers(transaction);
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void evaluateFailedTransaction(Transaction transaction) {
         if (transaction == null || transaction.getCreatedBy() == null) {
             return;
@@ -72,7 +71,7 @@ public class RiskEvaluationService {
         }
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void evaluateReversalTransaction(Transaction transaction) {
         if (transaction == null || transaction.getCreatedBy() == null
                 || transaction.getType() != TransactionType.REVERSAL
