@@ -241,6 +241,42 @@ For production frontend deployment, use one of these patterns:
 
 The reverse-proxy option is preferred because it keeps browser-facing URLs consistent with local development.
 
+## Cross-Agent Handoff
+
+The repository includes a provider-neutral handoff protocol for continuing a task between Codex and Google Antigravity. Read [`.agent/PROTOCOL.md`](.agent/PROTOCOL.md) before using it.
+
+Create a checkpoint after tests have been run and before switching agents:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/agent-checkpoint.ps1 `
+  -SourceAgent codex -TargetAgent antigravity `
+  -TaskId double-entry-ledger `
+  -Objective "Implement the approved ledger MVP" `
+  -Completed "Journal schema" `
+  -Remaining "Reversal postings" `
+  -NextAction "Implement ReversalPostingService"
+```
+
+Review the generated `.agent/active-handoff.json`, then intentionally commit and push the application and handoff changes. The script reports suggested Git commands but never commits, pushes, merges, resets, or runs tests.
+
+Resume from the same reviewed branch and commit:
+
+```powershell
+# Codex to Antigravity
+powershell -ExecutionPolicy Bypass -File scripts/agent-resume.ps1 -Agent antigravity
+
+# Antigravity to Codex
+powershell -ExecutionPolicy Bypass -File scripts/agent-resume.ps1 -Agent codex
+```
+
+Resume verifies repository, branch, commit ancestry, schema version, lease ownership, and dirty-worktree state before acquiring a two-hour cooperative lease. The scripts cannot detect provider quota exhaustion or launch another provider automatically, so checkpoint after each plan task and every 20-30 minutes during long work.
+
+Run the dependency-free protocol tests with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/test-agent-handoff.ps1
+```
+
 ## API Surface Used By Frontend
 
 ### Auth
