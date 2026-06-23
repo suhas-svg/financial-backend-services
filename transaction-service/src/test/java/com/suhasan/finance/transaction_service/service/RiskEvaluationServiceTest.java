@@ -11,8 +11,11 @@ import com.suhasan.finance.transaction_service.repository.RiskAlertRepository;
 import com.suhasan.finance.transaction_service.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.Collection;
 
@@ -36,6 +39,21 @@ class RiskEvaluationServiceTest {
         transactionRepository = mock(TransactionRepository.class);
         riskEvaluationService = new RiskEvaluationService(riskAlertRepository, transactionRepository);
         when(riskAlertRepository.save(any(RiskAlert.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    @Test
+    void riskEvaluationJoinsTheTransactionThatPersistsTheEvent() throws Exception {
+        for (String methodName : new String[] {
+                "evaluateCompletedTransaction",
+                "evaluateFailedTransaction",
+                "evaluateReversalTransaction"
+        }) {
+            Method method = RiskEvaluationService.class.getMethod(methodName, Transaction.class);
+            Transactional transactional = method.getAnnotation(Transactional.class);
+
+            assertThat(transactional).isNotNull();
+            assertThat(transactional.propagation()).isEqualTo(Propagation.REQUIRED);
+        }
     }
 
     @Test

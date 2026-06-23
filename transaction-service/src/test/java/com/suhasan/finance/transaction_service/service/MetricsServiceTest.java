@@ -24,6 +24,18 @@ class MetricsServiceTest {
         meterRegistry = new SimpleMeterRegistry();
         metricsService = new MetricsService(meterRegistry);
     }
+
+    @Test
+    void metricsServiceDoesNotRegisterTheAspectOwnedProcessingTimer() {
+        metricsService.recordTransactionInitiated(TransactionType.TRANSFER);
+        metricsService.recordTransactionCompleted(
+                TransactionType.TRANSFER,
+                TransactionStatus.COMPLETED,
+                BigDecimal.TEN,
+                25L);
+
+        assertTrue(meterRegistry.find("transaction.processing.duration").meters().isEmpty());
+    }
     
     @Test
     void testRecordTransactionInitiated() {

@@ -35,7 +35,6 @@ public class MetricsService {
     private final ConcurrentHashMap<TransactionStatus, Counter> transactionStatusCounters = new ConcurrentHashMap<>();
     
     // Timers for performance metrics
-    private final Timer transactionProcessingTimer;
     private final Timer accountValidationTimer;
     private final Timer balanceCheckTimer;
     
@@ -72,10 +71,6 @@ public class MetricsService {
                 .register(meterRegistry);
         
         // Initialize timers
-        this.transactionProcessingTimer = Timer.builder("transaction.processing.duration")
-                .description("Time taken to process transactions")
-                .register(meterRegistry);
-                
         this.accountValidationTimer = Timer.builder("account.validation.duration")
                 .description("Time taken to validate accounts")
                 .register(meterRegistry);
@@ -155,8 +150,6 @@ public class MetricsService {
         transactionCompletedCounter.increment();
         transactionTypeCounters.get(type).increment();
         transactionStatusCounters.get(status).increment();
-        transactionProcessingTimer.record(processingTimeMs, java.util.concurrent.TimeUnit.MILLISECONDS);
-        
         activeTransactionsCount.decrementAndGet();
         dailyTransactionVolume.incrementAndGet();
         dailyTransactionAmount.addAndGet(amount.multiply(BigDecimal.valueOf(100)).longValue()); // Convert to cents

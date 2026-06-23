@@ -37,7 +37,7 @@ public class ResilienceConfig {
     @Value("${account-service.resilience.circuit-breaker.minimum-number-of-calls:5}")
     private int circuitBreakerMinimumNumberOfCalls;
 
-    @Value("${account-service.resilience.time-limiter.timeout:5000}")
+    @Value("${account-service.resilience.time-limiter.timeout:30000}")
     private long timeLimiterTimeout;
 
     /**

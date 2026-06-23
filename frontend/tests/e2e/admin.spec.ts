@@ -14,27 +14,29 @@ async function signIn(page: import("@playwright/test").Page, username: string, p
 test("admin can open monitoring pages when logged in with admin credentials", async ({ page }) => {
   await signIn(page, adminUsername, adminPassword);
 
-  await expect(page.getByText("Operations")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Admin Accounts" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Monitoring" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Ops Transactions" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Audit Log" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Risk Alerts" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  await page.goto("/admin");
+  await expect(page.getByRole("heading", { name: "Operations overview" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Admin Accounts", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Monitoring", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Ops Transactions", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Audit Log", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Risk Alerts", exact: true })).toBeVisible();
 
-  await page.getByRole("link", { name: "Monitoring" }).click();
+  await page.getByRole("link", { name: "Monitoring", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Monitoring" })).toBeVisible();
   await expect(page.getByText("Account health")).toBeVisible();
   await expect(page.getByText("Transaction health")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Available metrics" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Audit Log" }).click();
+  await page.getByRole("link", { name: "Audit Log", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Audit Log" })).toBeVisible();
   await expect(page.getByText("Total events")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Audit events" })).toBeVisible();
   await expect(page.getByPlaceholder("User ID")).toBeVisible();
   await expect(page.getByPlaceholder("Transaction ID")).toBeVisible();
 
-  await page.getByRole("link", { name: "Risk Alerts" }).click();
+  await page.getByRole("link", { name: "Risk Alerts", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Risk Alerts" })).toBeVisible();
   await expect(page.getByText("Total alerts")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Review queue" })).toBeVisible();

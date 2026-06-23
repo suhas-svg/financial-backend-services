@@ -26,7 +26,7 @@ public class AccountServiceClient {
     @Value("${account-service.base-url:http://localhost:8080}")
     private String accountServiceBaseUrl;
     
-    @Value("${account-service.timeout:5000}")
+    @Value("${account-service.timeout:30000}")
     private int timeout;
     
     /**
