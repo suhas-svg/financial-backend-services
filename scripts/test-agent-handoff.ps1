@@ -170,12 +170,142 @@ function Invoke-CheckpointTests {
     Test-LeaseRelease
 }
 
+function New-CheckpointedRepository {
+    $repo = New-TestRepository
+    $checkpoint = Invoke-AgentScript $repo 'agent-checkpoint.ps1' (Get-CheckpointArguments)
+    Assert-True ($checkpoint.ExitCode -eq 0) "Checkpoint setup failed: $($checkpoint.Output)"
+    Invoke-Git $repo @('add', '.agent') | Out-Null
+    Invoke-Git $repo @('commit', '-m', 'record handoff') | Out-Null
+    return $repo
+}
+
+function Write-TestJson {
+    param([string]$Path, [object]$Value)
+    $Value | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $Path -Encoding UTF8
+}
+
+function Test-ValidResume {
+    $repo = New-CheckpointedRepository
+    $result = Invoke-AgentScript $repo 'agent-resume.ps1' @('-Agent', 'antigravity')
+    Assert-True ($result.ExitCode -eq 0) "Valid resume failed: $($result.Output)"
+    foreach ($expected in @(
+        'Implement test handoff',
+        'Created baseline',
+        'Continue implementation',
+        'Continue the test task'
+    )) {
+        Assert-True ($result.Output -match [regex]::Escape($expected)) "Resume output omitted: $expected"
+    }
+    $lease = Get-Content (Join-Path $repo '.agent\lease.json') -Raw | ConvertFrom-Json
+    Assert-True ($lease.status -eq 'active') 'Resume did not activate the lease'
+    Assert-True ($lease.agent -eq 'antigravity') 'Resume lease has the wrong agent'
+    $duration = [DateTimeOffset]::Parse($lease.expiresAt) - [DateTimeOffset]::Parse($lease.acquiredAt)
+    Assert-True ([Math]::Abs($duration.TotalMinutes - 120) -lt 0.1) 'Resume lease was not two hours'
+}
+
+function Test-WrongBranchRefusal {
+    $repo = New-CheckpointedRepository
+    Invoke-Git $repo @('switch', '-c', 'codex/wrong-branch') | Out-Null
+    $result = Invoke-AgentScript $repo 'agent-resume.ps1' @('-Agent', 'antigravity')
+    Assert-True ($result.ExitCode -ne 0) 'Resume accepted the wrong branch'
+    Assert-True ($result.Output -match 'Branch mismatch') 'Wrong branch error was unclear'
+}
+
+function Test-UnreachableCommitRefusal {
+    $repo = New-CheckpointedRepository
+    $handoffPath = Join-Path $repo '.agent\active-handoff.json'
+    $handoff = Get-Content $handoffPath -Raw | ConvertFrom-Json
+    $handoff.headCommit = 'ffffffffffffffffffffffffffffffffffffffff'
+    Write-TestJson $handoffPath $handoff
+    $result = Invoke-AgentScript $repo 'agent-resume.ps1' @('-Agent', 'antigravity')
+    Assert-True ($result.ExitCode -ne 0) 'Resume accepted an unreachable commit'
+    Assert-True ($result.Output -match 'not reachable') 'Unreachable commit error was unclear'
+}
+
+function Set-TestLease {
+    param(
+        [string]$Repository,
+        [string]$Agent,
+        [DateTimeOffset]$ExpiresAt
+    )
+    $now = [DateTimeOffset]::UtcNow
+    Write-TestJson (Join-Path $Repository '.agent\lease.json') ([ordered]@{
+        schemaVersion = 1
+        taskId = 'handoff-test'
+        agent = $Agent
+        branch = 'codex/handoff-test'
+        status = 'active'
+        acquiredAt = $now.AddMinutes(-5).ToString('o')
+        expiresAt = $ExpiresAt.ToString('o')
+        updatedAt = $now.AddMinutes(-5).ToString('o')
+    })
+}
+
+function Test-ActiveLeaseRefusalAndForce {
+    $repo = New-CheckpointedRepository
+    Set-TestLease $repo 'codex' ([DateTimeOffset]::UtcNow.AddMinutes(60))
+    $blocked = Invoke-AgentScript $repo 'agent-resume.ps1' @('-Agent', 'antigravity')
+    Assert-True ($blocked.ExitCode -ne 0) 'Resume ignored an active foreign lease'
+    Assert-True ($blocked.Output -match 'Lease is active') 'Active lease error was unclear'
+
+    $forced = Invoke-AgentScript $repo 'agent-resume.ps1' @('-Agent', 'antigravity', '-Force')
+    Assert-True ($forced.ExitCode -eq 0) "Forced takeover failed: $($forced.Output)"
+    Assert-True ($forced.Output -match 'FORCED LEASE TAKEOVER') 'Forced takeover warning was missing'
+    $lease = Get-Content (Join-Path $repo '.agent\lease.json') -Raw | ConvertFrom-Json
+    Assert-True ($lease.agent -eq 'antigravity') 'Forced takeover did not change lease owner'
+}
+
+function Test-ExpiredLeaseTakeover {
+    $repo = New-CheckpointedRepository
+    Set-TestLease $repo 'codex' ([DateTimeOffset]::UtcNow.AddMinutes(-1))
+    $result = Invoke-AgentScript $repo 'agent-resume.ps1' @('-Agent', 'antigravity')
+    Assert-True ($result.ExitCode -eq 0) "Expired lease takeover failed: $($result.Output)"
+    $lease = Get-Content (Join-Path $repo '.agent\lease.json') -Raw | ConvertFrom-Json
+    Assert-True ($lease.agent -eq 'antigravity') 'Expired lease takeover has wrong owner'
+}
+
+function Test-UnsupportedSchemaRefusal {
+    $repo = New-CheckpointedRepository
+    $handoffPath = Join-Path $repo '.agent\active-handoff.json'
+    $handoff = Get-Content $handoffPath -Raw | ConvertFrom-Json
+    $handoff.schemaVersion = 2
+    Write-TestJson $handoffPath $handoff
+    $result = Invoke-AgentScript $repo 'agent-resume.ps1' @('-Agent', 'antigravity')
+    Assert-True ($result.ExitCode -ne 0) 'Resume accepted an unsupported schema'
+    Assert-True ($result.Output -match 'Unsupported schemaVersion') 'Schema error was unclear'
+}
+
+function Test-DirtyWorktreeWarning {
+    $repo = New-CheckpointedRepository
+    Add-Content -LiteralPath (Join-Path $repo 'README.md') -Value 'preserve this dirty change'
+    $before = Get-Content -LiteralPath (Join-Path $repo 'README.md') -Raw
+    $result = Invoke-AgentScript $repo 'agent-resume.ps1' @('-Agent', 'antigravity')
+    Assert-True ($result.ExitCode -eq 0) "Dirty worktree resume failed: $($result.Output)"
+    Assert-True ($result.Output -match 'WORKTREE IS DIRTY') 'Dirty worktree warning was missing'
+    $after = Get-Content -LiteralPath (Join-Path $repo 'README.md') -Raw
+    Assert-True ($after -eq $before) 'Resume modified a dirty application file'
+}
+
+function Invoke-ResumeTests {
+    $resumeScript = Join-Path $sourceRoot 'scripts\agent-resume.ps1'
+    if (-not (Test-Path -LiteralPath $resumeScript)) {
+        throw 'agent-resume.ps1 does not exist'
+    }
+    Test-ValidResume
+    Test-WrongBranchRefusal
+    Test-UnreachableCommitRefusal
+    Test-ActiveLeaseRefusalAndForce
+    Test-ExpiredLeaseTakeover
+    Test-UnsupportedSchemaRefusal
+    Test-DirtyWorktreeWarning
+}
+
 try {
     if (-not $ResumeOnly) {
         Invoke-CheckpointTests
     }
-    if ($ResumeOnly) {
-        throw 'Resume tests are not implemented yet'
+    if (-not $CheckpointOnly) {
+        Invoke-ResumeTests
     }
     Write-Host "Agent handoff tests passed: $script:Passed assertions, $script:Failed failures"
 }
