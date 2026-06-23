@@ -151,10 +151,25 @@ Event sources currently create notifications for account freeze/unfreeze, transf
 
 The frontend expects:
 
-- Account service: `http://localhost:8080`
-- Transaction service: `http://localhost:8081`
+- Account service: `http://127.0.0.1:8080`
+- Transaction service: `http://127.0.0.1:8081`
 
-Use your normal service startup, or the project compose files where appropriate. For the service folders:
+The verified Docker path uses `docker-compose.codex.yml` for the complete backend stack and `docker-compose.codex.override.yml` to expose both PostgreSQL instances on loopback-only host ports. Set local-only signing secrets before starting the stack; do not reuse these example values outside local development:
+
+```powershell
+$env:JWT_SECRET = "local-development-jwt-secret-change-me-at-least-32-characters"
+$env:INTERNAL_JWT_SECRET = "local-development-internal-jwt-secret-change-me-at-least-32-characters"
+docker compose -f docker-compose.codex.yml -f docker-compose.codex.override.yml up --build -d
+docker compose -f docker-compose.codex.yml -f docker-compose.codex.override.yml ps
+```
+
+Wait for `account-service` and `transaction-service` to report healthy. To stop the stack while preserving its database volumes:
+
+```powershell
+docker compose -f docker-compose.codex.yml -f docker-compose.codex.override.yml down
+```
+
+For manual JVM startup instead, provide PostgreSQL, matching JWT secrets, and the service-specific configuration, then run:
 
 ```powershell
 cd account-service
@@ -175,6 +190,27 @@ npm run dev
 ```
 
 Open the Vite URL printed in the terminal, normally `http://127.0.0.1:5173`.
+
+Authenticated customer pages use these routes:
+
+- `/` - dashboard
+- `/accounts` - customer accounts
+- `/move-money` - deposits, withdrawals, and transfers
+- `/transactions` - transaction history, detail, disputes, and reversals
+- `/disputes` - submitted dispute history
+- `/notifications` - notification inbox
+
+Admin pages are protected by `ROLE_ADMIN` and live under `/admin`:
+
+- `/admin` - operations overview
+- `/admin/accounts`
+- `/admin/monitoring`
+- `/admin/transactions`
+- `/admin/audit-log`
+- `/admin/risk-alerts`
+- `/admin/risk-cases`
+- `/admin/disputes`
+- `/admin/investigations`
 
 The Vite dev server proxies browser requests through:
 
@@ -534,8 +570,7 @@ cd account-service
 
 ```powershell
 cd transaction-service
-.\mvnw.cmd -q -DskipTests compile
-.\mvnw.cmd -q -Dtest=TransactionServiceHardeningTest test
+.\mvnw.cmd -q test
 ```
 
 The transaction-service test suite also covers the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup. Risk alert tests cover admin-only access, filters, summary counts, status updates with reviewer metadata, rule generation, dedupe behavior, and non-risky transaction handling. Risk case tests cover admin-only access, filters, summary counts, create-from-alert, duplicate open-case handling, claim, status updates, linked alert details, and append-only notes. Dispute tests cover customer ownership checks, completed/60-day eligibility, duplicate active-dispute rejection, admin listing, claim, status updates, internal notes, and investigation timeline/summary integration. Investigation tests cover admin-only access, search context expansion, mixed-source timeline sorting, summary counts, CSV export headers/content escaping, and empty search results.
@@ -544,32 +579,34 @@ Account hold/freeze tests cover default `ACTIVE` accounts, admin-only freeze/unf
 
 Pending debit authorization tests cover account ledger/available initialization, migration backfill, hold placement/capture/release balance effects, idempotent hold transitions, frozen and insufficient-available hold rejection, deposit balance updates, withdrawal and transfer hold orchestration, failed hold audit behavior, compensation after destination credit failure, backward-compatible account DTO handling, and frontend available-balance rendering and validation.
 
-## Live Demo Summary
+## Verified Baseline
 
-The pending debit authorization feature was verified against the local end-to-end stack with the real frontend and both backend services:
+The merged `main` baseline was revalidated on 2026-06-23:
 
-- Created a customer account with `$1,000.00`.
-- Placed an internal debit hold for `$150.00`.
-- Confirmed the UI showed `Available $850.00` and `Ledger $1,000.00`.
-- Confirmed the withdraw source was disabled for a `$900.00` debit because available balance was only `$850.00`.
-- Released the hold and confirmed available returned to `$1,000.00`.
-- Completed a `$200.00` withdrawal through the UI and confirmed both available and ledger became `$800.00`.
-- Confirmed the transaction history showed a completed withdrawal.
+- Frontend unit and component tests: 40 passed.
+- Frontend production build: passed.
+- Account service tests: 63 passed.
+- Transaction service tests: 316 passed, 52 skipped.
+- GitHub CI: configuration policy, PR build policy, Java 21/22 service tests, and secret scanning passed for the cross-console reliability PR.
 
-## Demo Evidence
+The live workflow exercised both consoles and their shared backend state:
 
-The PR includes screenshot artifacts under:
+- Registered and authenticated a customer, created accounts, moved money, and reviewed transaction history.
+- Confirmed available and ledger balances, holds, disputes, and notifications from customer pages.
+- Confirmed the configured risk rule created an alert on the fifth qualifying transfer.
+- Reviewed accounts, transactions, monitoring, audit events, risk alerts, risk cases, disputes, and investigations from the admin console.
+- Confirmed normal users could not see or open admin routes.
 
-```text
-frontend/demo-screenshots/
-frontend/backend-demo-screenshots/
-```
+### Known Baseline Warnings
 
-These show the customer app, admin dashboard, monitoring page, backend smoke checks, account creation validation, money movement, and transaction history flows.
+- The frontend dependency audit reported seven npm vulnerabilities. Review `npm audit` before choosing upgrades because dependency changes may require regression testing.
+- The production build reports a Vite chunk-size warning: the minified application JavaScript bundle is approximately 786 kB before gzip. Route-level lazy loading or explicit Rollup chunking can reduce it.
 
 ## Admin Testing Note
 
-The public registration flow creates normal `ROLE_USER` accounts. To test Phase 2 admin screens against the real backend, seed or promote a user with `ROLE_ADMIN` in the account-service database before logging in.
+The public registration flow creates normal `ROLE_USER` accounts. To test admin screens against the real backend, seed or promote a user with `ROLE_ADMIN` in the account-service database before logging in.
+
+Playwright reads the admin login from `E2E_ADMIN_USERNAME` and `E2E_ADMIN_PASSWORD`. Set both variables to match the seeded local admin account before running `npm run e2e`. Persisted Docker volumes may contain an older password, so a username existing in the database does not guarantee that the E2E default password still matches. Do not commit a real admin password.
 
 ## CI Notes
 
