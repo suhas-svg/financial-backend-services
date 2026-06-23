@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "taskId": "",
+  "objective": "",
+  "sourceAgent": "",
+  "targetAgent": "",
+  "repository": "",
+  "branch": "",
+  "baseBranch": "",
+  "headCommit": "",
+  "worktree": "",
+  "status": "idle",
+  "completed": [],
+  "remaining": [],
+  "blockers": [],
+  "changedFiles": [],
+  "validation": [],
+  "nextAction": "",
+  "updatedAt": "1970-01-01T00:00:00Z"
+}
