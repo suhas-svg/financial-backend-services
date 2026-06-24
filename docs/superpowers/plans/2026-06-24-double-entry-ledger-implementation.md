@@ -175,7 +175,7 @@ Commit with `feat(ledger): enforce immutable balanced journal schema` and push.
 - Test: `transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/domain/LedgerBalanceProjectionTest.java`
 - Test: `transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/domain/JournalDraftTest.java`
 
-- [ ] **Step 1: Write failing projection tests**
+- [x] **Step 1: Write failing projection tests**
 
 Assert pending debit reduces available, pending credit does not increase available, post moves pending to posted, fail releases pending, and reversal applies the opposite posted effect.
 
@@ -185,11 +185,11 @@ assertThat(projection.getPendingDebits()).isEqualByComparingTo("25.00");
 assertThat(projection.getAvailableBalance()).isEqualByComparingTo("75.00");
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `transaction-service\mvnw.cmd -q -Dtest=LedgerBalanceProjectionTest,JournalDraftTest test`
 
-- [ ] **Step 3: Implement minimal domain rules and repositories**
+- [x] **Step 3: Implement minimal domain rules and repositories**
 
 Keep arithmetic inside `LedgerBalanceProjection`; keep cross-posting balance validation in an immutable `JournalDraft` value object. Repository lock query:
 
@@ -199,11 +199,11 @@ Keep arithmetic inside `LedgerBalanceProjection`; keep cross-posting balance val
 List<LedgerBalanceProjection> lockAllOrdered(Collection<UUID> ids);
 ```
 
-- [ ] **Step 4: Verify GREEN and full suite**
+- [x] **Step 4: Verify GREEN and full suite**
 
 Run the Step 2 command and `transaction-service\mvnw.cmd -q test`.
 
-- [ ] **Step 5: Checkpoint and commit**
+- [x] **Step 5: Checkpoint and commit**
 
 Commit with `feat(ledger): add journal domain and balance projections` and push.
 
