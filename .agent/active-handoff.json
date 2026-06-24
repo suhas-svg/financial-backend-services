@@ -7,77 +7,57 @@
     "repository":  "suhas-svg/financial-backend-services",
     "branch":  "codex/double-entry-ledger-mvp",
     "baseBranch":  "main",
-    "headCommit":  "4a1fb2e89acb0ae39a2f4f99447de69d364b5a66",
+    "headCommit":  "a6541b2a2a59a0630b09df2556e98c56b9634547",
     "worktree":  "C:/Users/super/Desktop/project5/github-push-stage/financial-double-entry-ledger-mvp",
     "status":  "local_only",
     "completed":  [
-                      "Implemented account currency migration and immutability trigger definition",
-                      "Implemented monotonic versioned ledger projection mirror",
-                      "Added internal-service projection endpoint and authorization coverage",
-                      "Passed full account-service regression suite"
+                      "Implemented account currency and versioned projection mirror",
+                      "Implemented immutable ledger core schema and deferred balance/currency constraints",
+                      "Implemented projection and outbox schema",
+                      "Repaired transaction processing-state constraint",
+                      "Verified PostgreSQL migrations and full transaction regression suite"
                   ],
     "remaining":  [
-                      "Implement ledger database invariants",
-                      "Implement ledger domain and posting engine",
+                      "Implement ledger domain and projection engine",
+                      "Implement idempotent posting and reversal service",
                       "Integrate transactions, reconciliation, statements, and frontend",
-                      "Run PostgreSQL Docker/live verification and publish draft PR"
+                      "Run Docker/live verification and publish draft PR"
                   ],
     "blockers":  [
-                     "Docker engine unavailable; PostgreSQL trigger execution must be verified in the Docker validation task"
+
                  ],
     "changedFiles":  [
                          ".agent/active-handoff.json",
                          ".agent/lease.json",
-                         "account-service/src/main/java/com/suhasan/finance/account_service/controller/InternalAccountController.java",
-                         "account-service/src/main/java/com/suhasan/finance/account_service/dto/AccountRequest.java",
-                         "account-service/src/main/java/com/suhasan/finance/account_service/dto/AccountResponse.java",
-                         "account-service/src/main/java/com/suhasan/finance/account_service/entity/Account.java",
-                         "account-service/src/main/java/com/suhasan/finance/account_service/mapper/AccountMapper.java",
-                         "account-service/src/main/java/com/suhasan/finance/account_service/service/AccountService.java",
-                         "account-service/src/test/java/com/suhasan/finance/account_service/service/AccountServiceTest.java",
                          "docs/superpowers/plans/2026-06-24-double-entry-ledger-implementation.md",
-                         "account-service/src/main/java/com/suhasan/finance/account_service/dto/LedgerProjectionUpdateRequest.java",
-                         "account-service/src/main/resources/db/migration/V6__add_currency_and_ledger_projection_mirror.sql",
-                         "account-service/src/test/java/com/suhasan/finance/account_service/controller/InternalLedgerProjectionControllerTest.java",
-                         "account-service/src/test/java/com/suhasan/finance/account_service/migration/LedgerProjectionMirrorMigrationTest.java"
+                         "transaction-service/src/main/resources/db/migration/V12__create_ledger_core.sql",
+                         "transaction-service/src/main/resources/db/migration/V13__create_ledger_projections_and_outbox.sql",
+                         "transaction-service/src/main/resources/db/migration/V14__fix_transaction_processing_states.sql",
+                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/repository/LedgerMigrationIntegrationTest.java"
                      ],
     "validation":  [
                        {
-                           "command":  ".\\mvnw.cmd -q -Dtest=LedgerProjectionMirrorMigrationTest test",
-                           "workingDirectory":  "account-service",
+                           "command":  ".\\mvnw.cmd -q -Dtest=LedgerMigrationIntegrationTest test",
+                           "workingDirectory":  "transaction-service",
                            "result":  "passed",
-                           "summary":  "Migration backfill/default test passed",
-                           "finishedAt":  "2026-06-24T12:48:00Z"
-                       },
-                       {
-                           "command":  ".\\mvnw.cmd -q -Dtest=AccountServiceTest test",
-                           "workingDirectory":  "account-service",
-                           "result":  "passed",
-                           "summary":  "Projection service tests passed",
-                           "finishedAt":  "2026-06-24T12:48:00Z"
-                       },
-                       {
-                           "command":  ".\\mvnw.cmd -q -Dtest=InternalLedgerProjectionControllerTest test",
-                           "workingDirectory":  "account-service",
-                           "result":  "passed",
-                           "summary":  "Internal endpoint authorization tests passed",
-                           "finishedAt":  "2026-06-24T12:48:00Z"
+                           "summary":  "4 PostgreSQL ledger invariant tests passed",
+                           "finishedAt":  "2026-06-24T17:07:00Z"
                        },
                        {
                            "command":  ".\\mvnw.cmd -q test",
-                           "workingDirectory":  "account-service",
+                           "workingDirectory":  "transaction-service",
                            "result":  "passed",
-                           "summary":  "72 tests passed, 0 failures, 0 errors, 0 skipped",
-                           "finishedAt":  "2026-06-24T12:48:00Z"
+                           "summary":  "320 tests passed, 0 failures, 0 errors, 52 skipped",
+                           "finishedAt":  "2026-06-24T17:07:00Z"
                        },
                        {
                            "command":  "powershell -ExecutionPolicy Bypass -File scripts\\test-agent-handoff.ps1",
                            "workingDirectory":  ".",
                            "result":  "passed",
                            "summary":  "48 assertions passed",
-                           "finishedAt":  "2026-06-24T12:48:00Z"
+                           "finishedAt":  "2026-06-24T17:07:00Z"
                        }
                    ],
-    "nextAction":  "Execute Task 2 ledger database invariants using test-first migrations",
-    "updatedAt":  "2026-06-24T12:56:09.5772646+00:00"
+    "nextAction":  "Execute Task 3 ledger domain and projection engine using TDD",
+    "updatedAt":  "2026-06-24T17:07:35.8828445+00:00"
 }

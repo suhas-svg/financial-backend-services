@@ -132,33 +132,33 @@ Run the repository checkpoint with validation, review files, then commit with `f
 - Create: `transaction-service/src/main/resources/db/migration/V14__fix_transaction_processing_states.sql`
 - Test: `transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/repository/LedgerMigrationIntegrationTest.java`
 
-- [ ] **Step 1: Write PostgreSQL migration tests**
+- [x] **Step 1: Write PostgreSQL migration tests**
 
 Test system-account uniqueness per currency, balanced-journal enforcement, one-currency journals, positive posting amounts, idempotency uniqueness, and update/delete rejection after insertion.
 
-- [ ] **Step 2: Run migration tests and verify RED**
+- [x] **Step 2: Run migration tests and verify RED**
 
 Run: `transaction-service\mvnw.cmd -q -Dtest=LedgerMigrationIntegrationTest test`
 
 Expected: FAIL because ledger relations are absent.
 
-- [ ] **Step 3: Implement V12 ledger core**
+- [x] **Step 3: Implement V12 ledger core**
 
 Create `ledger_accounts`, `journal_transactions`, `journal_postings`, `journal_state_events`, `journal_links`, and `ledger_idempotency_claims`. Use deferred constraint triggers for balance/currency checks and immutable-row triggers for journal tables.
 
-- [ ] **Step 4: Implement V13 projections and outbox**
+- [x] **Step 4: Implement V13 projections and outbox**
 
 Create `ledger_balance_projections` and `ledger_projection_outbox` with monotonic versions, retry metadata, unique source event IDs, and indexes for due messages.
 
-- [ ] **Step 5: Implement V14 processing-state repair**
+- [x] **Step 5: Implement V14 processing-state repair**
 
 Replace the existing check constraint with all Java enum values: `INITIATED`, `HOLD_PLACED`, `HOLD_CAPTURED`, `HOLD_RELEASED`, `DEBIT_APPLIED`, `CREDIT_APPLIED`, `COMPLETED`, `COMPENSATED`, and `MANUAL_ACTION_REQUIRED`.
 
-- [ ] **Step 6: Run migration tests and full transaction tests**
+- [x] **Step 6: Run migration tests and full transaction tests**
 
 Run the Step 2 command, then `transaction-service\mvnw.cmd -q test`. Expected: PASS.
 
-- [ ] **Step 7: Checkpoint and commit**
+- [x] **Step 7: Checkpoint and commit**
 
 Commit with `feat(ledger): enforce immutable balanced journal schema` and push.
 
