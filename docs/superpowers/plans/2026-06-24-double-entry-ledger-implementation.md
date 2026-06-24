@@ -36,7 +36,7 @@ Existing `TransactionServiceImpl` remains the compatibility orchestration bounda
 - Test: `account-service/src/test/java/com/suhasan/finance/account_service/service/AccountServiceTest.java`
 - Test: `account-service/src/test/java/com/suhasan/finance/account_service/security/AccountServiceSecurityConfigTest.java`
 
-- [ ] **Step 1: Write migration tests for USD backfill and mirror defaults**
+- [x] **Step 1: Write migration tests for USD backfill and mirror defaults**
 
 Add an integration test that inserts a legacy account, runs the migration, and asserts:
 
@@ -46,13 +46,13 @@ assertThat(row.pendingBalance()).isEqualByComparingTo("0.00");
 assertThat(row.ledgerProjectionVersion()).isZero();
 ```
 
-- [ ] **Step 2: Run the migration test and verify RED**
+- [x] **Step 2: Run the migration test and verify RED**
 
 Run: `account-service\mvnw.cmd -q -Dtest=LedgerProjectionMirrorMigrationTest test`
 
 Expected: FAIL because V6 and the new columns do not exist.
 
-- [ ] **Step 3: Add V6 with immutable currency and mirror columns**
+- [x] **Step 3: Add V6 with immutable currency and mirror columns**
 
 Use PostgreSQL definitions:
 
@@ -67,11 +67,11 @@ ALTER TABLE accounts ADD CONSTRAINT chk_accounts_currency CHECK (currency = UPPE
 
 Add a trigger that rejects `currency` changes after insert.
 
-- [ ] **Step 4: Run the migration test and verify GREEN**
+- [x] **Step 4: Run the migration test and verify GREEN**
 
 Run the Step 2 command. Expected: PASS.
 
-- [ ] **Step 5: Write service tests for monotonic mirror updates**
+- [x] **Step 5: Write service tests for monotonic mirror updates**
 
 Cover newer version application, exact replay, stale-version no-op, same-version conflict, currency mismatch, and the legacy `balance == ledgerBalance` alias.
 
@@ -84,13 +84,13 @@ assertThat(response.getLedgerProjectionVersion()).isEqualTo(7L);
 assertThat(response.getAvailableBalance()).isEqualByComparingTo("105.00");
 ```
 
-- [ ] **Step 6: Run the service tests and verify RED**
+- [x] **Step 6: Run the service tests and verify RED**
 
 Run: `account-service\mvnw.cmd -q -Dtest=AccountServiceTest test`
 
 Expected: FAIL because the projection contract and service method do not exist.
 
-- [ ] **Step 7: Implement entity, DTO, mapper, and service behavior**
+- [x] **Step 7: Implement entity, DTO, mapper, and service behavior**
 
 Add `currency`, `pendingBalance`, `ledgerProjectionVersion`, synchronization fields, and:
 
@@ -110,17 +110,17 @@ public AccountResponse applyLedgerProjection(Long accountId, LedgerProjectionUpd
 }
 ```
 
-- [ ] **Step 8: Add the internal endpoint and authorization tests**
+- [x] **Step 8: Add the internal endpoint and authorization tests**
 
 Implement `PUT /api/internal/accounts/{id}/ledger-projection`. Assert unauthenticated `401`, user `403`, and internal/admin success.
 
-- [ ] **Step 9: Run account-service regression tests**
+- [x] **Step 9: Run account-service regression tests**
 
 Run: `account-service\mvnw.cmd -q test`
 
 Expected: all tests pass.
 
-- [ ] **Step 10: Checkpoint and commit**
+- [x] **Step 10: Checkpoint and commit**
 
 Run the repository checkpoint with validation, review files, then commit with `feat(account): add ledger projection mirror contract` and push.
 

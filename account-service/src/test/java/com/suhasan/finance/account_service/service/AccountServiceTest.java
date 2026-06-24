@@ -7,6 +7,8 @@ import com.suhasan.finance.account_service.dto.BalanceOperationRequest;
 import com.suhasan.finance.account_service.dto.BalanceOperationResponse;
 import com.suhasan.finance.account_service.dto.DebitHoldRequest;
 import com.suhasan.finance.account_service.dto.DebitHoldResponse;
+import com.suhasan.finance.account_service.dto.AccountResponse;
+import com.suhasan.finance.account_service.dto.LedgerProjectionUpdateRequest;
 import com.suhasan.finance.account_service.entity.DebitHoldStatus;
 import com.suhasan.finance.account_service.mapper.AccountMapper;
 import com.suhasan.finance.account_service.repository.AccountBalanceOperationRepository;
@@ -21,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -97,6 +100,97 @@ public class AccountServiceTest {
         assertThat(result.getStatus()).isEqualTo(AccountStatus.ACTIVE);
         assertThat(result.getLedgerBalance()).isEqualByComparingTo("1000.00");
         assertThat(result.getAvailableBalance()).isEqualByComparingTo("1000.00");
+        assertThat(result.getCurrency()).isEqualTo("USD");
+    }
+
+    @Test
+    @DisplayName("Should apply a newer ledger projection version")
+    void shouldApplyNewerLedgerProjectionVersion() {
+        testAccount.setCurrency("USD");
+        testAccount.setLedgerProjectionVersion(6L);
+        when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testAccount));
+        when(accountRepository.save(testAccount)).thenReturn(testAccount);
+        AccountResponse mapped = new AccountResponse();
+        mapped.setLedgerProjectionVersion(7L);
+        when(accountMapper.toDto(testAccount)).thenReturn(mapped);
+
+        AccountResponse response = accountService.applyLedgerProjection(1L, projection(7L));
+
+        assertThat(response.getLedgerProjectionVersion()).isEqualTo(7L);
+        assertThat(testAccount.getLedgerBalance()).isEqualByComparingTo("125.00");
+        assertThat(testAccount.getPendingBalance()).isEqualByComparingTo("-20.00");
+        assertThat(testAccount.getAvailableBalance()).isEqualByComparingTo("105.00");
+        assertThat(testAccount.getBalance()).isEqualByComparingTo("125.00");
+        verify(accountRepository).save(testAccount);
+    }
+
+    @Test
+    @DisplayName("Should accept an exact ledger projection replay without saving")
+    void shouldAcceptExactLedgerProjectionReplay() {
+        setProjectionState(7L);
+        when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testAccount));
+        when(accountMapper.toDto(testAccount)).thenReturn(new AccountResponse());
+
+        accountService.applyLedgerProjection(1L, projection(7L));
+
+        verify(accountRepository, never()).save(any(Account.class));
+    }
+
+    @Test
+    @DisplayName("Should ignore a stale ledger projection version")
+    void shouldIgnoreStaleLedgerProjectionVersion() {
+        setProjectionState(8L);
+        when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testAccount));
+        when(accountMapper.toDto(testAccount)).thenReturn(new AccountResponse());
+
+        accountService.applyLedgerProjection(1L, projection(7L));
+
+        verify(accountRepository, never()).save(any(Account.class));
+        assertThat(testAccount.getLedgerProjectionVersion()).isEqualTo(8L);
+    }
+
+    @Test
+    @DisplayName("Should reject a conflicting replay at the same projection version")
+    void shouldRejectConflictingProjectionReplay() {
+        setProjectionState(7L);
+        LedgerProjectionUpdateRequest conflicting = new LedgerProjectionUpdateRequest(
+                new BigDecimal("126.00"), new BigDecimal("-20.00"),
+                new BigDecimal("106.00"), "USD", 7L, "event-7", LocalDateTime.now());
+        when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testAccount));
+
+        assertThatThrownBy(() -> accountService.applyLedgerProjection(1L, conflicting))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("conflicts with projection version 7");
+    }
+
+    @Test
+    @DisplayName("Should reject a projection in another currency")
+    void shouldRejectProjectionCurrencyMismatch() {
+        testAccount.setCurrency("USD");
+        when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testAccount));
+        LedgerProjectionUpdateRequest eur = new LedgerProjectionUpdateRequest(
+                new BigDecimal("125.00"), new BigDecimal("-20.00"),
+                new BigDecimal("105.00"), "EUR", 7L, "event-7", LocalDateTime.now());
+
+        assertThatThrownBy(() -> accountService.applyLedgerProjection(1L, eur))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("currency");
+    }
+
+    private LedgerProjectionUpdateRequest projection(long version) {
+        return new LedgerProjectionUpdateRequest(
+                new BigDecimal("125.00"), new BigDecimal("-20.00"),
+                new BigDecimal("105.00"), "USD", version, "event-7", LocalDateTime.now());
+    }
+
+    private void setProjectionState(long version) {
+        testAccount.setCurrency("USD");
+        testAccount.setLedgerBalance(new BigDecimal("125.00"));
+        testAccount.setBalance(new BigDecimal("125.00"));
+        testAccount.setPendingBalance(new BigDecimal("-20.00"));
+        testAccount.setAvailableBalance(new BigDecimal("105.00"));
+        testAccount.setLedgerProjectionVersion(version);
+        testAccount.setLedgerProjectionSourceEventId("event-7");
     }
 
     @Test

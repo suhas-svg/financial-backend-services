@@ -4,6 +4,8 @@ import com.suhasan.finance.account_service.dto.BalanceOperationRequest;
 import com.suhasan.finance.account_service.dto.BalanceOperationResponse;
 import com.suhasan.finance.account_service.dto.DebitHoldRequest;
 import com.suhasan.finance.account_service.dto.DebitHoldResponse;
+import com.suhasan.finance.account_service.dto.AccountResponse;
+import com.suhasan.finance.account_service.dto.LedgerProjectionUpdateRequest;
 import com.suhasan.finance.account_service.service.AccountService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -40,6 +42,13 @@ public class InternalAccountController {
             @PathVariable Long id,
             @Valid @RequestBody BalanceOperationRequest request) {
         return ResponseEntity.ok(accountService.applyBalanceOperation(id, request));
+    }
+
+    @PutMapping("/{id}/ledger-projection")
+    public ResponseEntity<AccountResponse> updateLedgerProjection(
+            @PathVariable Long id,
+            @Valid @RequestBody LedgerProjectionUpdateRequest request) {
+        return ResponseEntity.ok(accountService.applyLedgerProjection(id, request));
     }
 
     @PostMapping("/{id}/holds")

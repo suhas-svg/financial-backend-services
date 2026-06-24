@@ -38,6 +38,9 @@ public class AccountRequest {
     @PositiveOrZero(message = "Balance must be zero or positive")
     private BigDecimal balance;
 
+    @Pattern(regexp = "[A-Z]{3}", message = "Currency must be a three-letter uppercase code")
+    private String currency = "USD";
+
     @PositiveOrZero(message = "Interest rate must be zero or positive")
     private Double interestRate;
 

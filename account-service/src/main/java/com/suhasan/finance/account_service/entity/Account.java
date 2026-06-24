@@ -58,6 +58,24 @@ public abstract class Account {
     @Column(name = "available_balance", nullable = false)
     private BigDecimal availableBalance;
 
+    @NotBlank(message = "Currency cannot be blank")
+    @Pattern(regexp = "[A-Z]{3}", message = "Currency must be a three-letter uppercase code")
+    @Column(nullable = false, updatable = false, length = 3)
+    private String currency = "USD";
+
+    @NotNull(message = "Pending balance cannot be null")
+    @Column(name = "pending_balance", nullable = false)
+    private BigDecimal pendingBalance = BigDecimal.ZERO;
+
+    @Column(name = "ledger_projection_version", nullable = false)
+    private Long ledgerProjectionVersion = 0L;
+
+    @Column(name = "ledger_projection_synced_at")
+    private LocalDateTime ledgerProjectionSyncedAt;
+
+    @Column(name = "ledger_projection_source_event_id", length = 100)
+    private String ledgerProjectionSourceEventId;
+
     @Column(nullable = false, updatable = false)
     private LocalDate createdAt = LocalDate.now();
 
@@ -95,6 +113,15 @@ public abstract class Account {
         }
         if (availableBalance == null) {
             availableBalance = ledgerBalance;
+        }
+        if (currency == null || currency.isBlank()) {
+            currency = "USD";
+        }
+        if (pendingBalance == null) {
+            pendingBalance = BigDecimal.ZERO;
+        }
+        if (ledgerProjectionVersion == null) {
+            ledgerProjectionVersion = 0L;
         }
         balance = ledgerBalance;
     }

@@ -6,6 +6,7 @@ import com.suhasan.finance.account_service.dto.BalanceOperationResponse;
 import com.suhasan.finance.account_service.dto.DebitHoldRequest;
 import com.suhasan.finance.account_service.dto.DebitHoldResponse;
 import com.suhasan.finance.account_service.dto.NotificationCreateRequest;
+import com.suhasan.finance.account_service.dto.LedgerProjectionUpdateRequest;
 import com.suhasan.finance.account_service.entity.Account;
 import com.suhasan.finance.account_service.entity.AccountBalanceOperation;
 import com.suhasan.finance.account_service.entity.AccountBalanceOperationId;
@@ -81,6 +82,9 @@ public class AccountService {
             account.setStatus(AccountStatus.ACTIVE);
         }
         normalizeBalances(account);
+        if (account.getCurrency() == null || account.getCurrency().isBlank()) {
+            account.setCurrency("USD");
+        }
         return creationTimer.record(() -> {
             Account saved = accountRepository.save(account);
             createdCounter.increment();
@@ -154,6 +158,45 @@ public class AccountService {
         existing.setLedgerBalance(newBalance);
         existing.setAvailableBalance(newBalance);
         accountRepository.save(existing);
+    }
+
+    public AccountResponse applyLedgerProjection(Long accountId, LedgerProjectionUpdateRequest request) {
+        Account account = accountRepository.findByIdForUpdate(accountId)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found: " + accountId));
+        normalizeBalances(account);
+        if (!account.getCurrency().equals(request.currency())) {
+            throw new IllegalArgumentException("Projection currency " + request.currency()
+                    + " does not match account currency " + account.getCurrency());
+        }
+
+        long currentVersion = account.getLedgerProjectionVersion();
+        if (request.version() < currentVersion) {
+            return accountMapper.toDto(account);
+        }
+        if (request.version() == currentVersion) {
+            requireExactProjectionReplay(account, request);
+            return accountMapper.toDto(account);
+        }
+
+        account.setLedgerBalance(request.postedBalance());
+        account.setBalance(request.postedBalance());
+        account.setPendingBalance(request.pendingBalance());
+        account.setAvailableBalance(request.availableBalance());
+        account.setLedgerProjectionVersion(request.version());
+        account.setLedgerProjectionSourceEventId(request.sourceEventId());
+        account.setLedgerProjectionSyncedAt(request.updatedAt());
+        return accountMapper.toDto(accountRepository.save(account));
+    }
+
+    private void requireExactProjectionReplay(Account account, LedgerProjectionUpdateRequest request) {
+        boolean exact = account.getLedgerBalance().compareTo(request.postedBalance()) == 0
+                && account.getPendingBalance().compareTo(request.pendingBalance()) == 0
+                && account.getAvailableBalance().compareTo(request.availableBalance()) == 0
+                && java.util.Objects.equals(account.getLedgerProjectionSourceEventId(), request.sourceEventId());
+        if (!exact) {
+            throw new IllegalArgumentException("Projection payload conflicts with projection version "
+                    + request.version());
+        }
     }
 
     public BalanceOperationResponse applyBalanceOperation(Long accountId, BalanceOperationRequest request) {

@@ -68,6 +68,7 @@ public interface AccountMapper {
                 SavingsAccount sa = new SavingsAccount();
                 sa.setOwnerId(dto.getOwnerId());
                 sa.setBalance(dto.getBalance());
+                sa.setCurrency(dto.getCurrency() == null ? "USD" : dto.getCurrency());
                 sa.setInterestRate(dto.getInterestRate() != null
                     ? dto.getInterestRate() : 0.0);
                 return sa;
@@ -75,6 +76,7 @@ public interface AccountMapper {
                 CreditCardAccount ca = new CreditCardAccount();
                 ca.setOwnerId(dto.getOwnerId());
                 ca.setBalance(dto.getBalance());
+                ca.setCurrency(dto.getCurrency() == null ? "USD" : dto.getCurrency());
                 ca.setCreditLimit(dto.getCreditLimit());
                 ca.setDueDate(dto.getDueDate());
                 return ca;
