@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/suhas-svg/financial-backend-services/.agent/schemas/active-handoff.schema.json",
+  "title": "Active cross-agent handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "taskId", "objective", "sourceAgent", "targetAgent",
+    "repository", "branch", "baseBranch", "headCommit", "worktree", "status",
+    "completed", "remaining", "blockers", "changedFiles", "validation",
+    "nextAction", "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "taskId": { "type": "string" },
+    "objective": { "type": "string" },
+    "sourceAgent": { "enum": ["", "codex", "antigravity"] },
+    "targetAgent": { "enum": ["", "codex", "antigravity"] },
+    "repository": { "type": "string" },
+    "branch": { "type": "string" },
+    "baseBranch": { "type": "string" },
+    "headCommit": { "type": "string" },
+    "worktree": { "type": "string" },
+    "status": { "enum": ["idle", "local_only", "ready_for_handoff"] },
+    "completed": { "$ref": "#/$defs/stringArray" },
+    "remaining": { "$ref": "#/$defs/stringArray" },
+    "blockers": { "$ref": "#/$defs/stringArray" },
+    "changedFiles": { "$ref": "#/$defs/stringArray" },
+    "validation": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/validation" }
+    },
+    "nextAction": { "type": "string" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "enum": ["local_only", "ready_for_handoff"] } } },
+      "then": {
+        "properties": {
+          "taskId": { "minLength": 1 },
+          "objective": { "minLength": 1 },
+          "sourceAgent": { "enum": ["codex", "antigravity"] },
+          "targetAgent": { "enum": ["codex", "antigravity"] },
+          "repository": { "minLength": 1 },
+          "branch": { "minLength": 1 },
+          "baseBranch": { "minLength": 1 },
+          "headCommit": { "pattern": "^[0-9a-fA-F]{40}$" },
+          "worktree": { "minLength": 1 },
+          "nextAction": { "minLength": 1 }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "stringArray": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "workingDirectory", "result", "summary", "finishedAt"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "workingDirectory": { "type": "string", "minLength": 1 },
+        "result": { "enum": ["passed", "failed", "skipped"] },
+        "summary": { "type": "string" },
+        "finishedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/suhas-svg/financial-backend-services/.agent/schemas/lease.schema.json",
+  "title": "Cross-agent cooperative lease",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "taskId", "agent", "branch", "status",
+    "acquiredAt", "expiresAt", "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "taskId": { "type": "string" },
+    "agent": { "enum": ["", "codex", "antigravity"] },
+    "branch": { "type": "string" },
+    "status": { "enum": ["active", "released"] },
+    "acquiredAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "active" } } },
+      "then": {
+        "properties": {
+          "taskId": { "minLength": 1 },
+          "agent": { "enum": ["codex", "antigravity"] },
+          "branch": { "minLength": 1 }
+        }
+      }
+    }
+  ]
+}
