@@ -2,6 +2,7 @@ package com.suhasan.finance.transaction_service.ledger.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -19,7 +20,8 @@ public class LedgerAccount {
     @Enumerated(EnumType.STRING)
     @Column(name = "account_kind", nullable = false)
     private LedgerAccountKind accountKind;
-    @Column(nullable = false, length = 3)
+    @Column(nullable = false, length = 3, columnDefinition = "CHAR(3)")
+    @JdbcTypeCode(java.sql.Types.CHAR)
     private String currency;
     @Column(name = "external_account_id")
     private String externalAccountId;

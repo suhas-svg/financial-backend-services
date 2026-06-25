@@ -2,6 +2,7 @@ package com.suhasan.finance.transaction_service.ledger.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -27,7 +28,8 @@ public class JournalPosting {
     private PostingDirection direction;
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;
-    @Column(nullable = false, length = 3)
+    @Column(nullable = false, length = 3, columnDefinition = "CHAR(3)")
+    @JdbcTypeCode(java.sql.Types.CHAR)
     private String currency;
     private String memo;
 }

@@ -83,4 +83,15 @@ class LedgerBalanceProjectionTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("event sequence");
     }
+
+    @Test
+    void systemAccountDebitCanReserveBeyondAvailableBalance() {
+        LedgerBalanceProjection projection = LedgerBalanceProjection.open(
+                UUID.randomUUID(), BigDecimal.ZERO);
+
+        projection.reserveDebitAllowNegative(new BigDecimal("25.00"), 1L);
+
+        assertThat(projection.getPendingDebits()).isEqualByComparingTo("25.00");
+        assertThat(projection.getAvailableBalance()).isEqualByComparingTo("-25.00");
+    }
 }

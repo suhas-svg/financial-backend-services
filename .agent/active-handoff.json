@@ -7,21 +7,14 @@
     "repository":  "suhas-svg/financial-backend-services",
     "branch":  "codex/double-entry-ledger-mvp",
     "baseBranch":  "main",
-    "headCommit":  "0e165a9fc8a146c0baf04182df5ce9b3d7620c01",
+    "headCommit":  "60c0da01dd8b2656f6457b37601251a6599bc669",
     "worktree":  "C:/Users/super/Desktop/project5/github-push-stage/financial-double-entry-ledger-mvp",
     "status":  "local_only",
     "completed":  [
-                      "Implemented account currency and versioned projection mirror",
-                      "Implemented immutable ledger migrations and PostgreSQL invariants",
-                      "Implemented journal domain entities and repositories",
-                      "Implemented pending posted and available projection arithmetic",
-                      "Passed full transaction regression suite"
+                      "Task 4 idempotent posting and compensating reversal service"
                   ],
     "remaining":  [
-                      "Implement idempotent posting and reversal service",
-                      "Integrate existing transaction workflows",
-                      "Implement mirror outbox, customer APIs, reconciliation, statements, and frontend",
-                      "Run Docker/live verification and publish draft PR"
+                      "Task 5 existing transaction workflow integration and later ledger MVP tasks"
                   ],
     "blockers":  [
 
@@ -30,49 +23,58 @@
                          ".agent/active-handoff.json",
                          ".agent/lease.json",
                          "docs/superpowers/plans/2026-06-24-double-entry-ledger-implementation.md",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/JournalDraft.java",
                          "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/JournalPosting.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/JournalState.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/JournalStateEvent.java",
                          "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/JournalTransaction.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/JournalType.java",
                          "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/LedgerAccount.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/LedgerAccountKind.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/LedgerAccountStatus.java",
                          "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/LedgerBalanceProjection.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/PostingDirection.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/PostingDraft.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/JournalPostingRepository.java",
                          "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/JournalStateEventRepository.java",
                          "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/JournalTransactionRepository.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/LedgerAccountRepository.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/LedgerBalanceProjectionRepository.java",
-                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/domain/JournalDraftTest.java",
-                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/domain/LedgerBalanceProjectionTest.java"
+                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/domain/LedgerBalanceProjectionTest.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/JournalCommand.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/JournalRequestFingerprint.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/JournalResult.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/LedgerIdempotencyLock.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/LedgerPostingService.java",
+                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/service/LedgerPostingConcurrencyIntegrationTest.java",
+                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/service/LedgerPostingServiceTest.java"
                      ],
     "validation":  [
                        {
-                           "command":  ".\\mvnw.cmd -q \"-Dtest=LedgerBalanceProjectionTest,JournalDraftTest\" test",
+                           "command":  ".\\mvnw.cmd -q -Dtest=LedgerPostingServiceTest test",
                            "workingDirectory":  "transaction-service",
                            "result":  "passed",
-                           "summary":  "8 ledger domain tests passed",
-                           "finishedAt":  "2026-06-24T17:15:00Z"
+                           "summary":  "focused posting service unit tests passed",
+                           "finishedAt":  "2026-06-25T02:37:46.9147154+00:00"
                        },
                        {
-                           "command":  ".\\mvnw.cmd -q test",
+                           "command":  ".\\mvnw.cmd -q -Dtest=LedgerPostingConcurrencyIntegrationTest test with external PostgreSQL JDBC",
                            "workingDirectory":  "transaction-service",
                            "result":  "passed",
-                           "summary":  "328 tests passed, 0 failures, 0 errors, 52 skipped",
-                           "finishedAt":  "2026-06-24T17:15:00Z"
+                           "summary":  "duplicate idempotency and concurrent debit integration tests passed",
+                           "finishedAt":  "2026-06-25T02:37:46.9147154+00:00"
                        },
                        {
-                           "command":  "powershell -ExecutionPolicy Bypass -File scripts\\test-agent-handoff.ps1",
+                           "command":  ".\\mvnw.cmd -q \"-Dtest=LedgerBalanceProjectionTest,JournalDraftTest,LedgerPostingServiceTest\" test",
+                           "workingDirectory":  "transaction-service",
+                           "result":  "passed",
+                           "summary":  "focused ledger domain and posting tests passed",
+                           "finishedAt":  "2026-06-25T02:37:46.9147154+00:00"
+                       },
+                       {
+                           "command":  ".\\mvnw.cmd -q test with isolated external PostgreSQL",
+                           "workingDirectory":  "transaction-service",
+                           "result":  "passed",
+                           "summary":  "338 tests, 0 failures, 0 errors, 52 skipped",
+                           "finishedAt":  "2026-06-25T02:37:46.9147154+00:00"
+                       },
+                       {
+                           "command":  "scripts/test-agent-handoff.ps1",
                            "workingDirectory":  ".",
                            "result":  "passed",
-                           "summary":  "48 assertions passed",
-                           "finishedAt":  "2026-06-24T17:15:00Z"
+                           "summary":  "48 assertions, 0 failures",
+                           "finishedAt":  "2026-06-25T02:37:46.9147154+00:00"
                        }
                    ],
-    "nextAction":  "Execute Task 4 idempotent posting and reversal service using TDD",
-    "updatedAt":  "2026-06-24T17:15:39.3131079+00:00"
+    "nextAction":  "Begin Task 5 by writing compatibility tests for deposit, withdrawal, transfer, and reversal routes delegating to ledger postings",
+    "updatedAt":  "2026-06-25T02:37:47.4031426+00:00"
 }

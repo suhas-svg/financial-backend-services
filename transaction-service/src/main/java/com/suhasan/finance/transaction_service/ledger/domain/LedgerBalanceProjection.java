@@ -69,6 +69,13 @@ public class LedgerBalanceProjection {
         advance(eventSequence);
     }
 
+    public void reserveDebitAllowNegative(BigDecimal amount, long eventSequence) {
+        requirePositive(amount);
+        requireNextEvent(eventSequence);
+        pendingDebits = pendingDebits.add(amount);
+        advance(eventSequence);
+    }
+
     public void reserveCredit(BigDecimal amount, long eventSequence) {
         requirePositive(amount);
         requireNextEvent(eventSequence);

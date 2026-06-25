@@ -218,15 +218,15 @@ Commit with `feat(ledger): add journal domain and balance projections` and push.
 - Test: `ledger/service/LedgerPostingServiceTest.java`
 - Test: `ledger/service/LedgerPostingConcurrencyIntegrationTest.java`
 
-- [ ] **Step 1: Write failing posting tests**
+- [x] **Step 1: Write failing posting tests**
 
 Cover balanced transfer, same-currency enforcement, insufficient available funds, deterministic locks, idempotent replay, mismatched replay conflict, pending-to-posted, pending-to-failed, and compensating reversal.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `transaction-service\mvnw.cmd -q -Dtest=LedgerPostingServiceTest test`
 
-- [ ] **Step 3: Implement claim and pending creation transaction**
+- [x] **Step 3: Implement claim and pending creation transaction**
 
 Expose:
 
@@ -239,15 +239,15 @@ JournalResult reverse(UUID journalId, String actor, String reason, String idempo
 
 Acquire projections in sorted ID order, enforce request fingerprints, insert balanced postings/state event, and update projections atomically.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run the Step 2 command.
 
-- [ ] **Step 5: Write and run concurrency tests**
+- [x] **Step 5: Write and run concurrency tests**
 
 Use PostgreSQL Testcontainers and two executor threads. Assert only one duplicate key posts and concurrent debits cannot make available balance negative.
 
-- [ ] **Step 6: Run full suite, checkpoint, and commit**
+- [x] **Step 6: Run full suite, checkpoint, and commit**
 
 Commit with `feat(ledger): add idempotent posting and compensating reversal` and push.
 
