@@ -18,6 +18,16 @@ const sampleAccount = {
   status: "ACTIVE"
 };
 
+const sampleLedgerAccount = {
+  externalAccountId: "101",
+  currency: "USD",
+  postedBalance: 200,
+  pendingBalance: 50,
+  availableBalance: 175,
+  projectionVersion: 7,
+  updatedAt: "2026-06-25T07:00:00Z"
+};
+
 const frozenAccount = {
   ...sampleAccount,
   id: 202,
@@ -82,6 +92,9 @@ function mockFetch(handler?: (url: string, init?: RequestInit) => Promise<Respon
     }
     if (url.includes("/api/accounts")) {
       return jsonResponse({ ...emptyPage, content: [sampleAccount], totalElements: 1, totalPages: 1 });
+    }
+    if (url.includes("/api/ledger/accounts")) {
+      return jsonResponse([]);
     }
     if (url.includes("/api/notifications/summary")) {
       return jsonResponse({ total: 0, unread: 0, bySeverity: {}, byType: {}, bySourceType: {} });
@@ -220,6 +233,79 @@ describe("account forms", () => {
     expect(await screen.findByText("Ledger $250.00")).toBeInTheDocument();
   });
 
+  it("uses authoritative ledger projections on the dashboard and labels pending funds unavailable", async () => {
+    const { calls } = mockFetch((url) => {
+      if (url.includes("/api/accounts")) {
+        return jsonResponse({
+          ...emptyPage,
+          content: [{ ...sampleAccount, balance: 999, ledgerBalance: 999, availableBalance: 999 }],
+          totalElements: 1,
+          totalPages: 1
+        });
+      }
+      if (url.includes("/api/ledger/accounts")) {
+        return jsonResponse([sampleLedgerAccount]);
+      }
+      return undefined;
+    });
+
+    renderApp("/", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    expect(await screen.findByText("Available balance")).toBeInTheDocument();
+    expect((await screen.findAllByText("$175.00")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Posted $200.00")).toBeInTheDocument();
+    expect(await screen.findByText("Pending $50.00 unavailable")).toBeInTheDocument();
+    expect(calls.some(({ url }) => url.includes("/transaction-api/api/ledger/accounts"))).toBe(true);
+  });
+
+  it("keeps legacy account balances visible when ledger projections are unavailable during deployment skew", async () => {
+    mockFetch((url) => {
+      if (url.includes("/api/accounts")) {
+        return jsonResponse({ ...emptyPage, content: [sampleAccount], totalElements: 1, totalPages: 1 });
+      }
+      if (url.includes("/api/ledger/accounts")) {
+        return jsonResponse({ message: "Ledger warming up" }, 503);
+      }
+      return undefined;
+    });
+
+    renderApp("/", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    expect(await screen.findByText("Available balance")).toBeInTheDocument();
+    expect((await screen.findAllByText("$175.00")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Ledger $250.00")).toBeInTheDocument();
+  });
+
+  it("shows posted, pending, and available authoritative balances on the accounts page", async () => {
+    const user = userEvent.setup();
+    mockFetch((url) => {
+      if (url.includes("/api/accounts")) {
+        return jsonResponse({
+          ...emptyPage,
+          content: [{ ...sampleAccount, balance: 999, ledgerBalance: 999, availableBalance: 999 }],
+          totalElements: 1,
+          totalPages: 1
+        });
+      }
+      if (url.includes("/api/ledger/accounts")) {
+        return jsonResponse([sampleLedgerAccount]);
+      }
+      return undefined;
+    });
+
+    renderApp("/accounts", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    expect(await screen.findByText("Posted")).toBeInTheDocument();
+    expect(await screen.findByText("Pending")).toBeInTheDocument();
+    expect((await screen.findAllByText("$175.00")).length).toBeGreaterThan(0);
+    expect(screen.getByText("$200.00")).toBeInTheDocument();
+    expect(screen.getByText("$50.00")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "View account 101" }));
+    expect(screen.getByText("Projection version")).toBeInTheDocument();
+    expect(screen.getByText("7")).toBeInTheDocument();
+  });
+
   it("renders account type-specific fields", async () => {
     const user = userEvent.setup();
     mockFetch();
@@ -310,6 +396,52 @@ describe("transaction filters", () => {
       )).toBe(true);
     });
     expect(await screen.findByText("DP-20260530-0001")).toBeInTheDocument();
+  });
+
+  it("shows customer-safe journal postings for a selected transaction with a journal link", async () => {
+    const user = userEvent.setup();
+    const transaction = sampleTransaction({ journalId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" });
+    const { calls } = mockFetch((url) => {
+      if (url.includes("/api/ledger/journals/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")) {
+        return jsonResponse({
+          journalId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+          journalReference: "txn-1",
+          journalType: "TRANSFER",
+          state: "POSTED",
+          currency: "USD",
+          customerAmount: 42.5,
+          description: "Card purchase",
+          postedAt: "2026-05-20T10:00:05",
+          postings: [
+            {
+              externalAccountId: "101",
+              direction: "DEBIT",
+              amount: 42.5,
+              currency: "USD",
+              memo: "Card purchase"
+            }
+          ]
+        });
+      }
+      if (url.includes("/api/transactions/txn-1")) {
+        return jsonResponse(transaction);
+      }
+      if (url.includes("/api/transactions")) {
+        return jsonResponse({ ...emptyPage, content: [transaction], totalElements: 1, totalPages: 1 });
+      }
+      return undefined;
+    });
+
+    renderApp("/transactions", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    await user.click(await screen.findByText("txn-1"));
+
+    expect(await screen.findByText("Ledger journal")).toBeInTheDocument();
+    expect(screen.getByText("POSTED")).toBeInTheDocument();
+    expect(screen.getByText("Account 101")).toBeInTheDocument();
+    expect(screen.getByText("DEBIT $42.50")).toBeInTheDocument();
+    expect(calls.some(({ url }) => url.includes("/transaction-api/api/ledger/journals/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))).toBe(true);
+    expect(screen.queryByText("ledgerAccountId")).not.toBeInTheDocument();
   });
 });
 

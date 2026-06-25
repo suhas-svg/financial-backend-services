@@ -49,6 +49,7 @@ public class SecurityConfig {
 
                         // ── Transaction endpoints — require authenticated user ────────────────
                         .requestMatchers("/api/transactions/**").authenticated()
+                        .requestMatchers("/api/ledger/**").authenticated()
 
                         // ── Catch-all ────────────────────────────────────────────────────────
                         .anyRequest().authenticated())

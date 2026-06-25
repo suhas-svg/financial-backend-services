@@ -30,6 +30,37 @@ export type Account = {
   dueDate?: string;
 };
 
+export type LedgerAccountProjection = {
+  externalAccountId: string;
+  currency: string;
+  postedBalance: number;
+  pendingBalance: number;
+  availableBalance: number;
+  projectionVersion: number;
+  updatedAt?: string;
+};
+
+export type CustomerJournalPosting = {
+  externalAccountId: string;
+  direction: "DEBIT" | "CREDIT" | string;
+  amount: number;
+  currency: string;
+  memo?: string;
+};
+
+export type CustomerJournal = {
+  journalId: string;
+  journalReference?: string;
+  journalType: string;
+  state: string;
+  currency: string;
+  customerAmount: number;
+  description?: string;
+  postedAt?: string;
+  reversalOfJournalId?: string;
+  postings: CustomerJournalPosting[];
+};
+
 export type NotificationType = "TRANSACTION_COMPLETED" | "TRANSACTION_FAILED" | "ACCOUNT_FROZEN" | "ACCOUNT_UNFROZEN" | "DISPUTE_CREATED" | "DISPUTE_STATUS_UPDATED";
 export type NotificationSeverity = "INFO" | "SUCCESS" | "WARNING" | "CRITICAL";
 export type NotificationStatus = "UNREAD" | "READ";
@@ -65,6 +96,7 @@ export type DisputeReasonCode = "UNAUTHORIZED" | "DUPLICATE" | "INCORRECT_AMOUNT
 
 export type Transaction = {
   transactionId: string;
+  journalId?: string;
   fromAccountId?: string;
   toAccountId?: string;
   amount: number;

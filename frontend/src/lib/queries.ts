@@ -1,4 +1,4 @@
-import type { Account, AccountStatus, AuditLogEntry, AuditSummary, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, Limits, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, Page, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, Transaction, TransactionDispute, TransactionStats } from "../types";
+import type { Account, AccountStatus, AuditLogEntry, AuditSummary, CustomerJournal, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, LedgerAccountProjection, Limits, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, Page, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, Transaction, TransactionDispute, TransactionStats } from "../types";
 import { apiRequest, toQuery } from "./api";
 import type { AccountValues, DisputeNoteValues, DisputeStatusValues, DisputeValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, TransferValues } from "./schemas";
 import { getSession } from "./session";
@@ -13,6 +13,14 @@ export function register(values: RegisterValues) {
 
 export function listAccounts(params: { ownerId?: string; accountType?: string; status?: AccountStatus | ""; page?: number; size?: number } = {}) {
   return apiRequest<Page<Account>>("account", `/api/accounts${toQuery({ size: 20, ...params })}`);
+}
+
+export function listLedgerAccounts() {
+  return apiRequest<LedgerAccountProjection[]>("transaction", "/api/ledger/accounts");
+}
+
+export function getCustomerJournal(journalId: string) {
+  return apiRequest<CustomerJournal>("transaction", `/api/ledger/journals/${journalId}`);
 }
 
 export function createAccount(values: AccountValues) {

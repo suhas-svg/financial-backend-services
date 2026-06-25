@@ -1,61 +1,85 @@
 ﻿{
     "schemaVersion":  1,
-    "taskId":  "task six projection mirror outbox",
-    "objective":  "Deliver versioned balance mirrors through the ledger outbox",
+    "taskId":  "double-entry-ledger",
+    "objective":  "Implement the approved ledger MVP",
     "sourceAgent":  "codex",
     "targetAgent":  "antigravity",
     "repository":  "suhas-svg/financial-backend-services",
     "branch":  "codex/double-entry-ledger-mvp",
     "baseBranch":  "main",
-    "headCommit":  "6af17cddb56010885ea27cc0aeec765273a48e3e",
+    "headCommit":  "b7d954cc38d78460af25f032cb62a321222b6638",
     "worktree":  "C:/Users/super/Desktop/project5/github-push-stage/financial-double-entry-ledger-mvp",
-    "status":  "ready_for_handoff",
+    "status":  "local_only",
     "completed":  [
-                      "Added projection outbox domain, repository, enqueue service, dispatcher, client method, migration, metrics, and tests.",
-                      "Wired customer projection changes from posting flow into the outbox.",
-                      "Verified backend suites and handoff protocol."
+                      "Task 7 customer balance and journal APIs backend/frontend slice"
                   ],
     "remaining":  [
-                      "Task seven customer balance and journal APIs.",
-                      "Task eight reconciliation starts at V17.",
-                      "Task nine statements starts at V18."
+                      "Task 8 reconciliation and admin exception queue"
                   ],
     "blockers":  [
 
                  ],
     "changedFiles":  [
-
+                         ".agent/active-handoff.json",
+                         ".agent/lease.json",
+                         "frontend/src/lib/accountBalances.ts",
+                         "frontend/src/lib/api.test.ts",
+                         "frontend/src/lib/queries.ts",
+                         "frontend/src/pages/AccountsPage.tsx",
+                         "frontend/src/pages/DashboardPage.tsx",
+                         "frontend/src/pages/TransactionsPage.tsx",
+                         "frontend/src/test/app.component.test.tsx",
+                         "frontend/src/types.ts",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/LedgerAccountRepository.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/security/SecurityConfig.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/CustomerJournalPostingResponse.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/CustomerJournalResponse.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/CustomerLedgerController.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/CustomerLedgerQueryService.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/DefaultCustomerLedgerQueryService.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/LedgerAccountNotFoundException.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/LedgerAccountSummaryResponse.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/LedgerBalanceBatchRequest.java",
+                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/web/CustomerLedgerControllerTest.java",
+                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/web/DefaultCustomerLedgerQueryServiceTest.java"
                      ],
     "validation":  [
                        {
-                           "summary":  "Focused ledger outbox tests passed.",
-                           "finishedAt":  "2026-06-25T03:54:57.9323953Z",
-                           "command":  "mvn focused task six tests",
+                           "summary":  "Focused customer ledger controller and query service tests passed",
+                           "finishedAt":  "2026-06-25T11:14:48.4545354+00:00",
+                           "command":  ".\\mvnw.cmd -q \"-Dtest=CustomerLedgerControllerTest,DefaultCustomerLedgerQueryServiceTest\" test",
                            "result":  "passed",
                            "workingDirectory":  "transaction-service"
                        },
                        {
-                           "summary":  "Full transaction suite passed with clean Docker Postgres and sixteen Flyway migrations.",
-                           "finishedAt":  "2026-06-25T03:54:57.9323953Z",
-                           "command":  "mvn full transaction tests",
+                           "summary":  "Focused frontend projection, journal, and API query tests passed",
+                           "finishedAt":  "2026-06-25T11:14:48.4545354+00:00",
+                           "command":  "npm.cmd test -- src/test/app.component.test.tsx src/lib/api.test.ts",
                            "result":  "passed",
+                           "workingDirectory":  "frontend"
+                       },
+                       {
+                           "summary":  "Frontend TypeScript and production build passed",
+                           "finishedAt":  "2026-06-25T11:14:48.4545354+00:00",
+                           "command":  "npm.cmd run build",
+                           "result":  "passed",
+                           "workingDirectory":  "frontend"
+                       },
+                       {
+                           "summary":  "Full frontend Vitest suite passed",
+                           "finishedAt":  "2026-06-25T11:14:48.4545354+00:00",
+                           "command":  "npm.cmd test",
+                           "result":  "passed",
+                           "workingDirectory":  "frontend"
+                       },
+                       {
+                           "summary":  "Full backend suite blocked by local Docker/Testcontainers discovery resolving Docker Desktop docker_cli proxy; raw docker CLI to docker_engine and dockerDesktopLinuxEngine succeeds",
+                           "finishedAt":  "2026-06-25T11:14:48.4545354+00:00",
+                           "command":  ".\\mvnw.cmd -q test",
+                           "result":  "failed",
                            "workingDirectory":  "transaction-service"
-                       },
-                       {
-                           "summary":  "Account suite passed.",
-                           "finishedAt":  "2026-06-25T03:54:57.9323953Z",
-                           "command":  "mvn account tests",
-                           "result":  "passed",
-                           "workingDirectory":  "account-service"
-                       },
-                       {
-                           "summary":  "Handoff protocol passed with forty eight assertions.",
-                           "finishedAt":  "2026-06-25T03:54:57.9323953Z",
-                           "command":  "handoff protocol tests",
-                           "result":  "passed",
-                           "workingDirectory":  "repository root"
                        }
                    ],
-    "nextAction":  "Begin Task seven with failing customer ledger API tests.",
-    "updatedAt":  "2026-06-25T03:54:58.3438370+00:00"
+    "nextAction":  "Begin Task 8 with failing reconciliation exception queue tests",
+    "updatedAt":  "2026-06-25T11:14:49.0221774+00:00"
 }

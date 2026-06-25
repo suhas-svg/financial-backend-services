@@ -2,18 +2,20 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowRightLeft, PlusCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { listAccounts, getLimits, getTransactions, getUserStats } from "../lib/queries";
+import { getLimits, getTransactions, getUserStats, listAccounts, listLedgerAccounts } from "../lib/queries";
 import { compactDate, money, percent } from "../lib/format";
-import { availableBalance, ledgerBalance } from "../lib/accountBalances";
+import { availableBalance, ledgerBalance, pendingBalance, projectionFor, projectionMap } from "../lib/accountBalances";
 import { EmptyState, Panel, Stat } from "../components/ui";
 import { StatusBadge } from "../components/StatusBadge";
 
 export function DashboardPage() {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => listAccounts() });
+  const ledgerAccounts = useQuery({ queryKey: ["ledger", "accounts"], queryFn: listLedgerAccounts, retry: false });
   const transactions = useQuery({ queryKey: ["transactions", 0], queryFn: () => getTransactions(0) });
   const stats = useQuery({ queryKey: ["stats", "user"], queryFn: getUserStats });
   const limits = useQuery({ queryKey: ["limits"], queryFn: getLimits });
-  const totalBalance = accounts.data?.content.reduce((sum, account) => sum + availableBalance(account), 0) ?? 0;
+  const projections = projectionMap(ledgerAccounts.data);
+  const totalBalance = accounts.data?.content.reduce((sum, account) => sum + availableBalance(account, projectionFor(account, projections)), 0) ?? 0;
   const chartData = Object.entries(stats.data?.transactionAmountsByType ?? {}).map(([name, value]) => ({ name, value }));
 
   return (
@@ -46,6 +48,10 @@ export function DashboardPage() {
             {accounts.data?.content.length ? (
               accounts.data.content.map((account) => (
                 <div key={account.id} className="rounded-md border border-line p-3">
+                  {(() => {
+                    const projection = projectionFor(account, projections);
+                    return (
+                      <>
                   <div className="flex items-center justify-between">
                     <p className="font-medium">#{account.id}</p>
                     <div className="flex gap-2">
@@ -53,10 +59,20 @@ export function DashboardPage() {
                       <StatusBadge value={account.status ?? "ACTIVE"} />
                     </div>
                   </div>
-                  <p className="mt-2 text-2xl font-semibold">{money(availableBalance(account))}</p>
-                  <p className="text-xs text-muted">Ledger {money(ledgerBalance(account))}</p>
+                  <p className="mt-2 text-2xl font-semibold">{money(availableBalance(account, projection), projection?.currency)}</p>
+                  {projection ? (
+                    <>
+                      <p className="text-xs text-muted">Posted {money(ledgerBalance(account, projection), projection.currency)}</p>
+                      <p className="text-xs text-muted">Pending {money(pendingBalance(projection), projection.currency)} unavailable</p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted">Ledger {money(ledgerBalance(account))}</p>
+                  )}
                   {account.status === "FROZEN" ? <p className="text-xs text-danger">{account.statusReason || "Debit hold active"}</p> : null}
                   <p className="text-xs text-muted">Opened {compactDate(account.createdAt)}</p>
+                      </>
+                    );
+                  })()}
                 </div>
               ))
             ) : (
