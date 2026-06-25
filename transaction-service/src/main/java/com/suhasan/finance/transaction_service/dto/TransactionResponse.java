@@ -5,6 +5,7 @@ import com.suhasan.finance.transaction_service.entity.TransactionType;
 import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Data
 @NoArgsConstructor
@@ -26,6 +27,7 @@ public class TransactionResponse {
     private String createdBy;
     private String idempotencyKey;
     private String processingState;
+    private UUID journalId;
     
     // Reversal information
     private String originalTransactionId;  // For reversal transactions

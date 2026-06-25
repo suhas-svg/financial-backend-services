@@ -262,27 +262,27 @@ Commit with `feat(ledger): add idempotent posting and compensating reversal` and
 - Test existing transaction service/controller/reversal tests.
 - Create: `ledger/service/TransactionLedgerIntegrationTest.java`
 
-- [ ] **Step 1: Write failing compatibility tests**
+- [x] **Step 1: Write failing compatibility tests**
 
 Assert existing deposit, withdrawal, transfer, and reversal routes produce expected response shapes plus `journalId`, while financial changes come from ledger projections and account ownership/status/currency still comes from `account-service`.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run focused existing controller/service tests plus `TransactionLedgerIntegrationTest`.
 
-- [ ] **Step 3: Delegate workflows to the ledger**
+- [x] **Step 3: Delegate workflows to the ledger**
 
 Resolve ledger accounts before posting. Map deposit, withdrawal, transfer, and reversal to standard posting templates. Preserve transaction IDs, audit/risk calls, notifications, limits, and statuses. Stop calling legacy balance/hold mutation endpoints when `ledger.authoritative=true`.
 
-- [ ] **Step 4: Add feature-gated deployment compatibility**
+- [x] **Step 4: Add feature-gated deployment compatibility**
 
 Default tests and local development to ledger authority after migrations. Permit `ledger.authoritative=false` only for pre-cutover deployment; never dual-post.
 
-- [ ] **Step 5: Verify focused and full tests**
+- [x] **Step 5: Verify focused and full tests**
 
 Run both service suites. Expected: all existing and new tests pass.
 
-- [ ] **Step 6: Checkpoint and commit**
+- [x] **Step 6: Checkpoint and commit**
 
 Commit with `feat(transactions): route money movement through ledger` and push.
 
@@ -350,7 +350,7 @@ Commit with `feat(ui): show authoritative ledger balances` and push.
 ## Task 8: Reconciliation and admin exception queue
 
 **Files:**
-- Create: `V15__create_reconciliation.sql`
+- Create: `V16__create_reconciliation.sql`
 - Create reconciliation entities/repositories/services/controllers under `ledger/`.
 - Modify audit, investigation, metrics, and security integration.
 - Create: `frontend/src/pages/AdminReconciliationPage.tsx`
@@ -383,7 +383,7 @@ Commit with `feat(reconciliation): add daily controls and exception queue` and p
 ## Task 9: Immutable monthly statements
 
 **Files:**
-- Create: `V16__create_monthly_statements.sql`
+- Create: `V17__create_monthly_statements.sql`
 - Create statement entities/repositories/service/controller/exporter.
 - Create: `frontend/src/pages/StatementsPage.tsx`
 - Modify customer layout/app/types/queries/tests.

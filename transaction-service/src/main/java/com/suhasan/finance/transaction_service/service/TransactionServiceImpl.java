@@ -12,10 +12,20 @@ import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
 import com.suhasan.finance.transaction_service.exception.AccountServiceUnavailableException;
 import com.suhasan.finance.transaction_service.exception.TransactionAlreadyReversedException;
+import com.suhasan.finance.transaction_service.ledger.domain.JournalState;
+import com.suhasan.finance.transaction_service.ledger.domain.JournalType;
+import com.suhasan.finance.transaction_service.ledger.domain.LedgerAccountKind;
+import com.suhasan.finance.transaction_service.ledger.domain.PostingDirection;
+import com.suhasan.finance.transaction_service.ledger.domain.PostingDraft;
+import com.suhasan.finance.transaction_service.ledger.service.AccountLedgerResolver;
+import com.suhasan.finance.transaction_service.ledger.service.JournalCommand;
+import com.suhasan.finance.transaction_service.ledger.service.JournalResult;
+import com.suhasan.finance.transaction_service.ledger.service.LedgerPostingService;
 import com.suhasan.finance.transaction_service.repository.TransactionRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
@@ -51,6 +61,11 @@ public class TransactionServiceImpl implements TransactionService {
     private final MetricsService metricsService;
     private final TransactionLimitService transactionLimitService;
     private final RiskEvaluationService riskEvaluationService;
+    private final LedgerPostingService ledgerPostingService;
+    private final AccountLedgerResolver accountLedgerResolver;
+
+    @Value("${ledger.authoritative:true}")
+    private boolean ledgerAuthoritative;
 
     @Override
     @Transactional(noRollbackFor = Exception.class)
@@ -113,6 +128,10 @@ public class TransactionServiceImpl implements TransactionService {
         auditService.logTransactionInitiated(transactionId, TransactionType.TRANSFER,
                 request.getFromAccountId(), request.getToAccountId(), request.getAmount(), userId);
         metricsService.recordTransactionInitiated(TransactionType.TRANSFER);
+
+        if (ledgerAuthoritative) {
+            return processLedgerTransfer(transaction, request, fromAccount, normalizedIdempotencyKey, startTime);
+        }
 
         boolean holdPlaced = false;
         boolean holdCaptured = false;
@@ -217,6 +236,73 @@ public class TransactionServiceImpl implements TransactionService {
         }
     }
 
+    private TransactionResponse processLedgerTransfer(
+            Transaction transaction,
+            TransferRequest request,
+            AccountDto fromAccount,
+            String normalizedIdempotencyKey,
+            long startTime) {
+        try {
+            AccountDto toAccount = accountServiceClient.getAccount(request.getToAccountId());
+            if (toAccount == null) {
+                throw new IllegalArgumentException("To account not found");
+            }
+            String currency = transaction.getCurrency();
+            UUID sourceAccountId = accountLedgerResolver.resolveCustomerAccount(
+                    request.getFromAccountId(), fromAccount);
+            UUID destinationAccountId = accountLedgerResolver.resolveCustomerAccount(
+                    request.getToAccountId(), toAccount);
+            JournalCommand command = new JournalCommand(
+                    JournalType.TRANSFER,
+                    currency,
+                    LocalDate.now(),
+                    transaction.getDescription(),
+                    transaction.getTransactionId(),
+                    transaction.getCreatedBy(),
+                    transaction.getCreatedBy() + ":TRANSFER",
+                    firstNonBlank(normalizedIdempotencyKey, transaction.getTransactionId()),
+                    "TRANSFER|" + transaction.getTransactionId() + "|" + transaction.getAmount(),
+                    List.of(
+                            new PostingDraft(sourceAccountId, PostingDirection.DEBIT,
+                                    transaction.getAmount(), currency, "Transfer source debit"),
+                            new PostingDraft(destinationAccountId, PostingDirection.CREDIT,
+                                    transaction.getAmount(), currency, "Transfer destination credit")));
+            JournalResult pending = ledgerPostingService.createPending(command);
+            JournalResult posted = ledgerPostingService.post(pending.journalId(), "SYSTEM");
+            if (posted.state() != JournalState.POSTED) {
+                throw new IllegalStateException("Transfer journal did not post: " + posted.state());
+            }
+            transaction.setJournalId(posted.journalId());
+            transaction.setFromAccountBalanceAfter(fromAccount.ledgerBalanceOrBalance().subtract(transaction.getAmount()));
+            transaction.setToAccountBalanceBefore(toAccount.ledgerBalanceOrBalance());
+            transaction.setToAccountBalanceAfter(toAccount.ledgerBalanceOrBalance().add(transaction.getAmount()));
+            transaction.setProcessingState(TransactionProcessingState.COMPLETED);
+            transaction.setStatus(TransactionStatus.COMPLETED);
+            transaction.setProcessedBy("SYSTEM");
+            transaction.setProcessedAt(LocalDateTime.now());
+            transaction = transactionRepository.save(transaction);
+
+            long processingTime = System.currentTimeMillis() - startTime;
+            auditService.logTransactionCompleted(transaction);
+            riskEvaluationService.evaluateCompletedTransaction(transaction);
+            metricsService.recordTransactionCompleted(TransactionType.TRANSFER,
+                    TransactionStatus.COMPLETED, request.getAmount(), processingTime);
+            emitTransactionNotification(transaction);
+            return mapToResponse(transaction);
+        } catch (Exception e) {
+            transaction.setStatus(TransactionStatus.FAILED);
+            transaction.setProcessedAt(LocalDateTime.now());
+            transactionRepository.save(transaction);
+            auditService.logTransactionFailed(transaction.getTransactionId(), TransactionType.TRANSFER,
+                    request.getFromAccountId(), request.getToAccountId(), request.getAmount(),
+                    transaction.getCreatedBy(), e.getMessage(), "PROCESSING_ERROR");
+            riskEvaluationService.evaluateFailedTransaction(transaction);
+            metricsService.recordTransactionFailed(TransactionType.TRANSFER, "PROCESSING_ERROR");
+            emitTransactionNotification(transaction);
+            throw new RuntimeException("Transfer failed: " + e.getMessage());
+        }
+    }
+
     @Override
     @Transactional(noRollbackFor = Exception.class)
     @CacheEvict(value = "transaction:history", allEntries = true)
@@ -264,6 +350,10 @@ public class TransactionServiceImpl implements TransactionService {
                             "Idempotency conflict but record not found — manual review required"));
         }
 
+        if (ledgerAuthoritative) {
+            return processLedgerDeposit(transaction, account, normalizedIdempotencyKey);
+        }
+
         try {
             ResilientAccountServiceClient.BalanceOperationResponse response = accountServiceClient
                     .applyBalanceOperation(
@@ -274,6 +364,53 @@ public class TransactionServiceImpl implements TransactionService {
                             "DEPOSIT",
                             true);
             transaction.setToAccountBalanceAfter(response.getNewBalance());
+            transaction.setStatus(TransactionStatus.COMPLETED);
+            transaction.setProcessedBy("SYSTEM");
+            transaction.setProcessedAt(LocalDateTime.now());
+            transaction.setProcessingState(TransactionProcessingState.COMPLETED);
+            transaction = transactionRepository.save(transaction);
+            riskEvaluationService.evaluateCompletedTransaction(transaction);
+            emitTransactionNotification(transaction);
+            return mapToResponse(transaction);
+        } catch (Exception e) {
+            transaction.setStatus(TransactionStatus.FAILED);
+            transaction.setProcessedAt(LocalDateTime.now());
+            transactionRepository.save(transaction);
+            riskEvaluationService.evaluateFailedTransaction(transaction);
+            emitTransactionNotification(transaction);
+            throw new RuntimeException("Deposit failed: " + e.getMessage());
+        }
+    }
+
+    private TransactionResponse processLedgerDeposit(
+            Transaction transaction, AccountDto account, String normalizedIdempotencyKey) {
+        try {
+            String currency = transaction.getCurrency();
+            UUID clearingAccountId = accountLedgerResolver.resolveSystemAccount(LedgerAccountKind.CLEARING, currency);
+            UUID customerAccountId = accountLedgerResolver.resolveCustomerAccount(
+                    transaction.getToAccountId(), account);
+            JournalCommand command = new JournalCommand(
+                    JournalType.DEPOSIT,
+                    currency,
+                    LocalDate.now(),
+                    transaction.getDescription(),
+                    transaction.getTransactionId(),
+                    transaction.getCreatedBy(),
+                    transaction.getCreatedBy() + ":DEPOSIT",
+                    firstNonBlank(normalizedIdempotencyKey, transaction.getTransactionId()),
+                    "DEPOSIT|" + transaction.getTransactionId() + "|" + transaction.getAmount(),
+                    List.of(
+                            new PostingDraft(clearingAccountId, PostingDirection.DEBIT,
+                                    transaction.getAmount(), currency, "Deposit clearing"),
+                            new PostingDraft(customerAccountId, PostingDirection.CREDIT,
+                                    transaction.getAmount(), currency, "Deposit customer credit")));
+            JournalResult pending = ledgerPostingService.createPending(command);
+            JournalResult posted = ledgerPostingService.post(pending.journalId(), "SYSTEM");
+            if (posted.state() != JournalState.POSTED) {
+                throw new IllegalStateException("Deposit journal did not post: " + posted.state());
+            }
+            transaction.setJournalId(posted.journalId());
+            transaction.setToAccountBalanceAfter(account.ledgerBalanceOrBalance().add(transaction.getAmount()));
             transaction.setStatus(TransactionStatus.COMPLETED);
             transaction.setProcessedBy("SYSTEM");
             transaction.setProcessedAt(LocalDateTime.now());
@@ -343,6 +480,10 @@ public class TransactionServiceImpl implements TransactionService {
                             "Idempotency conflict but record not found — manual review required"));
         }
 
+        if (ledgerAuthoritative) {
+            return processLedgerWithdrawal(transaction, account, normalizedIdempotencyKey);
+        }
+
         boolean holdPlaced = false;
         boolean holdCaptured = false;
         String holdId = transaction.getTransactionId() + ":hold";
@@ -397,6 +538,53 @@ public class TransactionServiceImpl implements TransactionService {
                 riskEvaluationService.evaluateFailedTransaction(transaction);
                 emitTransactionNotification(transaction);
             }
+            throw new RuntimeException("Withdrawal failed: " + e.getMessage());
+        }
+    }
+
+    private TransactionResponse processLedgerWithdrawal(
+            Transaction transaction, AccountDto account, String normalizedIdempotencyKey) {
+        try {
+            String currency = transaction.getCurrency();
+            UUID customerAccountId = accountLedgerResolver.resolveCustomerAccount(
+                    transaction.getFromAccountId(), account);
+            UUID clearingAccountId = accountLedgerResolver.resolveSystemAccount(LedgerAccountKind.CLEARING, currency);
+            JournalCommand command = new JournalCommand(
+                    JournalType.WITHDRAWAL,
+                    currency,
+                    LocalDate.now(),
+                    transaction.getDescription(),
+                    transaction.getTransactionId(),
+                    transaction.getCreatedBy(),
+                    transaction.getCreatedBy() + ":WITHDRAWAL",
+                    firstNonBlank(normalizedIdempotencyKey, transaction.getTransactionId()),
+                    "WITHDRAWAL|" + transaction.getTransactionId() + "|" + transaction.getAmount(),
+                    List.of(
+                            new PostingDraft(customerAccountId, PostingDirection.DEBIT,
+                                    transaction.getAmount(), currency, "Withdrawal customer debit"),
+                            new PostingDraft(clearingAccountId, PostingDirection.CREDIT,
+                                    transaction.getAmount(), currency, "Withdrawal clearing")));
+            JournalResult pending = ledgerPostingService.createPending(command);
+            JournalResult posted = ledgerPostingService.post(pending.journalId(), "SYSTEM");
+            if (posted.state() != JournalState.POSTED) {
+                throw new IllegalStateException("Withdrawal journal did not post: " + posted.state());
+            }
+            transaction.setJournalId(posted.journalId());
+            transaction.setFromAccountBalanceAfter(account.ledgerBalanceOrBalance().subtract(transaction.getAmount()));
+            transaction.setStatus(TransactionStatus.COMPLETED);
+            transaction.setProcessedBy("SYSTEM");
+            transaction.setProcessedAt(LocalDateTime.now());
+            transaction.setProcessingState(TransactionProcessingState.COMPLETED);
+            transaction = transactionRepository.save(transaction);
+            riskEvaluationService.evaluateCompletedTransaction(transaction);
+            emitTransactionNotification(transaction);
+            return mapToResponse(transaction);
+        } catch (Exception e) {
+            transaction.setStatus(TransactionStatus.FAILED);
+            transaction.setProcessedAt(LocalDateTime.now());
+            transactionRepository.save(transaction);
+            riskEvaluationService.evaluateFailedTransaction(transaction);
+            emitTransactionNotification(transaction);
             throw new RuntimeException("Withdrawal failed: " + e.getMessage());
         }
     }
@@ -476,7 +664,11 @@ public class TransactionServiceImpl implements TransactionService {
 
         try {
             // Requirement 6.3: Update account balances to reflect the reversal
-            processReversalBalanceUpdates(originalTransaction, reversal);
+            if (ledgerAuthoritative) {
+                processLedgerReversal(originalTransaction, reversal, reason, userId, normalizedIdempotencyKey);
+            } else {
+                processReversalBalanceUpdates(originalTransaction, reversal);
+            }
 
             // Complete the reversal transaction
             reversal.setStatus(TransactionStatus.COMPLETED);
@@ -537,6 +729,28 @@ public class TransactionServiceImpl implements TransactionService {
         }
 
         return mapToResponse(reversal);
+    }
+
+    private void processLedgerReversal(
+            Transaction originalTransaction,
+            Transaction reversal,
+            String reason,
+            String userId,
+            String normalizedIdempotencyKey) {
+        if (originalTransaction.getJournalId() == null) {
+            throw new IllegalArgumentException(
+                    "Original transaction has no ledger journal: " + originalTransaction.getTransactionId());
+        }
+        JournalResult result = ledgerPostingService.reverse(
+                originalTransaction.getJournalId(),
+                userId,
+                reason,
+                firstNonBlank(normalizedIdempotencyKey, reversal.getTransactionId()));
+        if (result.state() != JournalState.POSTED) {
+            throw new IllegalStateException("Reversal journal did not post: " + result.state());
+        }
+        reversal.setJournalId(result.journalId());
+        reversal.setProcessingState(TransactionProcessingState.COMPLETED);
     }
 
     /**
@@ -1088,6 +1302,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .processingState(transaction.getProcessingState() != null
                         ? transaction.getProcessingState().name()
                         : null)
+                .journalId(transaction.getJournalId())
                 .originalTransactionId(transaction.getOriginalTransactionId())
                 .reversalTransactionId(reversalLinkId)
                 .reversedAt(transaction.getReversedAt())

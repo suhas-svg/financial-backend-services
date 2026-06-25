@@ -63,6 +63,9 @@ public class Transaction {
     @Size(max = 128)
     @Column(length = 128)
     private String idempotencyKey;
+
+    @Column(name = "journal_id")
+    private UUID journalId;
     
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
