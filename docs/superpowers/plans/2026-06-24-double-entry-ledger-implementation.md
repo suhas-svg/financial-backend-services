@@ -358,27 +358,27 @@ Commit with `feat(ui): show authoritative ledger balances` and push.
 - Create: `frontend/src/pages/AdminReconciliationPage.tsx`
 - Modify admin layout/app/types/queries/tests.
 
-- [ ] **Step 1: Write failing reconciliation tests**
+- [x] **Step 1: Write failing reconciliation tests**
 
 Cover each designed check, advisory-lock single execution, stable exception dedupe, deterministic severity, assignment/version conflicts, required resolution notes, and no ledger mutation on exception resolution.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run focused reconciliation tests.
 
-- [ ] **Step 3: Implement schema and reconciliation engine**
+- [x] **Step 3: Implement schema and reconciliation engine**
 
 Recompute journal/projection controls from immutable sources. Persist immutable run/check results and deduplicated operational exceptions.
 
-- [ ] **Step 4: Add authorized admin APIs and audit links**
+- [x] **Step 4: Add authorized admin APIs and audit links**
 
 Implement run/list/detail/assignment/status/notes endpoints with optimistic versions and admin-only mutations.
 
-- [ ] **Step 5: Write failing and then passing frontend tests**
+- [x] **Step 5: Write failing and then passing frontend tests**
 
 Cover summaries, filters, detail, assignment, notes, status changes, links, and manual rerun.
 
-- [ ] **Step 6: Verify, checkpoint, and commit**
+- [x] **Step 6: Verify, checkpoint, and commit**
 
 Commit with `feat(reconciliation): add daily controls and exception queue` and push.
 

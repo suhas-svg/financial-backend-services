@@ -316,3 +316,52 @@ export type InvestigationSummary = {
   reversals: number;
   highSeverityItems: number;
 };
+
+export type ReconciliationRunStatus = "RUNNING" | "COMPLETED" | "COMPLETED_WITH_EXCEPTIONS" | "FAILED";
+export type ReconciliationExceptionStatus = "OPEN" | "ACKNOWLEDGED" | "IN_PROGRESS" | "RESOLVED" | "WAIVED";
+export type ReconciliationSeverity = "INFO" | "WARNING" | "HIGH" | "CRITICAL";
+
+export type ReconciliationRun = {
+  runId: string;
+  type?: string;
+  reconciliationType?: string;
+  businessDate: string;
+  status: ReconciliationRunStatus | string;
+  startedAt: string;
+  completedAt?: string;
+  requestedBy?: string;
+  totalExceptions: number;
+  criticalExceptions: number;
+};
+
+export type ReconciliationException = {
+  exceptionId: string;
+  runId?: string;
+  checkCode: string;
+  severity: ReconciliationSeverity | string;
+  status: ReconciliationExceptionStatus | string;
+  fingerprint: string;
+  title?: string;
+  summary?: string;
+  description?: string;
+  journalId?: string;
+  ledgerAccountId?: string;
+  externalAccountId?: string;
+  currency?: string;
+  expectedAmount?: number;
+  actualAmount?: number;
+  deltaAmount?: number;
+  detectedAt: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  resolutionNote?: string;
+  assignedTo?: string;
+  notes?: ReconciliationExceptionNote[];
+  version: number;
+};
+
+export type ReconciliationExceptionNote = {
+  noteId: string;
+  author: string;
+  note: string;
+};

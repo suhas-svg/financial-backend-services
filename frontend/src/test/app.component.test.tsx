@@ -501,6 +501,7 @@ describe("customer shell navigation", () => {
     expect(screen.getByRole("link", { name: "Monitoring" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Ops Transactions" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Audit Log" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Reconciliation" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Risk Alerts" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Risk Cases" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Disputes" })).toBeInTheDocument();
@@ -975,6 +976,128 @@ describe("admin disputes", () => {
         && String(init.body).includes("Customer claim accepted.")
       )).toBe(true);
     });
+  });
+});
+
+describe("admin reconciliation", () => {
+  it("runs daily reconciliation, filters exceptions, and resolves selected exceptions", async () => {
+    const user = userEvent.setup();
+    const run = {
+      runId: "run-1",
+      type: "DAILY_LEDGER",
+      businessDate: "2026-06-25",
+      status: "COMPLETED_WITH_EXCEPTIONS",
+      startedAt: "2026-06-25T01:00:00Z",
+      completedAt: "2026-06-25T01:00:05Z",
+      requestedBy: "ops",
+      totalExceptions: 1,
+      criticalExceptions: 1
+    };
+    const exception = {
+      exceptionId: "ex-1",
+      runId: "run-1",
+      checkCode: "PROJECTION_RECOMPUTATION",
+      severity: "CRITICAL",
+      status: "OPEN",
+      fingerprint: "projection:ledger-1:posted-balance",
+      title: "Projection drift",
+      description: "Ledger account 101 projection differs from posted journals.",
+      ledgerAccountId: "ledger-1",
+      externalAccountId: "101",
+      currency: "USD",
+      expectedAmount: 200,
+      actualAmount: 175,
+      deltaAmount: 25,
+      detectedAt: "2026-06-25T01:00:05Z",
+      version: 3
+    };
+    const resolvedException = {
+      ...exception,
+      status: "RESOLVED",
+      resolutionNote: "Projection will be rebuilt after journal replay.",
+      resolvedBy: "ops",
+      resolvedAt: "2026-06-25T02:00:00Z",
+      version: 4
+    };
+    const assignedException = {
+      ...exception,
+      status: "IN_PROGRESS",
+      assignedTo: "analyst-1",
+      version: 4
+    };
+    const notedException = {
+      ...assignedException,
+      notes: [
+        {
+          noteId: "note-1",
+          author: "ops",
+          note: "Reconciling against immutable journal replay."
+        }
+      ]
+    };
+
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/admin/reconciliation/runs") && init?.method === "POST") {
+        return jsonResponse(run);
+      }
+      if (url.includes("/api/admin/reconciliation/runs")) {
+        return jsonResponse([run]);
+      }
+      if (url.includes("/api/admin/reconciliation/exceptions/ex-1/assignment") && init?.method === "PATCH") {
+        return jsonResponse(assignedException);
+      }
+      if (url.includes("/api/admin/reconciliation/exceptions/ex-1/notes") && init?.method === "POST") {
+        return jsonResponse(notedException);
+      }
+      if (url.includes("/api/admin/reconciliation/exceptions/ex-1/status") && init?.method === "PATCH") {
+        return jsonResponse(resolvedException);
+      }
+      if (url.includes("/api/admin/reconciliation/exceptions")) {
+        return jsonResponse([exception]);
+      }
+      return undefined;
+    });
+
+    renderApp("/admin/reconciliation", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
+
+    expect(await screen.findByRole("heading", { name: "Reconciliation" })).toBeInTheDocument();
+    expect(await screen.findByText("Projection drift")).toBeInTheDocument();
+    expect(screen.getByText("1 critical")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Exception status"), "OPEN");
+    await user.selectOptions(screen.getByLabelText("Severity"), "CRITICAL");
+
+    await waitFor(() => {
+      expect(calls.some(({ url }) =>
+        url.includes("/transaction-api/api/admin/reconciliation/exceptions")
+        && url.includes("status=OPEN")
+        && url.includes("severity=CRITICAL")
+      )).toBe(true);
+    });
+
+    await user.click(screen.getByRole("button", { name: "Run daily reconciliation" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) =>
+        url.includes("/transaction-api/api/admin/reconciliation/runs")
+        && init?.method === "POST"
+        && String(init.body).includes("\"businessDate\"")
+      )).toBe(true);
+    });
+
+    await user.click(screen.getByRole("button", { name: "View ex-1" }));
+    await user.type(screen.getByPlaceholderText("Assign to"), "analyst-1");
+    await user.click(screen.getByRole("button", { name: "Assign exception" }));
+    expect(await screen.findByText("analyst-1")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Internal note"), "Reconciling against immutable journal replay.");
+    await user.click(screen.getByRole("button", { name: "Add note" }));
+    expect(await screen.findByText("Reconciling against immutable journal replay.")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Resolution note"), "Projection will be rebuilt after journal replay.");
+    await user.click(screen.getByRole("button", { name: "Resolve exception" }));
+
+    expect(await screen.findByText("Projection will be rebuilt after journal replay.")).toBeInTheDocument();
   });
 });
 

@@ -1,4 +1,4 @@
-﻿{
+{
     "schemaVersion":  1,
     "taskId":  "double-entry-ledger",
     "objective":  "Implement the approved ledger MVP",
@@ -7,79 +7,93 @@
     "repository":  "suhas-svg/financial-backend-services",
     "branch":  "codex/double-entry-ledger-mvp",
     "baseBranch":  "main",
-    "headCommit":  "b7d954cc38d78460af25f032cb62a321222b6638",
+    "headCommit":  "f82aa83878ba03ac241fc6016638e184cdeb4865",
     "worktree":  "C:/Users/super/Desktop/project5/github-push-stage/financial-double-entry-ledger-mvp",
     "status":  "local_only",
     "completed":  [
-                      "Task 7 customer balance and journal APIs backend/frontend slice"
+                      "Task 8 reconciliation and admin exception queue"
                   ],
     "remaining":  [
-                      "Task 8 reconciliation and admin exception queue"
+                      "Task 9 immutable monthly statements"
                   ],
     "blockers":  [
 
                  ],
     "changedFiles":  [
-                         ".agent/active-handoff.json",
-                         ".agent/lease.json",
-                         "frontend/src/lib/accountBalances.ts",
-                         "frontend/src/lib/api.test.ts",
+                         "docs/superpowers/plans/2026-06-24-double-entry-ledger-implementation.md",
+                         "frontend/src/App.tsx",
+                         "frontend/src/components/AdminLayout.tsx",
                          "frontend/src/lib/queries.ts",
-                         "frontend/src/pages/AccountsPage.tsx",
-                         "frontend/src/pages/DashboardPage.tsx",
-                         "frontend/src/pages/TransactionsPage.tsx",
                          "frontend/src/test/app.component.test.tsx",
                          "frontend/src/types.ts",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/LedgerAccountRepository.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/JournalTransactionRepository.java",
                          "transaction-service/src/main/java/com/suhasan/finance/transaction_service/security/SecurityConfig.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/CustomerJournalPostingResponse.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/CustomerJournalResponse.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/CustomerLedgerController.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/CustomerLedgerQueryService.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/DefaultCustomerLedgerQueryService.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/LedgerAccountNotFoundException.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/LedgerAccountSummaryResponse.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/LedgerBalanceBatchRequest.java",
-                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/web/CustomerLedgerControllerTest.java",
-                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/web/DefaultCustomerLedgerQueryServiceTest.java"
+                         "frontend/src/pages/AdminReconciliationPage.tsx",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/ReconciliationCheckCode.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/ReconciliationException.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/ReconciliationExceptionNote.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/ReconciliationExceptionStatus.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/ReconciliationRun.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/ReconciliationRunStatus.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/ReconciliationSeverity.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/ReconciliationType.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/ReconciliationExceptionNoteRepository.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/ReconciliationExceptionRepository.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/ReconciliationRunRepository.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/LedgerReconciliationService.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/ReconciliationAlreadyRunningException.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/ReconciliationRunResult.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/AdminReconciliationController.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/AdminReconciliationQueryService.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/DefaultAdminReconciliationQueryService.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/ReconciliationExceptionAssignmentRequest.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/ReconciliationExceptionNoteRequest.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/ReconciliationExceptionNoteResponse.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/ReconciliationExceptionResponse.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/ReconciliationExceptionStatusRequest.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/ReconciliationRunRequest.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/ReconciliationRunResponse.java",
+                         "transaction-service/src/main/resources/db/migration/V17__create_reconciliation.sql",
+                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/service/LedgerReconciliationServiceTest.java",
+                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/web/AdminReconciliationControllerTest.java"
                      ],
     "validation":  [
                        {
-                           "summary":  "Focused customer ledger controller and query service tests passed",
-                           "finishedAt":  "2026-06-25T11:14:48.4545354+00:00",
-                           "command":  ".\\mvnw.cmd -q \"-Dtest=CustomerLedgerControllerTest,DefaultCustomerLedgerQueryServiceTest\" test",
+                           "command":  ".\\mvnw.cmd -q -DskipTests compile",
+                           "workingDirectory":  "transaction-service",
                            "result":  "passed",
-                           "workingDirectory":  "transaction-service"
+                           "summary":  "Backend compile passed after reconciliation changes",
+                           "finishedAt":  "2026-06-25T17:30:39.0198831+05:30"
                        },
                        {
-                           "summary":  "Focused frontend projection, journal, and API query tests passed",
-                           "finishedAt":  "2026-06-25T11:14:48.4545354+00:00",
-                           "command":  "npm.cmd test -- src/test/app.component.test.tsx src/lib/api.test.ts",
+                           "command":  ".\\mvnw.cmd -q \"-Dtest=LedgerReconciliationServiceTest,AdminReconciliationControllerTest\" test",
+                           "workingDirectory":  "transaction-service",
                            "result":  "passed",
-                           "workingDirectory":  "frontend"
+                           "summary":  "Focused reconciliation service and admin controller tests passed",
+                           "finishedAt":  "2026-06-25T17:30:39.0271809+05:30"
                        },
                        {
-                           "summary":  "Frontend TypeScript and production build passed",
-                           "finishedAt":  "2026-06-25T11:14:48.4545354+00:00",
+                           "command":  "npm.cmd test -- src/test/app.component.test.tsx",
+                           "workingDirectory":  "frontend",
+                           "result":  "passed",
+                           "summary":  "Focused frontend admin reconciliation workflow tests passed",
+                           "finishedAt":  "2026-06-25T17:30:39.0271809+05:30"
+                       },
+                       {
                            "command":  "npm.cmd run build",
+                           "workingDirectory":  "frontend",
                            "result":  "passed",
-                           "workingDirectory":  "frontend"
+                           "summary":  "Frontend TypeScript and production build passed",
+                           "finishedAt":  "2026-06-25T17:30:39.0271809+05:30"
                        },
                        {
-                           "summary":  "Full frontend Vitest suite passed",
-                           "finishedAt":  "2026-06-25T11:14:48.4545354+00:00",
-                           "command":  "npm.cmd test",
-                           "result":  "passed",
-                           "workingDirectory":  "frontend"
-                       },
-                       {
-                           "summary":  "Full backend suite blocked by local Docker/Testcontainers discovery resolving Docker Desktop docker_cli proxy; raw docker CLI to docker_engine and dockerDesktopLinuxEngine succeeds",
-                           "finishedAt":  "2026-06-25T11:14:48.4545354+00:00",
                            "command":  ".\\mvnw.cmd -q test",
+                           "workingDirectory":  "transaction-service",
                            "result":  "failed",
-                           "workingDirectory":  "transaction-service"
+                           "summary":  "Full backend suite still blocked by local Docker/Testcontainers discovery; 365 tests ran with 0 failures and 4 Docker environment errors in ledger integration tests",
+                           "finishedAt":  "2026-06-25T17:30:39.0271809+05:30"
                        }
                    ],
-    "nextAction":  "Begin Task 8 with failing reconciliation exception queue tests",
-    "updatedAt":  "2026-06-25T11:14:49.0221774+00:00"
+    "nextAction":  "Begin Task 9 with failing immutable monthly statement tests",
+    "updatedAt":  "2026-06-25T12:00:39.8308317+00:00"
 }

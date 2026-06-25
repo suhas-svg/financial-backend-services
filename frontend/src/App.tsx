@@ -8,6 +8,7 @@ import { AdminAuditLogPage } from "./pages/AdminAuditLogPage";
 import { AdminInvestigationsPage } from "./pages/AdminInvestigationsPage";
 import { AdminMonitoringPage } from "./pages/AdminMonitoringPage";
 import { AdminOverviewPage } from "./pages/AdminOverviewPage";
+import { AdminReconciliationPage } from "./pages/AdminReconciliationPage";
 import { AdminDisputesPage } from "./pages/AdminDisputesPage";
 import { AdminRiskAlertsPage } from "./pages/AdminRiskAlertsPage";
 import { AdminRiskCasesPage } from "./pages/AdminRiskCasesPage";
@@ -41,6 +42,7 @@ export function App() {
             <Route path="monitoring" element={<AdminMonitoringPage />} />
             <Route path="transactions" element={<AdminTransactionsPage />} />
             <Route path="audit-log" element={<AdminAuditLogPage />} />
+            <Route path="reconciliation" element={<AdminReconciliationPage />} />
             <Route path="risk-alerts" element={<AdminRiskAlertsPage />} />
             <Route path="risk-cases" element={<AdminRiskCasesPage />} />
             <Route path="disputes" element={<AdminDisputesPage />} />

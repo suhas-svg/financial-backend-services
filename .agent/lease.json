@@ -1,10 +1,10 @@
-﻿{
+{
     "schemaVersion":  1,
     "taskId":  "double-entry-ledger",
     "agent":  "codex",
     "branch":  "codex/double-entry-ledger-mvp",
     "status":  "released",
     "acquiredAt":  "2026-06-25T03:55:45.7565438+00:00",
-    "expiresAt":  "2026-06-25T11:14:49.0221774+00:00",
-    "updatedAt":  "2026-06-25T11:14:49.0221774+00:00"
+    "expiresAt":  "2026-06-25T12:00:39.8308317+00:00",
+    "updatedAt":  "2026-06-25T12:00:39.8308317+00:00"
 }
