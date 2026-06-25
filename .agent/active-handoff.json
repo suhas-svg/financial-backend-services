@@ -1,20 +1,24 @@
 ﻿{
     "schemaVersion":  1,
-    "taskId":  "double-entry-ledger",
-    "objective":  "Implement the approved immutable double-entry ledger MVP",
+    "taskId":  "task six projection mirror outbox",
+    "objective":  "Deliver versioned balance mirrors through the ledger outbox",
     "sourceAgent":  "codex",
     "targetAgent":  "antigravity",
     "repository":  "suhas-svg/financial-backend-services",
     "branch":  "codex/double-entry-ledger-mvp",
     "baseBranch":  "main",
-    "headCommit":  "72ae4d5f3300d412357e2bd08292a780da9f9964",
+    "headCommit":  "f2d5f95556fec8a9484b3939b99d99a69cd60f93",
     "worktree":  "C:/Users/super/Desktop/project5/github-push-stage/financial-double-entry-ledger-mvp",
     "status":  "local_only",
     "completed":  [
-                      "Task 5 existing transaction workflow integration"
+                      "Added projection outbox domain, repository, enqueue service, dispatcher, client method, migration, metrics, and tests.",
+                      "Wired customer projection changes from posting flow into the outbox.",
+                      "Verified backend suites and handoff protocol."
                   ],
     "remaining":  [
-                      "Task 6 projection mirror outbox and later ledger MVP tasks"
+                      "Task seven customer balance and journal APIs.",
+                      "Task eight reconciliation starts at V17.",
+                      "Task nine statements starts at V18."
                   ],
     "blockers":  [
 
@@ -23,53 +27,47 @@
                          ".agent/active-handoff.json",
                          ".agent/lease.json",
                          "docs/superpowers/plans/2026-06-24-double-entry-ledger-implementation.md",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/dto/TransactionResponse.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/entity/Transaction.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/service/TransactionServiceImpl.java",
-                         "transaction-service/src/main/resources/application.properties",
-                         "transaction-service/src/test/resources/application-test.properties",
-                         "transaction-service/src/test/resources/application.properties",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/AccountLedgerResolver.java",
-                         "transaction-service/src/main/resources/db/migration/V15__add_transaction_journal_link.sql",
-                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/service/TransactionLedgerIntegrationTest.java"
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/client/ResilientAccountServiceClient.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/LedgerPostingService.java",
+                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/service/LedgerPostingServiceTest.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/LedgerProjectionOutbox.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/LedgerProjectionOutboxRepository.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/LedgerProjectionOutboxDispatcher.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/LedgerProjectionOutboxService.java",
+                         "transaction-service/src/main/resources/db/migration/V16__relax_projection_outbox_source_event_uniqueness.sql",
+                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/service/LedgerProjectionOutboxDispatcherTest.java",
+                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/service/LedgerProjectionOutboxServiceTest.java"
                      ],
     "validation":  [
                        {
-                           "command":  ".\\mvnw.cmd -q -Dtest=TransactionLedgerIntegrationTest test",
-                           "workingDirectory":  "transaction-service",
+                           "summary":  "Focused ledger outbox tests passed.",
+                           "finishedAt":  "2026-06-25T03:54:08.9929659Z",
+                           "command":  "mvn focused task six tests",
                            "result":  "passed",
-                           "summary":  "ledger-authoritative deposit, transfer, withdrawal, and reversal compatibility tests passed",
-                           "finishedAt":  "2026-06-25T03:09:45.8400583+00:00"
+                           "workingDirectory":  "transaction-service"
                        },
                        {
-                           "command":  ".\\mvnw.cmd -q \"-Dtest=TransactionLedgerIntegrationTest,TransactionServiceImplTest,TransactionServiceReversalTest\" test",
-                           "workingDirectory":  "transaction-service",
+                           "summary":  "Full transaction suite passed with clean Docker Postgres and sixteen Flyway migrations.",
+                           "finishedAt":  "2026-06-25T03:54:08.9929659Z",
+                           "command":  "mvn full transaction tests",
                            "result":  "passed",
-                           "summary":  "focused ledger and existing transaction compatibility tests passed",
-                           "finishedAt":  "2026-06-25T03:09:45.8400583+00:00"
+                           "workingDirectory":  "transaction-service"
                        },
                        {
-                           "command":  ".\\mvnw.cmd -q test with isolated external PostgreSQL",
-                           "workingDirectory":  "transaction-service",
+                           "summary":  "Account suite passed.",
+                           "finishedAt":  "2026-06-25T03:54:08.9929659Z",
+                           "command":  "mvn account tests",
                            "result":  "passed",
-                           "summary":  "342 tests, 0 failures, 0 errors, 52 skipped",
-                           "finishedAt":  "2026-06-25T03:09:45.8400583+00:00"
+                           "workingDirectory":  "account-service"
                        },
                        {
-                           "command":  ".\\mvnw.cmd -q test",
-                           "workingDirectory":  "account-service",
+                           "summary":  "Handoff protocol passed with forty eight assertions.",
+                           "finishedAt":  "2026-06-25T03:54:08.9929659Z",
+                           "command":  "handoff protocol tests",
                            "result":  "passed",
-                           "summary":  "72 tests, 0 failures, 0 errors, 0 skipped",
-                           "finishedAt":  "2026-06-25T03:09:45.8400583+00:00"
-                       },
-                       {
-                           "command":  "scripts/test-agent-handoff.ps1",
-                           "workingDirectory":  ".",
-                           "result":  "passed",
-                           "summary":  "48 assertions, 0 failures",
-                           "finishedAt":  "2026-06-25T03:09:45.8400583+00:00"
+                           "workingDirectory":  "repository root"
                        }
                    ],
-    "nextAction":  "Begin Task 6 by writing LedgerProjectionOutboxDispatcher tests for successful delivery, retry/backoff, stale replay, currency conflict, and per-account isolation",
-    "updatedAt":  "2026-06-25T03:09:46.4574536+00:00"
+    "nextAction":  "Begin Task seven with failing customer ledger API tests.",
+    "updatedAt":  "2026-06-25T03:54:09.4254085+00:00"
 }

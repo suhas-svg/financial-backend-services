@@ -19,6 +19,7 @@ public class LedgerPostingService {
     private final JournalStateEventRepository stateRepository;
     private final LedgerBalanceProjectionRepository projectionRepository;
     private final LedgerIdempotencyLock idempotencyLock;
+    private final LedgerProjectionOutboxService projectionOutboxService;
 
     public LedgerPostingService(
             LedgerAccountRepository accountRepository,
@@ -26,13 +27,15 @@ public class LedgerPostingService {
             JournalPostingRepository postingRepository,
             JournalStateEventRepository stateRepository,
             LedgerBalanceProjectionRepository projectionRepository,
-            LedgerIdempotencyLock idempotencyLock) {
+            LedgerIdempotencyLock idempotencyLock,
+            LedgerProjectionOutboxService projectionOutboxService) {
         this.accountRepository = accountRepository;
         this.journalRepository = journalRepository;
         this.postingRepository = postingRepository;
         this.stateRepository = stateRepository;
         this.projectionRepository = projectionRepository;
         this.idempotencyLock = idempotencyLock;
+        this.projectionOutboxService = projectionOutboxService;
     }
 
     @Transactional
@@ -101,7 +104,9 @@ public class LedgerPostingService {
         }
         postingRepository.saveAll(postings);
         projectionRepository.saveAll(projections.values());
-        stateRepository.save(state(journalId, 1, JournalState.PENDING, command.createdBy(), null));
+        JournalStateEvent stateEvent = state(journalId, 1, JournalState.PENDING, command.createdBy(), null);
+        stateRepository.save(stateEvent);
+        enqueueCustomerProjectionChanges(accounts, projections, stateEvent.getEventId());
         return new JournalResult(journal.getJournalId(), JournalState.PENDING, false);
     }
 
@@ -168,7 +173,7 @@ public class LedgerPostingService {
     }
 
     private JournalResult complete(UUID journalId, String actor, String reason, JournalState targetState) {
-        journalRepository.findById(journalId)
+        JournalTransaction journal = journalRepository.findById(journalId)
                 .orElseThrow(() -> new IllegalArgumentException("Journal not found: " + journalId));
         JournalStateEvent latest = latestState(journalId);
         if (latest.getState() == targetState) {
@@ -184,6 +189,8 @@ public class LedgerPostingService {
                 .distinct()
                 .sorted()
                 .toList();
+        Map<UUID, LedgerAccount> accounts = toAccountMap(accountRepository.findAllById(accountIds));
+        requirePostableAccounts(journal.getCurrency(), accountIds, accounts);
         Map<UUID, LedgerBalanceProjection> projections = toProjectionMap(
                 projectionRepository.lockAllOrdered(accountIds));
         requireAllProjections(accountIds, projections);
@@ -203,8 +210,10 @@ public class LedgerPostingService {
             }
         }
         projectionRepository.saveAll(projections.values());
-        stateRepository.save(state(
-                journalId, latest.getEventSequence() + 1, targetState, actor, reason));
+        JournalStateEvent stateEvent = state(
+                journalId, latest.getEventSequence() + 1, targetState, actor, reason);
+        stateRepository.save(stateEvent);
+        enqueueCustomerProjectionChanges(accounts, projections, stateEvent.getEventId());
         return new JournalResult(journalId, targetState, false);
     }
 
@@ -252,6 +261,18 @@ public class LedgerPostingService {
             Collection<UUID> accountIds, Map<UUID, LedgerBalanceProjection> projections) {
         if (projections.size() != accountIds.size()) {
             throw new IllegalArgumentException("One or more ledger projections do not exist");
+        }
+    }
+
+    private void enqueueCustomerProjectionChanges(
+            Map<UUID, LedgerAccount> accounts,
+            Map<UUID, LedgerBalanceProjection> projections,
+            UUID sourceEventId) {
+        for (Map.Entry<UUID, LedgerBalanceProjection> entry : projections.entrySet()) {
+            LedgerAccount account = accounts.get(entry.getKey());
+            if (account != null && account.getAccountKind() == LedgerAccountKind.CUSTOMER) {
+                projectionOutboxService.enqueue(account, entry.getValue(), sourceEventId);
+            }
         }
     }
 

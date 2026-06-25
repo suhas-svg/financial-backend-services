@@ -32,6 +32,7 @@ class LedgerPostingServiceTest {
     @Mock private JournalStateEventRepository stateRepository;
     @Mock private LedgerBalanceProjectionRepository projectionRepository;
     @Mock private LedgerIdempotencyLock idempotencyLock;
+    @Mock private LedgerProjectionOutboxService projectionOutboxService;
 
     private LedgerPostingService service;
     private UUID sourceId;
@@ -43,7 +44,7 @@ class LedgerPostingServiceTest {
     void setUp() {
         service = new LedgerPostingService(
                 accountRepository, journalRepository, postingRepository, stateRepository, projectionRepository,
-                idempotencyLock);
+                idempotencyLock, projectionOutboxService);
         sourceId = UUID.randomUUID();
         destinationId = UUID.randomUUID();
         sourceProjection = LedgerBalanceProjection.open(sourceId, new BigDecimal("100.00"));
@@ -65,6 +66,8 @@ class LedgerPostingServiceTest {
             List<UUID> ordered = List.copyOf(ids);
             return ordered.equals(ordered.stream().sorted().toList());
         }));
+        verify(projectionOutboxService).enqueue(customerAccount(sourceId), eq(sourceProjection), any(UUID.class));
+        verify(projectionOutboxService).enqueue(customerAccount(destinationId), eq(destinationProjection), any(UUID.class));
     }
 
     @Test
@@ -81,6 +84,7 @@ class LedgerPostingServiceTest {
         assertThat(result.replay()).isTrue();
         verify(idempotencyLock).acquire("user-1:TRANSFER", "idem-1");
         verifyNoInteractions(projectionRepository);
+        verifyNoInteractions(projectionOutboxService);
     }
 
     @Test
@@ -108,6 +112,8 @@ class LedgerPostingServiceTest {
         assertThat(destinationProjection.getPostedBalance()).isEqualByComparingTo("25.00");
         assertThat(sourceProjection.getPendingBalance()).isZero();
         assertThat(destinationProjection.getPendingBalance()).isZero();
+        verify(projectionOutboxService).enqueue(customerAccount(sourceId), eq(sourceProjection), any(UUID.class));
+        verify(projectionOutboxService).enqueue(customerAccount(destinationId), eq(destinationProjection), any(UUID.class));
     }
 
     @Test
@@ -123,6 +129,8 @@ class LedgerPostingServiceTest {
         assertThat(sourceProjection.getPostedBalance()).isEqualByComparingTo("100.00");
         assertThat(destinationProjection.getPostedBalance()).isZero();
         assertThat(sourceProjection.getAvailableBalance()).isEqualByComparingTo("100.00");
+        verify(projectionOutboxService).enqueue(customerAccount(sourceId), eq(sourceProjection), any(UUID.class));
+        verify(projectionOutboxService).enqueue(customerAccount(destinationId), eq(destinationProjection), any(UUID.class));
     }
 
     @Test
@@ -243,6 +251,8 @@ class LedgerPostingServiceTest {
         when(postingRepository.findByJournalIdOrderByPostingSequence(journalId)).thenReturn(List.of(
                 posting(journalId, sourceId, 1, PostingDirection.DEBIT),
                 posting(journalId, destinationId, 2, PostingDirection.CREDIT)));
+        when(accountRepository.findAllById(any())).thenReturn(List.of(
+                customer(sourceId, "account-1"), customer(destinationId, "account-2")));
         when(projectionRepository.lockAllOrdered(any())).thenReturn(List.of(sourceProjection, destinationProjection));
         when(stateRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -282,6 +292,13 @@ class LedgerPostingServiceTest {
                 .status(LedgerAccountStatus.ACTIVE)
                 .createdAt(LocalDateTime.now())
                 .build();
+    }
+
+    private LedgerAccount customerAccount(UUID id) {
+        return argThat(account ->
+                account != null
+                        && account.getAccountKind() == LedgerAccountKind.CUSTOMER
+                        && id.equals(account.getLedgerAccountId()));
     }
 
     private JournalPosting posting(UUID journalId, UUID accountId, int sequence, PostingDirection direction) {

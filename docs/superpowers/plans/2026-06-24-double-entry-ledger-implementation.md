@@ -291,27 +291,29 @@ Commit with `feat(transactions): route money movement through ledger` and push.
 **Files:**
 - Create: `ledger/service/LedgerProjectionOutboxService.java`
 - Create: `ledger/service/LedgerProjectionOutboxDispatcher.java`
+- Create: `V16__relax_projection_outbox_source_event_uniqueness.sql`
 - Modify account-service client DTOs/methods.
 - Modify metrics configuration.
 - Test: `ledger/service/LedgerProjectionOutboxDispatcherTest.java`
+- Test: `ledger/service/LedgerProjectionOutboxServiceTest.java`
 
-- [ ] **Step 1: Write failing delivery tests**
+- [x] **Step 1: Write failing delivery tests**
 
 Assert successful delivery, retry/backoff, exact replay, stale version handling, terminal currency conflict, and one account failure not blocking other due messages.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run the focused dispatcher test.
 
-- [ ] **Step 3: Implement transactional enqueue and scheduled delivery**
+- [x] **Step 3: Implement transactional enqueue and scheduled delivery**
 
 Enqueue in the same transaction as projection changes. Claim due rows with `FOR UPDATE SKIP LOCKED`; send monotonic versions; record attempts, next attempt, delivery timestamp, and sanitized last error.
 
-- [ ] **Step 4: Add bounded metrics and logs**
+- [x] **Step 4: Add bounded metrics and logs**
 
 Record backlog, oldest age, retry count, and failures without account/journal IDs as metric tags.
 
-- [ ] **Step 5: Verify, checkpoint, and commit**
+- [x] **Step 5: Verify, checkpoint, and commit**
 
 Commit with `feat(ledger): deliver versioned account balance mirrors` and push.
 
@@ -350,7 +352,7 @@ Commit with `feat(ui): show authoritative ledger balances` and push.
 ## Task 8: Reconciliation and admin exception queue
 
 **Files:**
-- Create: `V16__create_reconciliation.sql`
+- Create: `V17__create_reconciliation.sql`
 - Create reconciliation entities/repositories/services/controllers under `ledger/`.
 - Modify audit, investigation, metrics, and security integration.
 - Create: `frontend/src/pages/AdminReconciliationPage.tsx`
@@ -383,7 +385,7 @@ Commit with `feat(reconciliation): add daily controls and exception queue` and p
 ## Task 9: Immutable monthly statements
 
 **Files:**
-- Create: `V17__create_monthly_statements.sql`
+- Create: `V18__create_monthly_statements.sql`
 - Create statement entities/repositories/service/controller/exporter.
 - Create: `frontend/src/pages/StatementsPage.tsx`
 - Modify customer layout/app/types/queries/tests.

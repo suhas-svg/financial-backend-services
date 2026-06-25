@@ -1,10 +1,10 @@
 ﻿{
     "schemaVersion":  1,
-    "taskId":  "double-entry-ledger",
+    "taskId":  "task six projection mirror outbox",
     "agent":  "codex",
     "branch":  "codex/double-entry-ledger-mvp",
     "status":  "released",
-    "acquiredAt":  "2026-06-25T02:39:21.9644585+00:00",
-    "expiresAt":  "2026-06-25T03:09:46.4574536+00:00",
-    "updatedAt":  "2026-06-25T03:09:46.4574536+00:00"
+    "acquiredAt":  "2026-06-25T03:10:37.9681506+00:00",
+    "expiresAt":  "2026-06-25T03:54:09.4254085+00:00",
+    "updatedAt":  "2026-06-25T03:54:09.4254085+00:00"
 }
