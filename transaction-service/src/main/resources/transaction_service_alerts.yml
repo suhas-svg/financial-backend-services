@@ -1,5 +1,73 @@
 # Alerting rules for Transaction Service
 groups:
+  - name: ledger_critical
+    interval: 30s
+    rules:
+      - alert: LedgerProjectionInvariantFailureCritical
+        expr: increase(ledger_projection_invariant_failures_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: transaction-service
+          team: platform
+          component: immutable-ledger
+        annotations:
+          summary: "Ledger projection invariant failure detected"
+          description: "One or more ledger projection invariants failed in the last five minutes."
+          runbook_url: "docs/operations/ledger-cutover-runbook.md"
+
+      - alert: LedgerSuspenseBalanceNonZero
+        expr: abs(ledger_suspense_balance) > 0
+        for: 5m
+        labels:
+          severity: critical
+          service: transaction-service
+          team: platform
+          component: immutable-ledger
+        annotations:
+          summary: "Ledger suspense balance is non-zero"
+          description: "Suspense balance for currency {{ $labels.currency }} is {{ $value }}."
+          runbook_url: "docs/operations/ledger-cutover-runbook.md"
+
+      - alert: LedgerStalePendingJournals
+        expr: ledger_pending_journals_oldest_age_seconds > 900
+        for: 5m
+        labels:
+          severity: critical
+          service: transaction-service
+          team: platform
+          component: immutable-ledger
+        annotations:
+          summary: "Stale pending ledger journals detected"
+          description: "The oldest pending journal has been pending for {{ $value }} seconds."
+          runbook_url: "docs/operations/ledger-cutover-runbook.md"
+
+      - alert: LedgerProjectionOutboxBacklogSustained
+        expr: ledger_projection_outbox_backlog > 100
+        for: 10m
+        labels:
+          severity: warning
+          service: transaction-service
+          team: platform
+          component: immutable-ledger
+        annotations:
+          summary: "Ledger projection outbox backlog is sustained"
+          description: "Projection outbox backlog is {{ $value }} for more than ten minutes."
+          runbook_url: "docs/operations/ledger-cutover-runbook.md"
+
+      - alert: LedgerCriticalReconciliationExceptions
+        expr: ledger_reconciliation_exceptions{severity="CRITICAL",status!~"RESOLVED|WAIVED"} > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: transaction-service
+          team: platform
+          component: immutable-ledger
+        annotations:
+          summary: "Critical ledger reconciliation exception is open"
+          description: "At least one critical reconciliation exception remains open."
+          runbook_url: "docs/operations/ledger-cutover-runbook.md"
+
   - name: transaction_service_critical
     interval: 30s
     rules:

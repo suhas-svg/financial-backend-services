@@ -417,23 +417,23 @@ Commit with `feat(statements): add immutable monthly customer statements` and pu
 - Modify application properties, Docker Compose, monitoring config, and dashboards.
 - Create operational runbook under `docs/operations/`.
 
-- [ ] **Step 1: Write failing bootstrap tests**
+- [x] **Step 1: Write failing bootstrap tests**
 
 Assert idempotent account import, per-currency system seeds, balanced opening journals, refusal with unresolved legacy holds/processing transactions, and parity verification before authority enablement.
 
-- [ ] **Step 2: Verify RED, implement, and verify GREEN**
+- [x] **Step 2: Verify RED, implement, and verify GREEN**
 
 Keep bootstrap disabled by default and require an explicit admin/internal command plus maintenance mode.
 
-- [ ] **Step 3: Add metrics and alert rules**
+- [x] **Step 3: Add metrics and alert rules**
 
 Implement the bounded metrics and critical alerts specified in the design.
 
-- [ ] **Step 4: Document exact cutover and rollback boundary**
+- [x] **Step 4: Document exact cutover and rollback boundary**
 
 Include commands, preconditions, evidence capture, zero-critical-exception gate, and post-authority forward-fix rule.
 
-- [ ] **Step 5: Verify, checkpoint, and commit**
+- [x] **Step 5: Verify, checkpoint, and commit**
 
 Commit with `feat(ledger): add controlled bootstrap and operations telemetry` and push.
 

@@ -5,6 +5,8 @@ import com.suhasan.finance.transaction_service.ledger.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.function.Function;
@@ -20,6 +22,7 @@ public class LedgerPostingService {
     private final LedgerBalanceProjectionRepository projectionRepository;
     private final LedgerIdempotencyLock idempotencyLock;
     private final LedgerProjectionOutboxService projectionOutboxService;
+    private final LedgerOperationsMetrics ledgerOperationsMetrics;
 
     public LedgerPostingService(
             LedgerAccountRepository accountRepository,
@@ -28,7 +31,8 @@ public class LedgerPostingService {
             JournalStateEventRepository stateRepository,
             LedgerBalanceProjectionRepository projectionRepository,
             LedgerIdempotencyLock idempotencyLock,
-            LedgerProjectionOutboxService projectionOutboxService) {
+            LedgerProjectionOutboxService projectionOutboxService,
+            LedgerOperationsMetrics ledgerOperationsMetrics) {
         this.accountRepository = accountRepository;
         this.journalRepository = journalRepository;
         this.postingRepository = postingRepository;
@@ -36,15 +40,19 @@ public class LedgerPostingService {
         this.projectionRepository = projectionRepository;
         this.idempotencyLock = idempotencyLock;
         this.projectionOutboxService = projectionOutboxService;
+        this.ledgerOperationsMetrics = ledgerOperationsMetrics;
     }
 
     @Transactional
     public JournalResult createPending(JournalCommand command) {
+        Instant startedAt = Instant.now();
         idempotencyLock.acquire(command.idempotencyScope(), command.idempotencyKey());
         Optional<JournalTransaction> replay = journalRepository
                 .findByIdempotencyScopeAndIdempotencyKey(command.idempotencyScope(), command.idempotencyKey());
         if (replay.isPresent()) {
-            return replay(command, replay.get());
+            JournalResult result = replay(command, replay.get());
+            ledgerOperationsMetrics.recordIdempotentReplay(command.journalType().name(), command.currency());
+            return result;
         }
 
         JournalDraft draft = command.draft();
@@ -107,6 +115,7 @@ public class LedgerPostingService {
         JournalStateEvent stateEvent = state(journalId, 1, JournalState.PENDING, command.createdBy(), null);
         stateRepository.save(stateEvent);
         enqueueCustomerProjectionChanges(accounts, projections, stateEvent.getEventId());
+        ledgerOperationsMetrics.recordPosting(command.journalType().name(), command.currency(), "pending", Duration.between(startedAt, Instant.now()));
         return new JournalResult(journal.getJournalId(), JournalState.PENDING, false);
     }
 
@@ -173,6 +182,7 @@ public class LedgerPostingService {
     }
 
     private JournalResult complete(UUID journalId, String actor, String reason, JournalState targetState) {
+        Instant startedAt = Instant.now();
         JournalTransaction journal = journalRepository.findById(journalId)
                 .orElseThrow(() -> new IllegalArgumentException("Journal not found: " + journalId));
         JournalStateEvent latest = latestState(journalId);
@@ -214,6 +224,11 @@ public class LedgerPostingService {
                 journalId, latest.getEventSequence() + 1, targetState, actor, reason);
         stateRepository.save(stateEvent);
         enqueueCustomerProjectionChanges(accounts, projections, stateEvent.getEventId());
+        ledgerOperationsMetrics.recordPosting(
+                journal.getJournalType().name(),
+                journal.getCurrency(),
+                targetState.name().toLowerCase(Locale.ROOT),
+                Duration.between(startedAt, Instant.now()));
         return new JournalResult(journalId, targetState, false);
     }
 

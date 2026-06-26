@@ -33,6 +33,7 @@ class LedgerPostingServiceTest {
     @Mock private LedgerBalanceProjectionRepository projectionRepository;
     @Mock private LedgerIdempotencyLock idempotencyLock;
     @Mock private LedgerProjectionOutboxService projectionOutboxService;
+    @Mock private LedgerOperationsMetrics ledgerOperationsMetrics;
 
     private LedgerPostingService service;
     private UUID sourceId;
@@ -44,7 +45,7 @@ class LedgerPostingServiceTest {
     void setUp() {
         service = new LedgerPostingService(
                 accountRepository, journalRepository, postingRepository, stateRepository, projectionRepository,
-                idempotencyLock, projectionOutboxService);
+                idempotencyLock, projectionOutboxService, ledgerOperationsMetrics);
         sourceId = UUID.randomUUID();
         destinationId = UUID.randomUUID();
         sourceProjection = LedgerBalanceProjection.open(sourceId, new BigDecimal("100.00"));
@@ -62,6 +63,7 @@ class LedgerPostingServiceTest {
         assertThat(sourceProjection.getAvailableBalance()).isEqualByComparingTo("75.00");
         assertThat(destinationProjection.getPendingCredits()).isEqualByComparingTo("25.00");
         verify(idempotencyLock).acquire("user-1:TRANSFER", "idem-1");
+        verify(ledgerOperationsMetrics).recordPosting(eq("TRANSFER"), eq("USD"), eq("pending"), any());
         verify(projectionRepository).lockAllOrdered(argThat(ids -> {
             List<UUID> ordered = List.copyOf(ids);
             return ordered.equals(ordered.stream().sorted().toList());
@@ -83,6 +85,7 @@ class LedgerPostingServiceTest {
         assertThat(result.journalId()).isEqualTo(existing.getJournalId());
         assertThat(result.replay()).isTrue();
         verify(idempotencyLock).acquire("user-1:TRANSFER", "idem-1");
+        verify(ledgerOperationsMetrics).recordIdempotentReplay("TRANSFER", "USD");
         verifyNoInteractions(projectionRepository);
         verifyNoInteractions(projectionOutboxService);
     }
@@ -108,6 +111,7 @@ class LedgerPostingServiceTest {
         JournalResult result = service.post(journalId, "worker");
 
         assertThat(result.state()).isEqualTo(JournalState.POSTED);
+        verify(ledgerOperationsMetrics).recordPosting(eq("TRANSFER"), eq("USD"), eq("posted"), any());
         assertThat(sourceProjection.getPostedBalance()).isEqualByComparingTo("75.00");
         assertThat(destinationProjection.getPostedBalance()).isEqualByComparingTo("25.00");
         assertThat(sourceProjection.getPendingBalance()).isZero();
