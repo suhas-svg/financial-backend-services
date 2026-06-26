@@ -96,6 +96,9 @@ function mockFetch(handler?: (url: string, init?: RequestInit) => Promise<Respon
     if (url.includes("/api/ledger/accounts")) {
       return jsonResponse([]);
     }
+    if (url.includes("/api/ledger/statements")) {
+      return jsonResponse([]);
+    }
     if (url.includes("/api/notifications/summary")) {
       return jsonResponse({ total: 0, unread: 0, bySeverity: {}, byType: {}, bySourceType: {} });
     }
@@ -463,6 +466,94 @@ describe("customer disputes", () => {
   });
 });
 
+describe("customer statements", () => {
+  it("lists statement totals, generates a month, shows lines, and downloads CSV", async () => {
+    const user = userEvent.setup();
+    const createObjectUrl = vi.fn(() => "blob:statement-export");
+    const revokeObjectUrl = vi.fn();
+    vi.stubGlobal("URL", { createObjectURL: createObjectUrl, revokeObjectURL: revokeObjectUrl });
+
+    const statement = {
+      statementId: "statement-1",
+      externalAccountId: "1001",
+      currency: "USD",
+      periodStart: "2026-05-01",
+      periodEnd: "2026-06-01",
+      statementVersion: 1,
+      openingBalance: 1000,
+      closingBalance: 985,
+      generatedAt: "2026-06-01T00:00:00",
+      lines: [
+        {
+          lineId: "line-1",
+          journalId: "journal-1",
+          lineSequence: 1,
+          effectiveDate: "2026-05-10",
+          description: "ATM withdrawal",
+          amount: -25,
+          runningBalance: 975,
+          currency: "USD"
+        },
+        {
+          lineId: "line-2",
+          journalId: "journal-2",
+          lineSequence: 2,
+          effectiveDate: "2026-05-12",
+          description: "Fee refund",
+          amount: 10,
+          runningBalance: 985,
+          currency: "USD"
+        }
+      ]
+    };
+
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/ledger/statements/statement-1/csv")) {
+        return new Response("statementId,description\nstatement-1,\"ATM withdrawal\"\n", {
+          status: 200,
+          headers: { "Content-Type": "text/csv" }
+        });
+      }
+      if (url.includes("/api/ledger/statements") && init?.method === "POST") {
+        return jsonResponse(statement);
+      }
+      if (url.includes("/api/ledger/statements")) {
+        return jsonResponse([statement]);
+      }
+      return undefined;
+    });
+
+    renderApp("/statements", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    expect(await screen.findByRole("heading", { name: "Statements" })).toBeInTheDocument();
+    expect(await screen.findByText("1001")).toBeInTheDocument();
+    expect(screen.getByText("$985.00")).toBeInTheDocument();
+    expect(screen.getByText("ATM withdrawal")).toBeInTheDocument();
+    expect(screen.getByText("Fee refund")).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Account"));
+    await user.type(screen.getByLabelText("Account"), "1001");
+    await user.clear(screen.getByLabelText("Statement month"));
+    await user.type(screen.getByLabelText("Statement month"), "2026-05");
+    await user.click(screen.getByRole("button", { name: "Generate statement" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) =>
+        url.includes("/transaction-api/api/ledger/statements")
+        && init?.method === "POST"
+        && String(init.body).includes("\"externalAccountId\":\"1001\"")
+        && String(init.body).includes("\"yearMonth\":\"2026-05\"")
+      )).toBe(true);
+    });
+
+    await user.click(screen.getByRole("button", { name: "Download CSV" }));
+    await waitFor(() => {
+      expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob));
+    });
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:statement-export");
+  });
+});
+
 describe("customer shell navigation", () => {
   it("shows the customer shell for authenticated users", async () => {
     mockFetch();
@@ -473,6 +564,7 @@ describe("customer shell navigation", () => {
     expect(screen.getByRole("link", { name: "Move Money" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Transactions" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Disputes" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Statements" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.queryByText("Operations")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Admin Accounts" })).not.toBeInTheDocument();
@@ -485,6 +577,7 @@ describe("customer shell navigation", () => {
     expect(screen.getByRole("link", { name: "Move Money" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Transactions" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Disputes" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Statements" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.queryByText("Operations")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Admin Accounts" })).not.toBeInTheDocument();

@@ -390,23 +390,23 @@ Commit with `feat(reconciliation): add daily controls and exception queue` and p
 - Create: `frontend/src/pages/StatementsPage.tsx`
 - Modify customer layout/app/types/queries/tests.
 
-- [ ] **Step 1: Write failing statement tests**
+- [x] **Step 1: Write failing statement tests**
 
 Cover UTC periods, idempotent generation, posted-only lines, opening/closing arithmetic, late correction in next period, immutable versions, ownership, and CSV escaping.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run focused statement tests.
 
-- [ ] **Step 3: Implement generation, APIs, and CSV**
+- [x] **Step 3: Implement generation, APIs, and CSV**
 
 Generate from posted journal event watermark; store account snapshot and ordered lines; never update a generated version.
 
-- [ ] **Step 4: Write failing and passing frontend tests**
+- [x] **Step 4: Write failing and passing frontend tests**
 
 Cover statement list, detail totals/lines, empty state, and CSV action.
 
-- [ ] **Step 5: Verify, checkpoint, and commit**
+- [x] **Step 5: Verify, checkpoint, and commit**
 
 Commit with `feat(statements): add immutable monthly customer statements` and push.
 

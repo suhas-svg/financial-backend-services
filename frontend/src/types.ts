@@ -365,3 +365,27 @@ export type ReconciliationExceptionNote = {
   author: string;
   note: string;
 };
+
+export type CustomerStatementLine = {
+  lineId: string;
+  journalId: string;
+  lineSequence: number;
+  effectiveDate: string;
+  description?: string;
+  amount: number;
+  runningBalance: number;
+  currency: string;
+};
+
+export type CustomerStatement = {
+  statementId: string;
+  externalAccountId: string;
+  currency: string;
+  periodStart: string;
+  periodEnd: string;
+  statementVersion: number;
+  openingBalance: number;
+  closingBalance: number;
+  generatedAt: string;
+  lines: CustomerStatementLine[];
+};

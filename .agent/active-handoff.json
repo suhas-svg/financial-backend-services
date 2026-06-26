@@ -7,93 +7,93 @@
     "repository":  "suhas-svg/financial-backend-services",
     "branch":  "codex/double-entry-ledger-mvp",
     "baseBranch":  "main",
-    "headCommit":  "f82aa83878ba03ac241fc6016638e184cdeb4865",
+    "headCommit":  "af2de919ba622b26a08305a35cf1c2b51027871a",
     "worktree":  "C:/Users/super/Desktop/project5/github-push-stage/financial-double-entry-ledger-mvp",
     "status":  "local_only",
     "completed":  [
-                      "Task 8 reconciliation and admin exception queue"
+                      "Task 9 immutable monthly statement backend service, APIs, migrations, CSV export, frontend customer statements workflow, and TDD coverage"
                   ],
     "remaining":  [
-                      "Task 9 immutable monthly statements"
+                      "Task 10 bootstrap, cutover controls, and observability"
                   ],
     "blockers":  [
-
+                     "Full transaction-service suite still blocked by Testcontainers Docker discovery despite healthy local Docker compose services; focused monthly statement tests pass"
                  ],
     "changedFiles":  [
                          "docs/superpowers/plans/2026-06-24-double-entry-ledger-implementation.md",
                          "frontend/src/App.tsx",
-                         "frontend/src/components/AdminLayout.tsx",
+                         "frontend/src/components/CustomerLayout.tsx",
                          "frontend/src/lib/queries.ts",
                          "frontend/src/test/app.component.test.tsx",
                          "frontend/src/types.ts",
                          "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/JournalTransactionRepository.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/security/SecurityConfig.java",
-                         "frontend/src/pages/AdminReconciliationPage.tsx",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/ReconciliationCheckCode.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/ReconciliationException.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/ReconciliationExceptionNote.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/ReconciliationExceptionStatus.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/ReconciliationRun.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/ReconciliationRunStatus.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/ReconciliationSeverity.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/ReconciliationType.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/ReconciliationExceptionNoteRepository.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/ReconciliationExceptionRepository.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/ReconciliationRunRepository.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/LedgerReconciliationService.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/ReconciliationAlreadyRunningException.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/ReconciliationRunResult.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/AdminReconciliationController.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/AdminReconciliationQueryService.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/DefaultAdminReconciliationQueryService.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/ReconciliationExceptionAssignmentRequest.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/ReconciliationExceptionNoteRequest.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/ReconciliationExceptionNoteResponse.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/ReconciliationExceptionResponse.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/ReconciliationExceptionStatusRequest.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/ReconciliationRunRequest.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/ReconciliationRunResponse.java",
-                         "transaction-service/src/main/resources/db/migration/V17__create_reconciliation.sql",
-                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/service/LedgerReconciliationServiceTest.java",
-                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/web/AdminReconciliationControllerTest.java"
+                         "frontend/src/pages/StatementsPage.tsx",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/CustomerMonthlyStatement.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/domain/CustomerMonthlyStatementLine.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/CustomerMonthlyStatementLineRepository.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/repository/CustomerMonthlyStatementRepository.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/CustomerMonthlyStatementLineResult.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/CustomerMonthlyStatementResult.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/MonthlyStatementService.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/CustomerStatementController.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/CustomerStatementGenerateRequest.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/CustomerStatementLineResponse.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/CustomerStatementResponse.java",
+                         "transaction-service/src/main/resources/db/migration/V18__create_monthly_statements.sql",
+                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/service/MonthlyStatementServiceTest.java",
+                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/web/CustomerStatementControllerTest.java"
                      ],
     "validation":  [
                        {
-                           "command":  ".\\mvnw.cmd -q -DskipTests compile",
-                           "workingDirectory":  "transaction-service",
-                           "result":  "passed",
-                           "summary":  "Backend compile passed after reconciliation changes",
-                           "finishedAt":  "2026-06-25T17:30:39.0198831+05:30"
-                       },
-                       {
-                           "command":  ".\\mvnw.cmd -q \"-Dtest=LedgerReconciliationServiceTest,AdminReconciliationControllerTest\" test",
-                           "workingDirectory":  "transaction-service",
-                           "result":  "passed",
-                           "summary":  "Focused reconciliation service and admin controller tests passed",
-                           "finishedAt":  "2026-06-25T17:30:39.0271809+05:30"
-                       },
-                       {
+                           "summary":  "Vitest app component suite passed: 31 tests",
+                           "finishedAt":  "2026-06-26T09:52:22Z",
                            "command":  "npm.cmd test -- src/test/app.component.test.tsx",
-                           "workingDirectory":  "frontend",
                            "result":  "passed",
-                           "summary":  "Focused frontend admin reconciliation workflow tests passed",
-                           "finishedAt":  "2026-06-25T17:30:39.0271809+05:30"
+                           "workingDirectory":  "frontend"
                        },
                        {
+                           "summary":  "Focused monthly statement service and controller tests passed",
+                           "finishedAt":  "2026-06-26T09:54:11Z",
+                           "command":  ".\\\\mvnw.cmd -q \"-Dtest=MonthlyStatementServiceTest,CustomerStatementControllerTest\" test",
+                           "result":  "passed",
+                           "workingDirectory":  "transaction-service"
+                       },
+                       {
+                           "summary":  "Transaction-service compile passed",
+                           "finishedAt":  "2026-06-26T09:53:31Z",
+                           "command":  ".\\\\mvnw.cmd -q -DskipTests compile",
+                           "result":  "passed",
+                           "workingDirectory":  "transaction-service"
+                       },
+                       {
+                           "summary":  "Frontend TypeScript and Vite production build passed",
+                           "finishedAt":  "2026-06-26T09:54:00Z",
                            "command":  "npm.cmd run build",
-                           "workingDirectory":  "frontend",
                            "result":  "passed",
-                           "summary":  "Frontend TypeScript and production build passed",
-                           "finishedAt":  "2026-06-25T17:30:39.0271809+05:30"
+                           "workingDirectory":  "frontend"
                        },
                        {
-                           "command":  ".\\mvnw.cmd -q test",
-                           "workingDirectory":  "transaction-service",
+                           "summary":  "Docker daemon reachable; compose services healthy",
+                           "finishedAt":  "2026-06-26T09:55:35Z",
+                           "command":  "docker ps --format \"table {{.Names}}\\\\t{{.Status}}\\\\t{{.Ports}}\"",
+                           "result":  "passed",
+                           "workingDirectory":  "."
+                       },
+                       {
+                           "summary":  "Broad transaction-service suite blocked by Testcontainers Docker discovery: 370 run, 0 failures, 4 errors, 52 skipped",
+                           "finishedAt":  "2026-06-26T09:56:29Z",
+                           "command":  ".\\\\mvnw.cmd -q test",
                            "result":  "failed",
-                           "summary":  "Full backend suite still blocked by local Docker/Testcontainers discovery; 365 tests ran with 0 failures and 4 Docker environment errors in ledger integration tests",
-                           "finishedAt":  "2026-06-25T17:30:39.0271809+05:30"
+                           "workingDirectory":  "transaction-service"
+                       },
+                       {
+                           "summary":  "No whitespace errors",
+                           "finishedAt":  "2026-06-26T09:57:00Z",
+                           "command":  "git diff --check",
+                           "result":  "passed",
+                           "workingDirectory":  "."
                        }
                    ],
-    "nextAction":  "Begin Task 9 with failing immutable monthly statement tests",
-    "updatedAt":  "2026-06-25T12:00:39.8308317+00:00"
+    "nextAction":  "Begin Task 10 with failing bootstrap/cutover control tests",
+    "updatedAt":  "2026-06-26T09:58:18.8990667+00:00"
 }

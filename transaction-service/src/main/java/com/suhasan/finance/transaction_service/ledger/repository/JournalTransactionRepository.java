@@ -12,4 +12,5 @@ public interface JournalTransactionRepository extends JpaRepository<JournalTrans
     Optional<JournalTransaction> findByIdempotencyScopeAndIdempotencyKey(String scope, String key);
     Optional<JournalTransaction> findByReversalOfJournalId(UUID originalJournalId);
     List<JournalTransaction> findAllByEffectiveDateLessThanEqual(LocalDate businessDate);
+    List<JournalTransaction> findAllByEffectiveDateLessThan(LocalDate exclusiveEndDate);
 }
