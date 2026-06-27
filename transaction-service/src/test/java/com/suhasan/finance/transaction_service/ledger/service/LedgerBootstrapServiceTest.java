@@ -133,6 +133,40 @@ class LedgerBootstrapServiceTest {
     }
 
     @Test
+    void bootstrapSeedsDefaultSystemAccountsWhenNoLegacyAccountsExist() {
+        when(accountSource.fetchAccountsForBootstrap()).thenReturn(List.of());
+        when(transactionRepository.findByStatusOrderByCreatedAtDesc(TransactionStatus.PROCESSING)).thenReturn(List.of());
+        when(transactionRepository.findByStatusOrderByCreatedAtDesc(TransactionStatus.PENDING)).thenReturn(List.of());
+        when(accountRepository.findByAccountKindAndCurrency(any(), any())).thenReturn(Optional.empty());
+        when(accountRepository.save(any(LedgerAccount.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(projectionRepository.findById(any(UUID.class))).thenReturn(Optional.empty());
+        when(projectionRepository.save(any(LedgerBalanceProjection.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        LedgerBootstrapResult result = service.bootstrap(LedgerBootstrapCommand.enabled("operator", true, LocalDate.parse("2026-06-26")));
+
+        assertThat(result.importedAccounts()).isZero();
+        assertThat(result.seededSystemAccounts()).isEqualTo(9);
+        assertThat(result.openingJournals()).isZero();
+        assertThat(result.currencies()).containsExactly("USD", "EUR", "GBP");
+
+        ArgumentCaptor<LedgerAccount> accountCaptor = ArgumentCaptor.forClass(LedgerAccount.class);
+        verify(accountRepository, times(9)).save(accountCaptor.capture());
+        assertThat(accountCaptor.getAllValues())
+                .extracting(LedgerAccount::getAccountKind, LedgerAccount::getCurrency)
+                .contains(
+                        tuple(LedgerAccountKind.CLEARING, "USD"),
+                        tuple(LedgerAccountKind.SUSPENSE, "USD"),
+                        tuple(LedgerAccountKind.FEE, "USD"),
+                        tuple(LedgerAccountKind.CLEARING, "EUR"),
+                        tuple(LedgerAccountKind.SUSPENSE, "EUR"),
+                        tuple(LedgerAccountKind.FEE, "EUR"),
+                        tuple(LedgerAccountKind.CLEARING, "GBP"),
+                        tuple(LedgerAccountKind.SUSPENSE, "GBP"),
+                        tuple(LedgerAccountKind.FEE, "GBP"));
+        verifyNoInteractions(postingService);
+    }
+
+    @Test
     void bootstrapIsIdempotentWhenAccountProjectionAlreadyMatchesLegacyMirror() {
         LedgerAccount existing = customerAccount("1001", "customer-1", "USD");
         when(accountSource.fetchAccountsForBootstrap()).thenReturn(List.of(

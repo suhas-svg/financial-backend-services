@@ -93,7 +93,7 @@ public class TransactionServiceImpl implements TransactionService {
             throw new IllegalArgumentException("Transaction exceeds limits");
         }
 
-        if (fromAccount.spendableBalance().compareTo(request.getAmount()) < 0) {
+        if (!ledgerAuthoritative && fromAccount.spendableBalance().compareTo(request.getAmount()) < 0) {
             throw new IllegalArgumentException("Insufficient funds");
         }
 
@@ -451,7 +451,7 @@ public class TransactionServiceImpl implements TransactionService {
         if (!validateTransactionLimits(accountId, account.getAccountType(), TransactionType.WITHDRAWAL, amount)) {
             throw new IllegalArgumentException("Transaction exceeds limits");
         }
-        if (account.spendableBalance().compareTo(amount) < 0) {
+        if (!ledgerAuthoritative && account.spendableBalance().compareTo(amount) < 0) {
             throw new IllegalArgumentException("Insufficient funds");
         }
 

@@ -1,0 +1,16 @@
+services:
+  account-postgres:
+    ports: !override
+      - "127.0.0.1:25432:5432"
+
+  transaction-postgres:
+    ports: !override
+      - "127.0.0.1:25433:5432"
+
+  account-service:
+    ports: !override
+      - "18080:8080"
+
+  transaction-service:
+    ports: !override
+      - "18081:8081"

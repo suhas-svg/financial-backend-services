@@ -41,6 +41,9 @@ class LedgerProjectionMirrorMigrationTest {
                 "src/main/resources/db/migration/V6__add_currency_and_ledger_projection_mirror.sql");
         assertThat(migration.exists()).as("V6 ledger projection migration exists").isTrue();
         String migrationSql = Files.readString(migration.getFile().toPath());
+        assertThat(migrationSql)
+                .as("Hibernate validates Account.currency as varchar(3) against PostgreSQL")
+                .contains("ADD COLUMN currency VARCHAR(3) NOT NULL DEFAULT 'USD'");
         assertThat(migrationSql).contains("prevent_account_currency_change");
         String portableSql = migrationSql.split("-- PostgreSQL-only currency immutability trigger", 2)[0];
         ResourceDatabasePopulator populator = new ResourceDatabasePopulator(

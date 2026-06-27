@@ -17,6 +17,7 @@ public class AccountDto {
     private BigDecimal balance;
     private BigDecimal ledgerBalance;
     private BigDecimal availableBalance;
+    private String currency;
     private String accountType;
     private Boolean active;
     private String status;

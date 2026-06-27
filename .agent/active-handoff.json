@@ -7,97 +7,104 @@
     "repository":  "suhas-svg/financial-backend-services",
     "branch":  "codex/double-entry-ledger-mvp",
     "baseBranch":  "main",
-    "headCommit":  "ef6341a26782422235329d73e53a60d8d2550532",
+    "headCommit":  "2a712b30aa63081fab1ede3fddbb0e04e45f6f0b",
     "worktree":  "C:/Users/super/Desktop/project5/github-push-stage/financial-double-entry-ledger-mvp",
     "status":  "local_only",
     "completed":  [
-                      "Task 10 controlled bootstrap service/admin command, operations telemetry, alert rules, and cutover runbook"
+                      "Task 11 full regression, isolated Docker/live API verification, browser verification, and documentation"
                   ],
     "remaining":  [
-                      "Task 11 full regression, Docker, live, and browser verification"
+                      "Publish Task 11 commit and continue any remaining MVP hardening tasks from the approved plan"
                   ],
     "blockers":  [
-                     "Full transaction-service suite previously remained blocked by Testcontainers Docker discovery; Task 10 focused tests and compile pass"
+                     "Full transaction-service suite still has local Testcontainers Docker discovery errors in LedgerMigrationIntegrationTest, LedgerPostingConcurrencyIntegrationTest, and CachePerformanceBenchmark; focused ledger tests and live Docker verification pass."
                  ],
     "changedFiles":  [
-                         "docs/superpowers/plans/2026-06-24-double-entry-ledger-implementation.md",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/LedgerPostingService.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/security/SecurityConfig.java",
-                         "transaction-service/src/main/resources/transaction_service_alerts.yml",
-                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/service/LedgerPostingServiceTest.java",
-                         "docs/operations/ledger-cutover-runbook.md",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/LedgerBootstrapAccountSnapshot.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/LedgerBootstrapAccountSource.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/LedgerBootstrapCommand.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/LedgerBootstrapResult.java",
+                         "account-service/src/main/resources/db/migration/V6__add_currency_and_ledger_projection_mirror.sql",
+                         "account-service/src/test/java/com/suhasan/finance/account_service/migration/LedgerProjectionMirrorMigrationTest.java",
+                         "frontend/vite.config.ts",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/dto/AccountDto.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/AccountLedgerResolver.java",
                          "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/LedgerBootstrapService.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/LedgerOperationsMetrics.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/service/NoopLedgerBootstrapAccountSource.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/AdminLedgerBootstrapController.java",
-                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/ledger/web/LedgerBootstrapRequest.java",
+                         "transaction-service/src/main/java/com/suhasan/finance/transaction_service/service/TransactionServiceImpl.java",
                          "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/service/LedgerBootstrapServiceTest.java",
-                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/service/LedgerOperationsMetricsTest.java",
-                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/service/LedgerOperationsRunbookTest.java",
-                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/web/AdminLedgerBootstrapControllerTest.java"
+                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/service/TransactionLedgerIntegrationTest.java",
+                         "docker-compose.task11.override.yml",
+                         "docs/operations/ledger-task11-verification.md",
+                         "transaction-service/src/test/java/com/suhasan/finance/transaction_service/ledger/service/AccountLedgerResolverTest.java"
                      ],
     "validation":  [
                        {
-                           "summary":  "Bootstrap service TDD slice passed",
-                           "finishedAt":  "2026-06-26T10:49:00Z",
-                           "command":  ".\\\\mvnw.cmd -q \"-Dtest=LedgerBootstrapServiceTest\" test",
+                           "summary":  "Account-service regression passed: 72 tests, 0 failures, 0 errors",
+                           "finishedAt":  "2026-06-27T06:40:47Z",
+                           "command":  ".\\mvnw.cmd -q test",
+                           "result":  "passed",
+                           "workingDirectory":  "account-service"
+                       },
+                       {
+                           "summary":  "Focused transaction ledger regressions passed: 11 tests, 0 failures, 0 errors",
+                           "finishedAt":  "2026-06-27T06:40:39Z",
+                           "command":  ".\\mvnw.cmd -q \"-Dtest=LedgerBootstrapServiceTest,AccountLedgerResolverTest,TransactionLedgerIntegrationTest\" test",
                            "result":  "passed",
                            "workingDirectory":  "transaction-service"
                        },
                        {
-                           "summary":  "Admin ledger bootstrap controller/security tests passed",
-                           "finishedAt":  "2026-06-26T10:51:10Z",
-                           "command":  ".\\\\mvnw.cmd -q \"-Dtest=AdminLedgerBootstrapControllerTest\" test",
+                           "summary":  "Frontend unit tests passed: 47 tests across 4 files",
+                           "finishedAt":  "2026-06-27T06:40:49Z",
+                           "command":  "npm.cmd test -- --reporter=dot",
                            "result":  "passed",
+                           "workingDirectory":  "frontend"
+                       },
+                       {
+                           "summary":  "Frontend lint passed",
+                           "finishedAt":  "2026-06-27T06:41:00Z",
+                           "command":  "npm.cmd run lint",
+                           "result":  "passed",
+                           "workingDirectory":  "frontend"
+                       },
+                       {
+                           "summary":  "Frontend production build passed with Vite chunk-size warning only",
+                           "finishedAt":  "2026-06-27T06:41:20Z",
+                           "command":  "npm.cmd run build",
+                           "result":  "passed",
+                           "workingDirectory":  "frontend"
+                       },
+                       {
+                           "summary":  "Isolated Docker/live API verification passed: deposit, idempotent replay, withdrawal, transfer, balance, journal, statement, reconciliation completed with 0 exceptions",
+                           "finishedAt":  "2026-06-27T06:31:15Z",
+                           "command":  "docker compose -p ledger-task11 plus live API smoke",
+                           "result":  "passed",
+                           "workingDirectory":  "."
+                       },
+                       {
+                           "summary":  "Browser customer/admin verification passed: customer balances/transactions visible, admin reconciliation completed, 0 console errors",
+                           "finishedAt":  "2026-06-27T06:38:30Z",
+                           "command":  "playwright-cli snapshot/console against http://127.0.0.1:5174",
+                           "result":  "passed",
+                           "workingDirectory":  "frontend"
+                       },
+                       {
+                           "summary":  "Full transaction-service suite remains environmentally blocked by local Testcontainers Docker discovery: 395 tests, 0 failures, 6 errors, 61 skipped",
+                           "finishedAt":  "2026-06-27T06:44:20Z",
+                           "command":  ".\\mvnw.cmd -q test",
+                           "result":  "failed",
                            "workingDirectory":  "transaction-service"
                        },
                        {
-                           "summary":  "Bounded ledger telemetry and critical alert rule tests passed",
-                           "finishedAt":  "2026-06-26T10:56:30Z",
-                           "command":  ".\\\\mvnw.cmd -q \"-Dtest=LedgerOperationsMetricsTest\" test",
+                           "summary":  "Checkpoint protocol tests passed: 48 assertions, 0 failures",
+                           "finishedAt":  "2026-06-27T06:40:49Z",
+                           "command":  "powershell -ExecutionPolicy Bypass -File scripts\\test-agent-handoff.ps1",
                            "result":  "passed",
-                           "workingDirectory":  "transaction-service"
+                           "workingDirectory":  "."
                        },
                        {
-                           "summary":  "Posting service telemetry integration tests passed",
-                           "finishedAt":  "2026-06-26T11:00:00Z",
-                           "command":  ".\\\\mvnw.cmd -q \"-Dtest=LedgerPostingServiceTest\" test",
-                           "result":  "passed",
-                           "workingDirectory":  "transaction-service"
-                       },
-                       {
-                           "summary":  "Ledger cutover runbook content test passed",
-                           "finishedAt":  "2026-06-26T11:03:00Z",
-                           "command":  ".\\\\mvnw.cmd -q \"-Dtest=LedgerOperationsRunbookTest\" test",
-                           "result":  "passed",
-                           "workingDirectory":  "transaction-service"
-                       },
-                       {
-                           "summary":  "Combined focused Task 10 tests passed",
-                           "finishedAt":  "2026-06-26T11:00:46Z",
-                           "command":  ".\\\\mvnw.cmd -q \"-Dtest=LedgerBootstrapServiceTest,AdminLedgerBootstrapControllerTest,LedgerOperationsMetricsTest,LedgerPostingServiceTest,LedgerOperationsRunbookTest\" test",
-                           "result":  "passed",
-                           "workingDirectory":  "transaction-service"
-                       },
-                       {
-                           "summary":  "Transaction-service compile passed",
-                           "finishedAt":  "2026-06-26T11:00:24Z",
-                           "command":  ".\\\\mvnw.cmd -q -DskipTests compile",
-                           "result":  "passed",
-                           "workingDirectory":  "transaction-service"
-                       },
-                       {
-                           "summary":  "No whitespace errors before checkpoint",
-                           "finishedAt":  "2026-06-26T11:01:00Z",
+                           "summary":  "Whitespace check passed",
+                           "finishedAt":  "2026-06-27T06:45:00Z",
                            "command":  "git diff --check",
                            "result":  "passed",
                            "workingDirectory":  "."
                        }
                    ],
-    "nextAction":  "Begin Task 11 with full static/unit verification and clean-volume Docker migration verification",
-    "updatedAt":  "2026-06-26T11:02:01.6946770+00:00"
+    "nextAction":  "Review Task 11 verification evidence, then continue with the next approved ledger MVP task",
+    "updatedAt":  "2026-06-27T06:47:45.8630601+00:00"
 }

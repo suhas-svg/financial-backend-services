@@ -16,6 +16,8 @@ import java.util.*;
 @Service
 public class LedgerBootstrapService {
 
+    private static final List<String> DEFAULT_SYSTEM_CURRENCIES = List.of("USD", "EUR", "GBP");
+
     private static final List<LedgerAccountKind> SYSTEM_ACCOUNT_KINDS = List.of(
             LedgerAccountKind.CLEARING,
             LedgerAccountKind.SUSPENSE,
@@ -51,6 +53,9 @@ public class LedgerBootstrapService {
 
         LinkedHashSet<String> currencies = new LinkedHashSet<>();
         accounts.forEach(account -> currencies.add(account.currency()));
+        if (currencies.isEmpty()) {
+            currencies.addAll(DEFAULT_SYSTEM_CURRENCIES);
+        }
 
         SystemSeedResult systemSeedResult = seedSystemAccounts(currencies);
         int importedAccounts = 0;

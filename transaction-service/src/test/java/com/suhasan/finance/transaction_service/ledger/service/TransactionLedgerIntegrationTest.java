@@ -223,6 +223,37 @@ class TransactionLedgerIntegrationTest {
     }
 
     @Test
+    void withdrawalUsesLedgerProjectionInsteadOfAccountServiceSnapshotForFunds() {
+        UUID customerLedgerAccountId = UUID.randomUUID();
+        UUID clearingLedgerAccountId = UUID.randomUUID();
+        UUID journalId = UUID.randomUUID();
+        AccountDto staleAccountSnapshot = AccountDto.builder()
+                .id(101L)
+                .ownerId("user-1")
+                .ledgerBalance(BigDecimal.ZERO)
+                .availableBalance(BigDecimal.ZERO)
+                .accountType("CHECKING")
+                .status("ACTIVE")
+                .build();
+        when(accountServiceClient.getAccount("101")).thenReturn(staleAccountSnapshot);
+        when(transactionLimitService.validateTransactionLimits(anyString(), anyString(), any(), any()))
+                .thenReturn(true);
+        when(accountLedgerResolver.resolveCustomerAccount("101", staleAccountSnapshot)).thenReturn(customerLedgerAccountId);
+        when(accountLedgerResolver.resolveSystemAccount(LedgerAccountKind.CLEARING, "USD"))
+                .thenReturn(clearingLedgerAccountId);
+        when(ledgerPostingService.createPending(any(JournalCommand.class)))
+                .thenReturn(new JournalResult(journalId, JournalState.PENDING, false));
+        when(ledgerPostingService.post(journalId, "SYSTEM"))
+                .thenReturn(new JournalResult(journalId, JournalState.POSTED, false));
+
+        TransactionResponse response = transactionService.processWithdrawal(
+                "101", new BigDecimal("25.00"), "atm", "WDR-STALE", "user-1", "idem-withdrawal-stale");
+
+        assertThat(response.getStatus()).isEqualTo(TransactionStatus.COMPLETED);
+        verify(ledgerPostingService).createPending(any(JournalCommand.class));
+    }
+
+    @Test
     void reversalUsesCompensatingLedgerJournalAndDoesNotMutateLegacyBalances() {
         UUID originalJournalId = UUID.randomUUID();
         UUID reversalJournalId = UUID.randomUUID();
