@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { compactDate, money } from "../lib/format";
 import { createIdempotencyKey } from "../lib/idempotency";
-import { createDispute, getReversalStatus, getReversals, getTransaction, getTransactions, listDisputes, reverseTransaction, searchTransactions } from "../lib/queries";
+import { createDispute, getCustomerJournal, getReversalStatus, getReversals, getTransaction, getTransactions, listDisputes, reverseTransaction, searchTransactions } from "../lib/queries";
 import { disputeSchema, reversalSchema, type DisputeValues, type ReversalValues } from "../lib/schemas";
 import type { Transaction, TransactionDispute } from "../types";
 import { StatusBadge } from "../components/StatusBadge";
@@ -110,6 +110,12 @@ export function TransactionDetail({ transaction, allowReverse = false }: { trans
     queryFn: () => listDisputes(0),
     enabled: !allowReverse
   });
+  const journal = useQuery({
+    queryKey: ["ledger", "journals", transaction.journalId],
+    queryFn: () => getCustomerJournal(transaction.journalId!),
+    enabled: Boolean(transaction.journalId) && !allowReverse,
+    retry: false
+  });
   const form = useForm<ReversalValues>({ resolver: zodResolver(reversalSchema), defaultValues: { reason: "", reference: "" } });
   const disputeForm = useForm<DisputeValues>({
     resolver: zodResolver(disputeSchema),
@@ -150,6 +156,28 @@ export function TransactionDetail({ transaction, allowReverse = false }: { trans
         <Info label="Processed" value={compactDate(transaction.processedAt)} />
       </dl>
       <p className="text-muted">{transaction.description || "No description"}</p>
+      {journal.data ? (
+        <div className="grid gap-3 rounded-md border border-line bg-white p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-medium">Ledger journal</p>
+              <p className="text-xs text-muted">{journal.data.journalType} · {money(journal.data.customerAmount, journal.data.currency)}</p>
+            </div>
+            <StatusBadge value={journal.data.state} />
+          </div>
+          <div className="grid gap-2">
+            {journal.data.postings.map((posting) => (
+              <div key={`${posting.externalAccountId}-${posting.direction}-${posting.amount}`} className="rounded-md border border-line p-2">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-medium">Account {posting.externalAccountId}</p>
+                  <p className="font-medium">{posting.direction} {money(posting.amount, posting.currency)}</p>
+                </div>
+                {posting.memo ? <p className="text-xs text-muted">{posting.memo}</p> : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       {existingDispute ? (
         <div className="grid gap-2 rounded-md border border-line bg-white p-3">
           <div className="flex items-center justify-between gap-3">

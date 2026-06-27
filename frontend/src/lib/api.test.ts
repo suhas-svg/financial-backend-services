@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
-import { addRiskCaseNote, claimRiskCase, createRiskCaseFromAlert, exportInvestigationTimelineCsv, getInvestigationSummary, getInvestigationTimeline, searchAuditEvents, searchRiskAlerts, searchRiskCases, updateAccountStatus, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
+import { addRiskCaseNote, claimRiskCase, createRiskCaseFromAlert, exportInvestigationTimelineCsv, getCustomerJournal, getInvestigationSummary, getInvestigationTimeline, listLedgerAccounts, searchAuditEvents, searchRiskAlerts, searchRiskCases, updateAccountStatus, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
 import { clearSession, saveSession } from "./session";
 
 function tokenFor(payload: object) {
@@ -215,6 +215,27 @@ describe("apiRequest", () => {
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "/transaction-api/api/investigations/export?userId=customer&transactionId=txn-1&accountId=101&alertId=alert-1&caseId=case-1",
+      expect.any(Object)
+    );
+  });
+
+  it("maps customer ledger projection and journal requests to the transaction proxy", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    ));
+
+    await listLedgerAccounts();
+    await getCustomerJournal("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/transaction-api/api/ledger/accounts",
+      expect.any(Object)
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/transaction-api/api/ledger/journals/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       expect.any(Object)
     );
   });

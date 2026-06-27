@@ -32,6 +32,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
 
@@ -317,6 +318,31 @@ public class ResilientAccountServiceClient {
         }
     }
 
+    @CacheEvict(value = "account:validation", key = "#accountId")
+    public LedgerProjectionUpdateResponse applyLedgerProjection(
+            String accountId,
+            LedgerProjectionUpdateRequest request) {
+        String serviceToken = generateInternalServiceToken();
+        try {
+            WebClient webClient = webClientBuilder.baseUrl(accountServiceBaseUrl).build();
+            return webClient.put()
+                    .uri("/api/internal/accounts/{id}/ledger-projection", accountId)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceToken)
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .bodyValue(request)
+                    .retrieve()
+                    .bodyToMono(LedgerProjectionUpdateResponse.class)
+                    .timeout(Duration.ofMillis(timeout))
+                    .block();
+        } catch (WebClientResponseException.Conflict conflict) {
+            throw LedgerProjectionDeliveryException.terminal("projection conflict: " + conflict.getResponseBodyAsString());
+        } catch (WebClientResponseException.BadRequest badRequest) {
+            throw LedgerProjectionDeliveryException.terminal("projection rejected: " + badRequest.getResponseBodyAsString());
+        } catch (Exception e) {
+            throw mapServiceException("ledger projection update", e);
+        }
+    }
+
     private Mono<Boolean> checkHealthAsync() {
         WebClient webClient = webClientBuilder.baseUrl(accountServiceBaseUrl).build();
         return webClient.get()
@@ -416,6 +442,46 @@ public class ResilientAccountServiceClient {
         public BalanceOperationResponse(Long accountId, String operationId, boolean applied,
                                         BigDecimal newBalance, Long version, String status) {
             this(accountId, operationId, applied, newBalance, version, status, null);
+        }
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class LedgerProjectionUpdateResponse {
+        private Long id;
+        private BigDecimal ledgerBalance;
+        private BigDecimal pendingBalance;
+        private BigDecimal availableBalance;
+        private String currency;
+        private Long ledgerProjectionVersion;
+        private String ledgerProjectionSourceEventId;
+    }
+
+    public record LedgerProjectionUpdateRequest(
+            BigDecimal postedBalance,
+            BigDecimal pendingBalance,
+            BigDecimal availableBalance,
+            String currency,
+            long version,
+            String sourceEventId,
+            LocalDateTime updatedAt) {
+    }
+
+    public static class LedgerProjectionDeliveryException extends RuntimeException {
+        private final boolean terminal;
+
+        private LedgerProjectionDeliveryException(String message, boolean terminal) {
+            super(message);
+            this.terminal = terminal;
+        }
+
+        public static LedgerProjectionDeliveryException terminal(String message) {
+            return new LedgerProjectionDeliveryException(message, true);
+        }
+
+        public boolean terminal() {
+            return terminal;
         }
     }
 

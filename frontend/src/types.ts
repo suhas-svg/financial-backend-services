@@ -30,6 +30,37 @@ export type Account = {
   dueDate?: string;
 };
 
+export type LedgerAccountProjection = {
+  externalAccountId: string;
+  currency: string;
+  postedBalance: number;
+  pendingBalance: number;
+  availableBalance: number;
+  projectionVersion: number;
+  updatedAt?: string;
+};
+
+export type CustomerJournalPosting = {
+  externalAccountId: string;
+  direction: "DEBIT" | "CREDIT" | string;
+  amount: number;
+  currency: string;
+  memo?: string;
+};
+
+export type CustomerJournal = {
+  journalId: string;
+  journalReference?: string;
+  journalType: string;
+  state: string;
+  currency: string;
+  customerAmount: number;
+  description?: string;
+  postedAt?: string;
+  reversalOfJournalId?: string;
+  postings: CustomerJournalPosting[];
+};
+
 export type NotificationType = "TRANSACTION_COMPLETED" | "TRANSACTION_FAILED" | "ACCOUNT_FROZEN" | "ACCOUNT_UNFROZEN" | "DISPUTE_CREATED" | "DISPUTE_STATUS_UPDATED";
 export type NotificationSeverity = "INFO" | "SUCCESS" | "WARNING" | "CRITICAL";
 export type NotificationStatus = "UNREAD" | "READ";
@@ -65,6 +96,7 @@ export type DisputeReasonCode = "UNAUTHORIZED" | "DUPLICATE" | "INCORRECT_AMOUNT
 
 export type Transaction = {
   transactionId: string;
+  journalId?: string;
   fromAccountId?: string;
   toAccountId?: string;
   amount: number;
@@ -283,4 +315,77 @@ export type InvestigationSummary = {
   failures: number;
   reversals: number;
   highSeverityItems: number;
+};
+
+export type ReconciliationRunStatus = "RUNNING" | "COMPLETED" | "COMPLETED_WITH_EXCEPTIONS" | "FAILED";
+export type ReconciliationExceptionStatus = "OPEN" | "ACKNOWLEDGED" | "IN_PROGRESS" | "RESOLVED" | "WAIVED";
+export type ReconciliationSeverity = "INFO" | "WARNING" | "HIGH" | "CRITICAL";
+
+export type ReconciliationRun = {
+  runId: string;
+  type?: string;
+  reconciliationType?: string;
+  businessDate: string;
+  status: ReconciliationRunStatus | string;
+  startedAt: string;
+  completedAt?: string;
+  requestedBy?: string;
+  totalExceptions: number;
+  criticalExceptions: number;
+};
+
+export type ReconciliationException = {
+  exceptionId: string;
+  runId?: string;
+  checkCode: string;
+  severity: ReconciliationSeverity | string;
+  status: ReconciliationExceptionStatus | string;
+  fingerprint: string;
+  title?: string;
+  summary?: string;
+  description?: string;
+  journalId?: string;
+  ledgerAccountId?: string;
+  externalAccountId?: string;
+  currency?: string;
+  expectedAmount?: number;
+  actualAmount?: number;
+  deltaAmount?: number;
+  detectedAt: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  resolutionNote?: string;
+  assignedTo?: string;
+  notes?: ReconciliationExceptionNote[];
+  version: number;
+};
+
+export type ReconciliationExceptionNote = {
+  noteId: string;
+  author: string;
+  note: string;
+};
+
+export type CustomerStatementLine = {
+  lineId: string;
+  journalId: string;
+  lineSequence: number;
+  effectiveDate: string;
+  description?: string;
+  amount: number;
+  runningBalance: number;
+  currency: string;
+};
+
+export type CustomerStatement = {
+  statementId: string;
+  externalAccountId: string;
+  currency: string;
+  periodStart: string;
+  periodEnd: string;
+  statementVersion: number;
+  openingBalance: number;
+  closingBalance: number;
+  generatedAt: string;
+  lines: CustomerStatementLine[];
 };

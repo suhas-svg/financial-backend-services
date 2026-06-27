@@ -1,4 +1,4 @@
-import type { Account, AccountStatus, AuditLogEntry, AuditSummary, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, Limits, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, Page, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, Transaction, TransactionDispute, TransactionStats } from "../types";
+import type { Account, AccountStatus, AuditLogEntry, AuditSummary, CustomerJournal, CustomerStatement, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, LedgerAccountProjection, Limits, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, Page, ReconciliationException, ReconciliationExceptionStatus, ReconciliationRun, ReconciliationSeverity, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, Transaction, TransactionDispute, TransactionStats } from "../types";
 import { apiRequest, toQuery } from "./api";
 import type { AccountValues, DisputeNoteValues, DisputeStatusValues, DisputeValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, TransferValues } from "./schemas";
 import { getSession } from "./session";
@@ -13,6 +13,14 @@ export function register(values: RegisterValues) {
 
 export function listAccounts(params: { ownerId?: string; accountType?: string; status?: AccountStatus | ""; page?: number; size?: number } = {}) {
   return apiRequest<Page<Account>>("account", `/api/accounts${toQuery({ size: 20, ...params })}`);
+}
+
+export function listLedgerAccounts() {
+  return apiRequest<LedgerAccountProjection[]>("transaction", "/api/ledger/accounts");
+}
+
+export function getCustomerJournal(journalId: string) {
+  return apiRequest<CustomerJournal>("transaction", `/api/ledger/journals/${journalId}`);
 }
 
 export function createAccount(values: AccountValues) {
@@ -252,4 +260,49 @@ export function getInvestigationSummary(params: Record<string, string | undefine
 
 export function exportInvestigationTimelineCsv(params: Record<string, string | undefined> = {}) {
   return apiRequest<string>("transaction", `/api/investigations/export${toQuery(params)}`);
+}
+
+export function listReconciliationRuns() {
+  return apiRequest<ReconciliationRun[]>("transaction", "/api/admin/reconciliation/runs");
+}
+
+export function runReconciliation(values: { businessDate: string }) {
+  return apiRequest<ReconciliationRun>("transaction", "/api/admin/reconciliation/runs", { method: "POST", body: values });
+}
+
+export function listReconciliationExceptions(params: {
+  status?: ReconciliationExceptionStatus | "";
+  severity?: ReconciliationSeverity | "";
+} = {}) {
+  return apiRequest<ReconciliationException[]>("transaction", `/api/admin/reconciliation/exceptions${toQuery(params)}`);
+}
+
+export function updateReconciliationExceptionStatus(
+  exceptionId: string,
+  values: { status: ReconciliationExceptionStatus; note: string; expectedVersion: number }
+) {
+  return apiRequest<ReconciliationException>("transaction", `/api/admin/reconciliation/exceptions/${exceptionId}/status`, { method: "PATCH", body: values });
+}
+
+export function assignReconciliationException(
+  exceptionId: string,
+  values: { assignedTo: string; expectedVersion: number }
+) {
+  return apiRequest<ReconciliationException>("transaction", `/api/admin/reconciliation/exceptions/${exceptionId}/assignment`, { method: "PATCH", body: values });
+}
+
+export function addReconciliationExceptionNote(exceptionId: string, values: { note: string }) {
+  return apiRequest<ReconciliationException>("transaction", `/api/admin/reconciliation/exceptions/${exceptionId}/notes`, { method: "POST", body: values });
+}
+
+export function listStatements() {
+  return apiRequest<CustomerStatement[]>("transaction", "/api/ledger/statements");
+}
+
+export function generateStatement(values: { externalAccountId: string; yearMonth: string }) {
+  return apiRequest<CustomerStatement>("transaction", "/api/ledger/statements", { method: "POST", body: values });
+}
+
+export function exportStatementCsv(statementId: string) {
+  return apiRequest<string>("transaction", `/api/ledger/statements/${statementId}/csv`);
 }

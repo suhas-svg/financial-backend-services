@@ -18,6 +18,16 @@ const sampleAccount = {
   status: "ACTIVE"
 };
 
+const sampleLedgerAccount = {
+  externalAccountId: "101",
+  currency: "USD",
+  postedBalance: 200,
+  pendingBalance: 50,
+  availableBalance: 175,
+  projectionVersion: 7,
+  updatedAt: "2026-06-25T07:00:00Z"
+};
+
 const frozenAccount = {
   ...sampleAccount,
   id: 202,
@@ -82,6 +92,12 @@ function mockFetch(handler?: (url: string, init?: RequestInit) => Promise<Respon
     }
     if (url.includes("/api/accounts")) {
       return jsonResponse({ ...emptyPage, content: [sampleAccount], totalElements: 1, totalPages: 1 });
+    }
+    if (url.includes("/api/ledger/accounts")) {
+      return jsonResponse([]);
+    }
+    if (url.includes("/api/ledger/statements")) {
+      return jsonResponse([]);
     }
     if (url.includes("/api/notifications/summary")) {
       return jsonResponse({ total: 0, unread: 0, bySeverity: {}, byType: {}, bySourceType: {} });
@@ -220,6 +236,79 @@ describe("account forms", () => {
     expect(await screen.findByText("Ledger $250.00")).toBeInTheDocument();
   });
 
+  it("uses authoritative ledger projections on the dashboard and labels pending funds unavailable", async () => {
+    const { calls } = mockFetch((url) => {
+      if (url.includes("/api/accounts")) {
+        return jsonResponse({
+          ...emptyPage,
+          content: [{ ...sampleAccount, balance: 999, ledgerBalance: 999, availableBalance: 999 }],
+          totalElements: 1,
+          totalPages: 1
+        });
+      }
+      if (url.includes("/api/ledger/accounts")) {
+        return jsonResponse([sampleLedgerAccount]);
+      }
+      return undefined;
+    });
+
+    renderApp("/", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    expect(await screen.findByText("Available balance")).toBeInTheDocument();
+    expect((await screen.findAllByText("$175.00")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Posted $200.00")).toBeInTheDocument();
+    expect(await screen.findByText("Pending $50.00 unavailable")).toBeInTheDocument();
+    expect(calls.some(({ url }) => url.includes("/transaction-api/api/ledger/accounts"))).toBe(true);
+  });
+
+  it("keeps legacy account balances visible when ledger projections are unavailable during deployment skew", async () => {
+    mockFetch((url) => {
+      if (url.includes("/api/accounts")) {
+        return jsonResponse({ ...emptyPage, content: [sampleAccount], totalElements: 1, totalPages: 1 });
+      }
+      if (url.includes("/api/ledger/accounts")) {
+        return jsonResponse({ message: "Ledger warming up" }, 503);
+      }
+      return undefined;
+    });
+
+    renderApp("/", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    expect(await screen.findByText("Available balance")).toBeInTheDocument();
+    expect((await screen.findAllByText("$175.00")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Ledger $250.00")).toBeInTheDocument();
+  });
+
+  it("shows posted, pending, and available authoritative balances on the accounts page", async () => {
+    const user = userEvent.setup();
+    mockFetch((url) => {
+      if (url.includes("/api/accounts")) {
+        return jsonResponse({
+          ...emptyPage,
+          content: [{ ...sampleAccount, balance: 999, ledgerBalance: 999, availableBalance: 999 }],
+          totalElements: 1,
+          totalPages: 1
+        });
+      }
+      if (url.includes("/api/ledger/accounts")) {
+        return jsonResponse([sampleLedgerAccount]);
+      }
+      return undefined;
+    });
+
+    renderApp("/accounts", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    expect(await screen.findByText("Posted")).toBeInTheDocument();
+    expect(await screen.findByText("Pending")).toBeInTheDocument();
+    expect((await screen.findAllByText("$175.00")).length).toBeGreaterThan(0);
+    expect(screen.getByText("$200.00")).toBeInTheDocument();
+    expect(screen.getByText("$50.00")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "View account 101" }));
+    expect(screen.getByText("Projection version")).toBeInTheDocument();
+    expect(screen.getByText("7")).toBeInTheDocument();
+  });
+
   it("renders account type-specific fields", async () => {
     const user = userEvent.setup();
     mockFetch();
@@ -311,6 +400,52 @@ describe("transaction filters", () => {
     });
     expect(await screen.findByText("DP-20260530-0001")).toBeInTheDocument();
   });
+
+  it("shows customer-safe journal postings for a selected transaction with a journal link", async () => {
+    const user = userEvent.setup();
+    const transaction = sampleTransaction({ journalId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" });
+    const { calls } = mockFetch((url) => {
+      if (url.includes("/api/ledger/journals/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")) {
+        return jsonResponse({
+          journalId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+          journalReference: "txn-1",
+          journalType: "TRANSFER",
+          state: "POSTED",
+          currency: "USD",
+          customerAmount: 42.5,
+          description: "Card purchase",
+          postedAt: "2026-05-20T10:00:05",
+          postings: [
+            {
+              externalAccountId: "101",
+              direction: "DEBIT",
+              amount: 42.5,
+              currency: "USD",
+              memo: "Card purchase"
+            }
+          ]
+        });
+      }
+      if (url.includes("/api/transactions/txn-1")) {
+        return jsonResponse(transaction);
+      }
+      if (url.includes("/api/transactions")) {
+        return jsonResponse({ ...emptyPage, content: [transaction], totalElements: 1, totalPages: 1 });
+      }
+      return undefined;
+    });
+
+    renderApp("/transactions", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    await user.click(await screen.findByText("txn-1"));
+
+    expect(await screen.findByText("Ledger journal")).toBeInTheDocument();
+    expect(screen.getByText("POSTED")).toBeInTheDocument();
+    expect(screen.getByText("Account 101")).toBeInTheDocument();
+    expect(screen.getByText("DEBIT $42.50")).toBeInTheDocument();
+    expect(calls.some(({ url }) => url.includes("/transaction-api/api/ledger/journals/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))).toBe(true);
+    expect(screen.queryByText("ledgerAccountId")).not.toBeInTheDocument();
+  });
 });
 
 describe("customer disputes", () => {
@@ -331,6 +466,94 @@ describe("customer disputes", () => {
   });
 });
 
+describe("customer statements", () => {
+  it("lists statement totals, generates a month, shows lines, and downloads CSV", async () => {
+    const user = userEvent.setup();
+    const createObjectUrl = vi.fn(() => "blob:statement-export");
+    const revokeObjectUrl = vi.fn();
+    vi.stubGlobal("URL", { createObjectURL: createObjectUrl, revokeObjectURL: revokeObjectUrl });
+
+    const statement = {
+      statementId: "statement-1",
+      externalAccountId: "1001",
+      currency: "USD",
+      periodStart: "2026-05-01",
+      periodEnd: "2026-06-01",
+      statementVersion: 1,
+      openingBalance: 1000,
+      closingBalance: 985,
+      generatedAt: "2026-06-01T00:00:00",
+      lines: [
+        {
+          lineId: "line-1",
+          journalId: "journal-1",
+          lineSequence: 1,
+          effectiveDate: "2026-05-10",
+          description: "ATM withdrawal",
+          amount: -25,
+          runningBalance: 975,
+          currency: "USD"
+        },
+        {
+          lineId: "line-2",
+          journalId: "journal-2",
+          lineSequence: 2,
+          effectiveDate: "2026-05-12",
+          description: "Fee refund",
+          amount: 10,
+          runningBalance: 985,
+          currency: "USD"
+        }
+      ]
+    };
+
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/ledger/statements/statement-1/csv")) {
+        return new Response("statementId,description\nstatement-1,\"ATM withdrawal\"\n", {
+          status: 200,
+          headers: { "Content-Type": "text/csv" }
+        });
+      }
+      if (url.includes("/api/ledger/statements") && init?.method === "POST") {
+        return jsonResponse(statement);
+      }
+      if (url.includes("/api/ledger/statements")) {
+        return jsonResponse([statement]);
+      }
+      return undefined;
+    });
+
+    renderApp("/statements", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    expect(await screen.findByRole("heading", { name: "Statements" })).toBeInTheDocument();
+    expect(await screen.findByText("1001")).toBeInTheDocument();
+    expect(screen.getByText("$985.00")).toBeInTheDocument();
+    expect(screen.getByText("ATM withdrawal")).toBeInTheDocument();
+    expect(screen.getByText("Fee refund")).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Account"));
+    await user.type(screen.getByLabelText("Account"), "1001");
+    await user.clear(screen.getByLabelText("Statement month"));
+    await user.type(screen.getByLabelText("Statement month"), "2026-05");
+    await user.click(screen.getByRole("button", { name: "Generate statement" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) =>
+        url.includes("/transaction-api/api/ledger/statements")
+        && init?.method === "POST"
+        && String(init.body).includes("\"externalAccountId\":\"1001\"")
+        && String(init.body).includes("\"yearMonth\":\"2026-05\"")
+      )).toBe(true);
+    });
+
+    await user.click(screen.getByRole("button", { name: "Download CSV" }));
+    await waitFor(() => {
+      expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob));
+    });
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:statement-export");
+  });
+});
+
 describe("customer shell navigation", () => {
   it("shows the customer shell for authenticated users", async () => {
     mockFetch();
@@ -341,6 +564,7 @@ describe("customer shell navigation", () => {
     expect(screen.getByRole("link", { name: "Move Money" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Transactions" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Disputes" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Statements" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.queryByText("Operations")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Admin Accounts" })).not.toBeInTheDocument();
@@ -353,6 +577,7 @@ describe("customer shell navigation", () => {
     expect(screen.getByRole("link", { name: "Move Money" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Transactions" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Disputes" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Statements" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.queryByText("Operations")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Admin Accounts" })).not.toBeInTheDocument();
@@ -369,6 +594,7 @@ describe("customer shell navigation", () => {
     expect(screen.getByRole("link", { name: "Monitoring" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Ops Transactions" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Audit Log" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Reconciliation" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Risk Alerts" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Risk Cases" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Disputes" })).toBeInTheDocument();
@@ -843,6 +1069,128 @@ describe("admin disputes", () => {
         && String(init.body).includes("Customer claim accepted.")
       )).toBe(true);
     });
+  });
+});
+
+describe("admin reconciliation", () => {
+  it("runs daily reconciliation, filters exceptions, and resolves selected exceptions", async () => {
+    const user = userEvent.setup();
+    const run = {
+      runId: "run-1",
+      type: "DAILY_LEDGER",
+      businessDate: "2026-06-25",
+      status: "COMPLETED_WITH_EXCEPTIONS",
+      startedAt: "2026-06-25T01:00:00Z",
+      completedAt: "2026-06-25T01:00:05Z",
+      requestedBy: "ops",
+      totalExceptions: 1,
+      criticalExceptions: 1
+    };
+    const exception = {
+      exceptionId: "ex-1",
+      runId: "run-1",
+      checkCode: "PROJECTION_RECOMPUTATION",
+      severity: "CRITICAL",
+      status: "OPEN",
+      fingerprint: "projection:ledger-1:posted-balance",
+      title: "Projection drift",
+      description: "Ledger account 101 projection differs from posted journals.",
+      ledgerAccountId: "ledger-1",
+      externalAccountId: "101",
+      currency: "USD",
+      expectedAmount: 200,
+      actualAmount: 175,
+      deltaAmount: 25,
+      detectedAt: "2026-06-25T01:00:05Z",
+      version: 3
+    };
+    const resolvedException = {
+      ...exception,
+      status: "RESOLVED",
+      resolutionNote: "Projection will be rebuilt after journal replay.",
+      resolvedBy: "ops",
+      resolvedAt: "2026-06-25T02:00:00Z",
+      version: 4
+    };
+    const assignedException = {
+      ...exception,
+      status: "IN_PROGRESS",
+      assignedTo: "analyst-1",
+      version: 4
+    };
+    const notedException = {
+      ...assignedException,
+      notes: [
+        {
+          noteId: "note-1",
+          author: "ops",
+          note: "Reconciling against immutable journal replay."
+        }
+      ]
+    };
+
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/admin/reconciliation/runs") && init?.method === "POST") {
+        return jsonResponse(run);
+      }
+      if (url.includes("/api/admin/reconciliation/runs")) {
+        return jsonResponse([run]);
+      }
+      if (url.includes("/api/admin/reconciliation/exceptions/ex-1/assignment") && init?.method === "PATCH") {
+        return jsonResponse(assignedException);
+      }
+      if (url.includes("/api/admin/reconciliation/exceptions/ex-1/notes") && init?.method === "POST") {
+        return jsonResponse(notedException);
+      }
+      if (url.includes("/api/admin/reconciliation/exceptions/ex-1/status") && init?.method === "PATCH") {
+        return jsonResponse(resolvedException);
+      }
+      if (url.includes("/api/admin/reconciliation/exceptions")) {
+        return jsonResponse([exception]);
+      }
+      return undefined;
+    });
+
+    renderApp("/admin/reconciliation", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
+
+    expect(await screen.findByRole("heading", { name: "Reconciliation" })).toBeInTheDocument();
+    expect(await screen.findByText("Projection drift")).toBeInTheDocument();
+    expect(screen.getByText("1 critical")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Exception status"), "OPEN");
+    await user.selectOptions(screen.getByLabelText("Severity"), "CRITICAL");
+
+    await waitFor(() => {
+      expect(calls.some(({ url }) =>
+        url.includes("/transaction-api/api/admin/reconciliation/exceptions")
+        && url.includes("status=OPEN")
+        && url.includes("severity=CRITICAL")
+      )).toBe(true);
+    });
+
+    await user.click(screen.getByRole("button", { name: "Run daily reconciliation" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) =>
+        url.includes("/transaction-api/api/admin/reconciliation/runs")
+        && init?.method === "POST"
+        && String(init.body).includes("\"businessDate\"")
+      )).toBe(true);
+    });
+
+    await user.click(screen.getByRole("button", { name: "View ex-1" }));
+    await user.type(screen.getByPlaceholderText("Assign to"), "analyst-1");
+    await user.click(screen.getByRole("button", { name: "Assign exception" }));
+    expect(await screen.findByText("analyst-1")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Internal note"), "Reconciling against immutable journal replay.");
+    await user.click(screen.getByRole("button", { name: "Add note" }));
+    expect(await screen.findByText("Reconciling against immutable journal replay.")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Resolution note"), "Projection will be rebuilt after journal replay.");
+    await user.click(screen.getByRole("button", { name: "Resolve exception" }));
+
+    expect(await screen.findByText("Projection will be rebuilt after journal replay.")).toBeInTheDocument();
   });
 });
 

@@ -14,6 +14,11 @@ public class AccountResponse {
     private BigDecimal balance;
     private BigDecimal ledgerBalance;
     private BigDecimal availableBalance;
+    private BigDecimal pendingBalance;
+    private String currency;
+    private Long ledgerProjectionVersion;
+    private LocalDateTime ledgerProjectionSyncedAt;
+    private String ledgerProjectionSourceEventId;
     private LocalDate createdAt;
     private String accountType;
     private AccountStatus status;

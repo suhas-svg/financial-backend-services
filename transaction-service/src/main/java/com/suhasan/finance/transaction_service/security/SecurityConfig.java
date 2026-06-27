@@ -44,11 +44,14 @@ public class SecurityConfig {
                         .requestMatchers("/api/audit/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
                         .requestMatchers("/api/risk/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
                         .requestMatchers("/api/investigations/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
+                        .requestMatchers("/api/admin/ledger/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
+                        .requestMatchers("/api/admin/reconciliation/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
                         .requestMatchers("/api/disputes/admin/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
                         .requestMatchers("/api/disputes/**").authenticated()
 
                         // ── Transaction endpoints — require authenticated user ────────────────
                         .requestMatchers("/api/transactions/**").authenticated()
+                        .requestMatchers("/api/ledger/**").authenticated()
 
                         // ── Catch-all ────────────────────────────────────────────────────────
                         .anyRequest().authenticated())

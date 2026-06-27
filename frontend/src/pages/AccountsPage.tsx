@@ -3,10 +3,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { createAccount, deleteAccount, listAccounts, updateAccount } from "../lib/queries";
+import { createAccount, deleteAccount, listAccounts, listLedgerAccounts, updateAccount } from "../lib/queries";
 import { accountSchema, type AccountValues } from "../lib/schemas";
 import { compactDate, money } from "../lib/format";
-import { availableBalance, ledgerBalance } from "../lib/accountBalances";
+import { availableBalance, ledgerBalance, pendingBalance, projectionFor, projectionMap } from "../lib/accountBalances";
 import type { Account } from "../types";
 import { Button, EmptyState, ErrorNotice, Field, Input, Panel, Select } from "../components/ui";
 import { StatusBadge } from "../components/StatusBadge";
@@ -17,6 +17,8 @@ export function AccountsPage() {
   const [editing, setEditing] = useState<Account | null>(null);
   const [selected, setSelected] = useState<Account | null>(null);
   const accounts = useQuery({ queryKey: ["accounts", typeFilter], queryFn: () => listAccounts({ accountType: typeFilter || undefined }) });
+  const ledgerAccounts = useQuery({ queryKey: ["ledger", "accounts"], queryFn: listLedgerAccounts, retry: false });
+  const projections = projectionMap(ledgerAccounts.data);
   const form = useForm<AccountValues>({
     resolver: zodResolver(accountSchema),
     defaultValues: { accountType: "CHECKING", balance: 0, interestRate: 0 }
@@ -106,6 +108,10 @@ export function AccountsPage() {
       <Panel title="Account detail">
         {selected ? (
           <dl className="grid gap-3 text-sm">
+            {(() => {
+              const projection = projectionFor(selected, projections);
+              return (
+                <>
             <div className="flex justify-between gap-3">
               <dt className="text-muted">Account</dt>
               <dd className="font-medium">#{selected.id}</dd>
@@ -130,16 +136,31 @@ export function AccountsPage() {
             ) : null}
             <div className="flex justify-between gap-3">
               <dt className="text-muted">Available</dt>
-              <dd>{money(availableBalance(selected))}</dd>
+              <dd>{money(availableBalance(selected, projection), projection?.currency)}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-muted">Ledger</dt>
-              <dd>{money(ledgerBalance(selected))}</dd>
+              <dt className="text-muted">{projection ? "Posted" : "Ledger"}</dt>
+              <dd>{money(ledgerBalance(selected, projection), projection?.currency)}</dd>
             </div>
+            {projection ? (
+              <>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Pending</dt>
+                  <dd>{money(pendingBalance(projection), projection.currency)}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Projection version</dt>
+                  <dd>{projection.projectionVersion}</dd>
+                </div>
+              </>
+            ) : null}
             <div className="flex justify-between gap-3">
               <dt className="text-muted">Opened</dt>
               <dd>{compactDate(selected.createdAt)}</dd>
             </div>
+                </>
+              );
+            })()}
           </dl>
         ) : (
           <EmptyState title="No account selected" detail="Select an account row to inspect its current details." />
@@ -167,13 +188,16 @@ export function AccountsPage() {
                   <th>Type</th>
                   <th>Status</th>
                   <th>Available</th>
-                  <th>Ledger</th>
+                  <th>Posted</th>
+                  <th>Pending</th>
                   <th>Opened</th>
                   <th className="text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {accounts.data.content.map((account) => (
+                {accounts.data.content.map((account) => {
+                  const projection = projectionFor(account, projections);
+                  return (
                   <tr key={account.id} className="border-b border-line last:border-0">
                     <td className="py-2 font-medium">#{account.id}</td>
                     <td>{account.ownerId}</td>
@@ -183,8 +207,9 @@ export function AccountsPage() {
                     <td>
                       <StatusBadge value={account.status ?? "ACTIVE"} />
                     </td>
-                    <td>{money(availableBalance(account))}</td>
-                    <td>{money(ledgerBalance(account))}</td>
+                    <td>{money(availableBalance(account, projection), projection?.currency)}</td>
+                    <td>{money(ledgerBalance(account, projection), projection?.currency)}</td>
+                    <td>{projection ? money(pendingBalance(projection), projection.currency) : "-"}</td>
                     <td>{compactDate(account.createdAt)}</td>
                     <td className="text-right">
                       <div className="flex justify-end gap-2">
@@ -200,7 +225,8 @@ export function AccountsPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
