@@ -14,6 +14,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -30,40 +32,33 @@ import static org.assertj.core.api.Assertions.assertThat;
         "management.health.redis.enabled=false"
 })
 @Execution(ExecutionMode.SAME_THREAD)
+@Testcontainers(disabledWithoutDocker = true)
 class LedgerPostingConcurrencyIntegrationTest {
 
-    private static PostgreSQLContainer<?> postgres;
-    private static final String JDBC_URL;
-    private static final String USERNAME;
-    private static final String PASSWORD;
+    private static final String EXTERNAL_JDBC_URL = System.getenv("LEDGER_TEST_JDBC_URL");
+    private static final String EXTERNAL_USERNAME = System.getenv().getOrDefault("LEDGER_TEST_DB_USER", "test");
+    private static final String EXTERNAL_PASSWORD = System.getenv().getOrDefault("LEDGER_TEST_DB_PASSWORD", "test");
 
-    static {
-        String configuredUrl = System.getenv("LEDGER_TEST_JDBC_URL");
-        USERNAME = System.getenv().getOrDefault("LEDGER_TEST_DB_USER", "test");
-        PASSWORD = System.getenv().getOrDefault("LEDGER_TEST_DB_PASSWORD", "test");
-        if (configuredUrl == null || configuredUrl.isBlank()) {
-            postgres = new PostgreSQLContainer<>("postgres:15-alpine")
-                    .withDatabaseName("ledger_concurrency")
-                    .withUsername(USERNAME)
-                    .withPassword(PASSWORD);
-            postgres.start();
-            configuredUrl = postgres.getJdbcUrl();
-        }
-        JDBC_URL = configuredUrl;
-    }
+    @Container
+    private static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
+            .withDatabaseName("ledger_concurrency")
+            .withUsername(EXTERNAL_USERNAME)
+            .withPassword(EXTERNAL_PASSWORD);
 
     @DynamicPropertySource
     static void databaseProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", () -> JDBC_URL);
-        registry.add("spring.datasource.username", () -> USERNAME);
-        registry.add("spring.datasource.password", () -> PASSWORD);
+        registry.add("spring.datasource.url", () -> hasExternalDatabase() ? EXTERNAL_JDBC_URL : postgres.getJdbcUrl());
+        registry.add("spring.datasource.username", () -> hasExternalDatabase() ? EXTERNAL_USERNAME : postgres.getUsername());
+        registry.add("spring.datasource.password", () -> hasExternalDatabase() ? EXTERNAL_PASSWORD : postgres.getPassword());
     }
 
     @AfterAll
     static void stopContainer() {
-        if (postgres != null) {
-            postgres.stop();
-        }
+        // The Testcontainers JUnit extension owns container lifecycle.
+    }
+
+    private static boolean hasExternalDatabase() {
+        return EXTERNAL_JDBC_URL != null && !EXTERNAL_JDBC_URL.isBlank();
     }
 
     @Autowired private LedgerPostingService postingService;

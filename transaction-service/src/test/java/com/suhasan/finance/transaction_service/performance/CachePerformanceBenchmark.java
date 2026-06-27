@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("test")
 @DisplayName("Cache Performance Benchmark")
 @SuppressWarnings({"resource", "null"})

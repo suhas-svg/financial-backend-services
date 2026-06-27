@@ -10,6 +10,8 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -22,10 +24,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Execution(ExecutionMode.SAME_THREAD)
+@Testcontainers(disabledWithoutDocker = true)
 class LedgerMigrationIntegrationTest {
 
     private static JdbcTemplate jdbc;
-    private static PostgreSQLContainer<?> postgres;
+    @Container
+    private static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
+            .withDatabaseName("ledger_migrations")
+            .withUsername("test")
+            .withPassword("test");
     private static String jdbcUrl;
     private static String username;
     private static String password;
@@ -36,12 +43,9 @@ class LedgerMigrationIntegrationTest {
         username = System.getenv().getOrDefault("LEDGER_TEST_DB_USER", "test");
         password = System.getenv().getOrDefault("LEDGER_TEST_DB_PASSWORD", "test");
         if (jdbcUrl == null || jdbcUrl.isBlank()) {
-            postgres = new PostgreSQLContainer<>("postgres:15-alpine")
-                    .withDatabaseName("ledger_migrations")
-                    .withUsername(username)
-                    .withPassword(password);
-            postgres.start();
             jdbcUrl = postgres.getJdbcUrl();
+            username = postgres.getUsername();
+            password = postgres.getPassword();
         }
         Flyway.configure()
                 .dataSource(jdbcUrl, username, password)
@@ -54,9 +58,7 @@ class LedgerMigrationIntegrationTest {
 
     @AfterAll
     static void stopContainer() {
-        if (postgres != null) {
-            postgres.stop();
-        }
+        // The Testcontainers JUnit extension owns container lifecycle.
     }
 
     @Test
