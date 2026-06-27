@@ -1,9 +1,9 @@
 # Immutable Double-Entry Ledger and Reconciliation Design
 
-**Status:** Approved design, pending written-spec review  
-**Date:** 2026-06-24  
-**Repository:** `suhas-svg/financial-backend-services`  
-**Branch:** `codex/double-entry-ledger-mvp`  
+**Status:** Approved design, pending written-spec review
+**Date:** 2026-06-24
+**Repository:** `suhas-svg/financial-backend-services`
+**Branch:** `codex/double-entry-ledger-mvp`
 **Authoritative baseline:** `origin/main` at `e249cac`
 
 ## 1. Objective
