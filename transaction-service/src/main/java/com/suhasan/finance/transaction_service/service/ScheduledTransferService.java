@@ -208,14 +208,10 @@ public class ScheduledTransferService {
 
     private boolean executeClaimedTransfer(ClaimedScheduledTransfer claimed) {
         long started = System.currentTimeMillis();
+        TransactionResponse transaction;
         try {
-            TransactionResponse transaction = transactionService.processTransfer(toTransferRequest(claimed.schedule()),
+            transaction = transactionService.processTransfer(toTransferRequest(claimed.schedule()),
                     claimed.schedule().getUserId(), claimed.idempotencyKey());
-            finalizeSuccessfulRun(claimed, transaction);
-            metricsService.recordScheduledTransferCompleted(System.currentTimeMillis() - started);
-            emitNotification(claimed.schedule(), "SCHEDULED_TRANSFER_EXECUTED", "SUCCESS", "Scheduled transfer executed",
-                    "Your scheduled transfer was executed successfully.", "executed:%s".formatted(claimed.scheduledFor()));
-            return true;
         } catch (RuntimeException e) {
             try {
                 finalizeFailedRun(claimed, e);
@@ -230,6 +226,20 @@ public class ScheduledTransferService {
                         claimed.schedule().getScheduleId(), finalizeFailure.getMessage());
                 return false;
             }
+        }
+
+        try {
+            finalizeSuccessfulRun(claimed, transaction);
+            metricsService.recordScheduledTransferCompleted(System.currentTimeMillis() - started);
+            emitNotification(claimed.schedule(), "SCHEDULED_TRANSFER_EXECUTED", "SUCCESS", "Scheduled transfer executed",
+                    "Your scheduled transfer was executed successfully.", "executed:%s".formatted(claimed.scheduledFor()));
+            return true;
+        } catch (RuntimeException e) {
+            log.warn("Failed to finalize successful scheduled transfer {} after transaction {}: {}",
+                    claimed.schedule().getScheduleId(),
+                    transaction == null ? null : transaction.getTransactionId(),
+                    e.getMessage());
+            return false;
         }
     }
 

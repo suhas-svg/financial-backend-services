@@ -188,6 +188,29 @@ class ScheduledTransferServiceTest {
     }
 
     @Test
+    void successFinalizationFailureDoesNotMarkTransferFailedAfterProcessTransferSucceeds() {
+        ScheduledTransfer schedule = activeSchedule("schedule-1", "customer");
+        schedule.setNextRunAt(Instant.parse("2026-07-01T09:00:00Z"));
+        when(scheduleRepository.findDueActiveForUpdate(any(), any())).thenReturn(List.of(schedule));
+        when(runRepository.existsByScheduleScheduleIdAndScheduledFor("schedule-1", schedule.getNextRunAt()))
+                .thenReturn(false);
+        when(runRepository.save(any(ScheduledTransferRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scheduleRepository.save(any(ScheduledTransfer.class))).thenThrow(new RuntimeException("finalize failed"));
+        when(transactionService.processTransfer(any(TransferRequest.class), eq("customer"), anyString()))
+                .thenReturn(TransactionResponse.builder().transactionId("txn-1").build());
+
+        int processed = service.executeDueTransfers(Instant.parse("2026-07-01T09:01:00Z"), 50);
+
+        assertThat(processed).isZero();
+        verify(transactionService).processTransfer(any(TransferRequest.class), eq("customer"),
+                eq("scheduled-transfer:schedule-1:2026-07-01T09:00:00Z"));
+        verify(runRepository, never()).save(argThat(run -> run.getStatus() == ScheduledTransferRunStatus.FAILED));
+        verify(accountServiceClient, never()).createNotification(argThat(request ->
+                "SCHEDULED_TRANSFER_FAILED".equals(request.getType())
+                        && "SCHEDULED_TRANSFER".equals(request.getSourceType())));
+    }
+
+    @Test
     void failedOneTimeExecutionCompletesScheduleWithoutRetry() {
         ScheduledTransfer schedule = activeSchedule("schedule-1", "customer");
         schedule.setScheduleType(ScheduledTransferType.ONE_TIME);
