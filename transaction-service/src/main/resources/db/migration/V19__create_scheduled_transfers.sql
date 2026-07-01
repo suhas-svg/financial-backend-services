@@ -17,7 +17,7 @@ CREATE TABLE scheduled_transfers (
     updated_at TIMESTAMP NOT NULL,
     version BIGINT NOT NULL DEFAULT 0,
     CONSTRAINT ck_scheduled_transfer_amount_positive CHECK (amount > 0),
-    CONSTRAINT ck_scheduled_transfer_currency_shape CHECK (length(currency) = 3),
+    CONSTRAINT ck_scheduled_transfer_currency_shape CHECK (currency = UPPER(currency) AND LENGTH(currency) = 3),
     CONSTRAINT ck_scheduled_transfer_type CHECK (schedule_type IN ('ONE_TIME', 'RECURRING')),
     CONSTRAINT ck_scheduled_transfer_frequency CHECK (
         (schedule_type = 'ONE_TIME' AND frequency IS NULL)
