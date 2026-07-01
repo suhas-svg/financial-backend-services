@@ -267,6 +267,9 @@ describe("apiRequest", () => {
     await listScheduledTransferRuns("schedule-1");
 
     expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers", expect.objectContaining({ method: "POST" }));
+    const createBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(createBody).toEqual(expect.objectContaining({ firstRunAt: new Date("2026-07-15T10:00").toISOString() }));
+    expect(createBody).not.toHaveProperty("endAt");
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/transaction-api/api/scheduled-transfers?"), expect.anything());
     expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers/schedule-1", expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers/schedule-1/pause", expect.objectContaining({ method: "PATCH" }));

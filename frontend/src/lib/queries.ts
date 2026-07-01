@@ -120,7 +120,7 @@ export function reverseTransaction(transactionId: string, values: ReversalValues
 }
 
 export function createScheduledTransfer(values: ScheduledTransferValues) {
-  return apiRequest<ScheduledTransfer>("transaction", "/api/scheduled-transfers", { method: "POST", body: values });
+  return apiRequest<ScheduledTransfer>("transaction", "/api/scheduled-transfers", { method: "POST", body: scheduledTransferPayload(values) });
 }
 
 export function listScheduledTransfers(params: { status?: ScheduledTransferStatus | ""; page?: number; size?: number } = {}) {
@@ -145,6 +145,21 @@ export function cancelScheduledTransfer(scheduleId: string) {
 
 export function listScheduledTransferRuns(scheduleId: string) {
   return apiRequest<Page<ScheduledTransferRun>>("transaction", `/api/scheduled-transfers/${scheduleId}/runs`);
+}
+
+function scheduledTransferPayload(values: ScheduledTransferValues) {
+  return {
+    ...values,
+    firstRunAt: toInstant(values.firstRunAt),
+    endAt: values.endAt ? toInstant(values.endAt) : undefined,
+    frequency: values.scheduleType === "RECURRING" ? values.frequency : undefined,
+    description: values.description || undefined,
+    reference: values.reference || undefined
+  };
+}
+
+function toInstant(value: string) {
+  return new Date(value).toISOString();
 }
 
 export function getReversalStatus(transactionId: string) {
