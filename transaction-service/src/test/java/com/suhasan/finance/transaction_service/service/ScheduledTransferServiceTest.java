@@ -21,8 +21,12 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -32,10 +36,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -57,12 +62,19 @@ class ScheduledTransferServiceTest {
     @Mock
     private MetricsService metricsService;
 
+    @Mock
+    private TransactionTemplate transactionTemplate;
+
     @InjectMocks
     private ScheduledTransferService service;
 
     @BeforeEach
     void setUp() {
         lenientOwnedSourceAccount();
+        org.mockito.Mockito.lenient().when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
     }
 
     @Test
@@ -89,6 +101,16 @@ class ScheduledTransferServiceTest {
         assertThatThrownBy(() -> service.create(request, "customer"))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("source account");
+    }
+
+    @Test
+    void createScheduleRejectsMissingScheduleTypeDeterministically() {
+        ScheduledTransferCreateRequest request = baseCreateRequest();
+        request.setScheduleType(null);
+
+        assertThatThrownBy(() -> service.create(request, "customer"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Schedule type");
     }
 
     @Test
@@ -126,10 +148,43 @@ class ScheduledTransferServiceTest {
         verify(transactionService).processTransfer(argThat(request ->
                 "101".equals(request.getFromAccountId())
                         && "102".equals(request.getToAccountId())
-                        && request.getAmount().compareTo(new BigDecimal("125.00")) == 0), eq("customer"), contains("schedule-1"));
+                        && request.getAmount().compareTo(new BigDecimal("125.00")) == 0), eq("customer"),
+                eq("scheduled-transfer:schedule-1:2026-07-01T09:00:00Z"));
         verify(runRepository, atLeastOnce()).save(argThat(run ->
                 run.getStatus() == ScheduledTransferRunStatus.COMPLETED
                         && "txn-1".equals(run.getTransactionId())));
+    }
+
+    @Test
+    void executeDueTransfersIsNotWrappedInSingleTransactionalBoundary() throws Exception {
+        Method method = ScheduledTransferService.class.getMethod("executeDueTransfers", Instant.class, int.class);
+
+        assertThat(method.getAnnotation(Transactional.class)).isNull();
+    }
+
+    @Test
+    void executeDueTransfersContinuesWhenOneScheduleUnexpectedlyFails() {
+        ScheduledTransfer first = activeSchedule("schedule-1", "customer");
+        first.setNextRunAt(Instant.parse("2026-07-01T09:00:00Z"));
+        ScheduledTransfer second = activeSchedule("schedule-2", "customer");
+        second.setNextRunAt(Instant.parse("2026-07-01T09:05:00Z"));
+        when(scheduleRepository.findDueActiveForUpdate(any(), any())).thenReturn(List.of(first, second));
+        when(runRepository.existsByScheduleScheduleIdAndScheduledFor("schedule-1", first.getNextRunAt()))
+                .thenReturn(false);
+        when(runRepository.existsByScheduleScheduleIdAndScheduledFor("schedule-2", second.getNextRunAt()))
+                .thenReturn(false);
+        doThrow(new RuntimeException("claim failed"))
+                .doAnswer(invocation -> invocation.getArgument(0))
+                .when(runRepository).save(any(ScheduledTransferRun.class));
+        when(transactionService.processTransfer(any(TransferRequest.class), eq("customer"), anyString()))
+                .thenReturn(TransactionResponse.builder().transactionId("txn-2").build());
+
+        int processed = service.executeDueTransfers(Instant.parse("2026-07-01T09:06:00Z"), 50);
+
+        assertThat(processed).isEqualTo(1);
+        verify(transactionService, times(1)).processTransfer(any(TransferRequest.class), eq("customer"),
+                eq("scheduled-transfer:schedule-2:2026-07-01T09:05:00Z"));
+        verify(metricsService).recordScheduledTransferFailed(0L);
     }
 
     @Test

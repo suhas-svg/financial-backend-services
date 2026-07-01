@@ -23,11 +23,15 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -40,6 +44,7 @@ public class ScheduledTransferService {
     private final TransactionService transactionService;
     private final ResilientAccountServiceClient accountServiceClient;
     private final MetricsService metricsService;
+    private final TransactionTemplate transactionTemplate;
 
     @Transactional
     public ScheduledTransferResponse create(ScheduledTransferCreateRequest request, String userId) {
@@ -125,21 +130,20 @@ public class ScheduledTransferService {
                 .map(this::toRunResponse);
     }
 
-    @Transactional
     public int executeDueTransfers(Instant now, int batchSize) {
         int size = Math.max(1, batchSize);
-        var dueSchedules = scheduleRepository.findDueActiveForUpdate(now, PageRequest.of(0, size));
-        metricsService.recordScheduledTransferDue(dueSchedules.size());
-
         int processed = 0;
-        for (ScheduledTransfer schedule : dueSchedules) {
-            Instant scheduledFor = schedule.getNextRunAt();
-            if (runRepository.existsByScheduleScheduleIdAndScheduledFor(schedule.getScheduleId(), scheduledFor)) {
-                metricsService.recordScheduledTransferDuplicatePrevented();
-                continue;
+        Set<String> attemptedScheduleIds = new HashSet<>();
+
+        while (attemptedScheduleIds.size() < size) {
+            ClaimedScheduledTransfer claimed = claimNextDueTransfer(now, size, attemptedScheduleIds);
+            if (claimed == null) {
+                break;
             }
-            executeOne(schedule, scheduledFor, now);
-            processed++;
+
+            if (executeClaimedTransfer(claimed)) {
+                processed++;
+            }
         }
         return processed;
     }
@@ -157,50 +161,110 @@ public class ScheduledTransferService {
         };
     }
 
-    private void executeOne(ScheduledTransfer schedule, Instant scheduledFor, Instant startedAt) {
-        String idempotencyKey = "scheduled-transfer:%s:%s".formatted(schedule.getScheduleId(), scheduledFor);
-        ScheduledTransferRun run = ScheduledTransferRun.builder()
-                .runId(UUID.randomUUID().toString())
-                .schedule(schedule)
-                .scheduledFor(scheduledFor)
-                .startedAt(startedAt)
-                .status(ScheduledTransferRunStatus.PROCESSING)
-                .idempotencyKey(idempotencyKey)
-                .build();
-        runRepository.save(run);
-        metricsService.recordScheduledTransferClaimed();
+    private ClaimedScheduledTransfer claimNextDueTransfer(Instant now, int batchSize, Set<String> attemptedScheduleIds) {
+        try {
+            return transactionTemplate.execute(status -> {
+                List<ScheduledTransfer> dueSchedules = scheduleRepository.findDueActiveForUpdate(now, PageRequest.of(0, batchSize));
+                metricsService.recordScheduledTransferDue(dueSchedules.size());
 
+                for (ScheduledTransfer schedule : dueSchedules) {
+                    if (!attemptedScheduleIds.add(schedule.getScheduleId())) {
+                        continue;
+                    }
+
+                    Instant scheduledFor = schedule.getNextRunAt();
+                    if (runRepository.existsByScheduleScheduleIdAndScheduledFor(schedule.getScheduleId(), scheduledFor)) {
+                        metricsService.recordScheduledTransferDuplicatePrevented();
+                        continue;
+                    }
+
+                    String idempotencyKey = idempotencyKey(schedule.getScheduleId(), scheduledFor);
+                    ScheduledTransferRun run = ScheduledTransferRun.builder()
+                            .runId(UUID.randomUUID().toString())
+                            .schedule(schedule)
+                            .scheduledFor(scheduledFor)
+                            .startedAt(now)
+                            .status(ScheduledTransferRunStatus.PROCESSING)
+                            .idempotencyKey(idempotencyKey)
+                            .build();
+                    try {
+                        runRepository.save(run);
+                        metricsService.recordScheduledTransferClaimed();
+                        return new ClaimedScheduledTransfer(schedule, run, scheduledFor, idempotencyKey);
+                    } catch (RuntimeException e) {
+                        metricsService.recordScheduledTransferFailed(0L);
+                        log.warn("Failed to claim scheduled transfer {} due at {}: {}",
+                                schedule.getScheduleId(), scheduledFor, e.getMessage());
+                    }
+                }
+                return null;
+            });
+        } catch (RuntimeException e) {
+            metricsService.recordScheduledTransferFailed(0L);
+            log.warn("Failed to query due scheduled transfers: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private boolean executeClaimedTransfer(ClaimedScheduledTransfer claimed) {
         long started = System.currentTimeMillis();
         try {
-            TransactionResponse transaction = transactionService.processTransfer(toTransferRequest(schedule),
-                    schedule.getUserId(), idempotencyKey);
+            TransactionResponse transaction = transactionService.processTransfer(toTransferRequest(claimed.schedule()),
+                    claimed.schedule().getUserId(), claimed.idempotencyKey());
+            finalizeSuccessfulRun(claimed, transaction);
+            metricsService.recordScheduledTransferCompleted(System.currentTimeMillis() - started);
+            emitNotification(claimed.schedule(), "SCHEDULED_TRANSFER_EXECUTED", "SUCCESS", "Scheduled transfer executed",
+                    "Your scheduled transfer was executed successfully.", "executed:%s".formatted(claimed.scheduledFor()));
+            return true;
+        } catch (RuntimeException e) {
+            try {
+                finalizeFailedRun(claimed, e);
+                metricsService.recordScheduledTransferFailed(System.currentTimeMillis() - started);
+                emitNotification(claimed.schedule(), "SCHEDULED_TRANSFER_FAILED", "WARNING", "Scheduled transfer failed",
+                        "Your scheduled transfer failed: %s".formatted(sanitizeFailureReason(e)),
+                        "failed:%s".formatted(claimed.scheduledFor()));
+                return true;
+            } catch (RuntimeException finalizeFailure) {
+                metricsService.recordScheduledTransferFailed(System.currentTimeMillis() - started);
+                log.warn("Failed to finalize scheduled transfer {} after execution failure: {}",
+                        claimed.schedule().getScheduleId(), finalizeFailure.getMessage());
+                return false;
+            }
+        }
+    }
+
+    private void finalizeSuccessfulRun(ClaimedScheduledTransfer claimed, TransactionResponse transaction) {
+        transactionTemplate.execute(status -> {
+            ScheduledTransferRun run = claimed.run();
+            ScheduledTransfer schedule = run.getSchedule();
             run.setStatus(ScheduledTransferRunStatus.COMPLETED);
             run.setTransactionId(transaction == null ? null : transaction.getTransactionId());
             run.setCompletedAt(Instant.now());
-            schedule.setLastRunAt(scheduledFor);
-            advanceOrComplete(schedule, scheduledFor);
+            schedule.setLastRunAt(claimed.scheduledFor());
+            advanceOrComplete(schedule, claimed.scheduledFor());
             runRepository.save(run);
             scheduleRepository.save(schedule);
-            metricsService.recordScheduledTransferCompleted(System.currentTimeMillis() - started);
-            emitNotification(schedule, "SCHEDULED_TRANSFER_EXECUTED", "SUCCESS", "Scheduled transfer executed",
-                    "Your scheduled transfer was executed successfully.", "executed:%s".formatted(scheduledFor));
-        } catch (RuntimeException e) {
+            return null;
+        });
+    }
+
+    private void finalizeFailedRun(ClaimedScheduledTransfer claimed, RuntimeException failure) {
+        transactionTemplate.execute(status -> {
+            ScheduledTransferRun run = claimed.run();
+            ScheduledTransfer schedule = run.getSchedule();
             run.setStatus(ScheduledTransferRunStatus.FAILED);
-            run.setFailureReason(sanitizeFailureReason(e));
+            run.setFailureReason(sanitizeFailureReason(failure));
             run.setCompletedAt(Instant.now());
-            schedule.setLastRunAt(scheduledFor);
+            schedule.setLastRunAt(claimed.scheduledFor());
             if (schedule.getScheduleType() == ScheduledTransferType.ONE_TIME) {
                 schedule.setStatus(ScheduledTransferStatus.COMPLETED);
             } else {
-                advanceOrComplete(schedule, scheduledFor);
+                advanceOrComplete(schedule, claimed.scheduledFor());
             }
             runRepository.save(run);
             scheduleRepository.save(schedule);
-            metricsService.recordScheduledTransferFailed(System.currentTimeMillis() - started);
-            emitNotification(schedule, "SCHEDULED_TRANSFER_FAILED", "WARNING", "Scheduled transfer failed",
-                    "Your scheduled transfer failed: %s".formatted(run.getFailureReason()),
-                    "failed:%s".formatted(scheduledFor));
-        }
+            return null;
+        });
     }
 
     private void validateCreateRequest(ScheduledTransferCreateRequest request, String userId) {
@@ -212,6 +276,9 @@ public class ScheduledTransferService {
         }
         if (request.getFirstRunAt() == null || !request.getFirstRunAt().isAfter(Instant.now())) {
             throw new IllegalArgumentException("First run time must be in the future");
+        }
+        if (request.getScheduleType() == null) {
+            throw new IllegalArgumentException("Schedule type is required");
         }
         if (request.getScheduleType() == ScheduledTransferType.ONE_TIME && request.getFrequency() != null) {
             throw new IllegalArgumentException("One-time scheduled transfers must not include a frequency");
@@ -252,6 +319,10 @@ public class ScheduledTransferService {
                 .description(schedule.getDescription())
                 .reference(schedule.getReference())
                 .build();
+    }
+
+    private String idempotencyKey(String scheduleId, Instant scheduledFor) {
+        return "scheduled-transfer:%s:%s".formatted(scheduleId, scheduledFor);
     }
 
     private void advanceOrComplete(ScheduledTransfer schedule, Instant scheduledFor) {
@@ -335,5 +406,12 @@ public class ScheduledTransferService {
             log.warn("Failed to create scheduled transfer notification for schedule {}: {}",
                     schedule.getScheduleId(), e.getMessage());
         }
+    }
+
+    private record ClaimedScheduledTransfer(
+            ScheduledTransfer schedule,
+            ScheduledTransferRun run,
+            Instant scheduledFor,
+            String idempotencyKey) {
     }
 }
