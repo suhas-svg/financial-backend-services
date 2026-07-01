@@ -29,6 +29,8 @@ financial-backend-services/
 - See available balance as the primary spendable amount and ledger balance as secondary detail.
 - See frozen accounts with hold warnings and status reasons.
 - Deposit, withdraw, and transfer money.
+- Create one-time or recurring scheduled transfers between accounts.
+- Pause, resume, cancel, and inspect scheduled transfer run history.
 - Use available-balance validation for withdrawals and outgoing transfer sources.
 - Keep frozen accounts selectable for credits, while debit-source controls are disabled.
 - Generate an `Idempotency-Key` per money-movement submit.
@@ -75,7 +77,8 @@ financial-backend-services/
   - Customer notification APIs for listing, summary counts, marking one read, and marking all read.
   - Internal/admin notification creation API secured to `ROLE_ADMIN` and `ROLE_INTERNAL_SERVICE`.
 - Transaction service:
-  - Deposit, withdrawal, and transfer endpoints.
+  - Deposit, withdrawal, transfer, and scheduled transfer endpoints.
+  - Scheduled transfer persistence, authenticated APIs, and worker execution for one-time and recurring transfers.
   - Frozen-account debit enforcement before withdrawals and outgoing transfer debits.
   - Pending debit authorization flow for withdrawals and outgoing transfers.
   - Debit hold placement and capture before completing debit transactions.
@@ -90,7 +93,7 @@ financial-backend-services/
   - Customer dispute submission and admin-only dispute queue APIs.
   - Admin-only investigation timeline, summary, and CSV export APIs.
   - Account-service integration for balance updates.
-  - Best-effort account-service notification emission for completed/failed transfer outcomes and dispute lifecycle updates.
+  - Best-effort account-service notification emission for completed/failed transfer outcomes, scheduled transfer lifecycle events, and dispute lifecycle updates.
 
 ## Notification Center
 
@@ -109,7 +112,7 @@ Internal creation API:
 
 Notification records are customer-owned in `account-service`. Customer endpoints always use the authenticated user, while internal/admin callers may create notifications for any `userId`. The internal endpoint requires `ROLE_ADMIN` or `ROLE_INTERNAL_SERVICE`.
 
-Event sources currently create notifications for account freeze/unfreeze, transfer completion/failure, dispute creation, and dispute status changes to `APPROVED`, `DENIED`, or `CLOSED`. Source workflows treat notification delivery as best-effort: failures are logged and do not roll back money movement, account status changes, or dispute updates. Dedupe keys keep repeated source events from creating duplicate inbox rows.
+Event sources currently create notifications for account freeze/unfreeze, transfer completion/failure, scheduled transfer creation/pause/resume/cancel/execution/failure, dispute creation, and dispute status changes to `APPROVED`, `DENIED`, or `CLOSED`. Source workflows treat notification delivery as best-effort: failures are logged and do not roll back money movement, scheduled transfer processing, account status changes, or dispute updates. Dedupe keys keep repeated source events from creating duplicate inbox rows.
 
 ## Technology Stack
 
@@ -196,6 +199,7 @@ Authenticated customer pages use these routes:
 - `/` - dashboard
 - `/accounts` - customer accounts
 - `/move-money` - deposits, withdrawals, and transfers
+- `/scheduled-transfers` - scheduled and recurring transfers
 - `/transactions` - transaction history, detail, disputes, and reversals
 - `/disputes` - submitted dispute history
 - `/notifications` - notification inbox
@@ -373,6 +377,18 @@ POST /api/transactions/deposit
 POST /api/transactions/withdraw
 POST /api/transactions/transfer
 POST /api/transactions/{transactionId}/reverse
+```
+
+Scheduled transfer customer routes use the authenticated user and are exposed through the frontend transaction proxy:
+
+```http
+POST   /api/scheduled-transfers
+GET    /api/scheduled-transfers?page=&size=&status=
+GET    /api/scheduled-transfers/{scheduleId}
+PATCH  /api/scheduled-transfers/{scheduleId}/pause
+PATCH  /api/scheduled-transfers/{scheduleId}/resume
+DELETE /api/scheduled-transfers/{scheduleId}
+GET    /api/scheduled-transfers/{scheduleId}/runs?page=&size=
 ```
 
 Debit transaction behavior:
@@ -588,6 +604,7 @@ The frontend test suite covers:
 - Move Money debit-source disabling based on frozen status and insufficient available balance.
 - Deposit and incoming-credit destination behavior remaining selectable for frozen or held accounts.
 - Transaction table filters.
+- Customer scheduled transfer route, account-backed create form, recurrence validation, proxy mapping, pause/resume/cancel actions, and run-history display.
 - Customer dispute submission, validation, history, and resolution note display.
 - Admin navigation visibility.
 - Admin audit log summary, filters, event table, detail panel, and API proxy mapping.
@@ -609,7 +626,7 @@ cd transaction-service
 .\mvnw.cmd -q test
 ```
 
-The transaction-service test suite also covers the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup. Risk alert tests cover admin-only access, filters, summary counts, status updates with reviewer metadata, rule generation, dedupe behavior, and non-risky transaction handling. Risk case tests cover admin-only access, filters, summary counts, create-from-alert, duplicate open-case handling, claim, status updates, linked alert details, and append-only notes. Dispute tests cover customer ownership checks, completed/60-day eligibility, duplicate active-dispute rejection, admin listing, claim, status updates, internal notes, and investigation timeline/summary integration. Investigation tests cover admin-only access, search context expansion, mixed-source timeline sorting, summary counts, CSV export headers/content escaping, and empty search results.
+The transaction-service test suite also covers scheduled transfer persistence constraints, authenticated scheduled transfer APIs, scheduler claim/finalize behavior, execution recovery, notification emission, the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup. Risk alert tests cover admin-only access, filters, summary counts, status updates with reviewer metadata, rule generation, dedupe behavior, and non-risky transaction handling. Risk case tests cover admin-only access, filters, summary counts, create-from-alert, duplicate open-case handling, claim, status updates, linked alert details, and append-only notes. Dispute tests cover customer ownership checks, completed/60-day eligibility, duplicate active-dispute rejection, admin listing, claim, status updates, internal notes, and investigation timeline/summary integration. Investigation tests cover admin-only access, search context expansion, mixed-source timeline sorting, summary counts, CSV export headers/content escaping, and empty search results.
 
 Account hold/freeze tests cover default `ACTIVE` accounts, admin-only freeze/unfreeze with required reasons, frozen debit rejection, credit allowance, transaction-service prechecks, backend rejection messages, frontend status rendering, and move-money debit-source disabling.
 

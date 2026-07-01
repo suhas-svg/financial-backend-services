@@ -89,6 +89,28 @@ class NotificationServiceTest {
     }
 
     @Test
+    void createNotification_acceptsScheduledTransferLifecycleType() {
+        when(notificationRepository.findByDedupeKey("scheduled-transfer:schedule-1:created")).thenReturn(Optional.empty());
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        NotificationCreateRequest request = NotificationCreateRequest.builder()
+                .userId("customer")
+                .type(NotificationType.SCHEDULED_TRANSFER_CREATED)
+                .severity(NotificationSeverity.INFO)
+                .title("Scheduled transfer created")
+                .message("Your scheduled transfer was created.")
+                .sourceType(NotificationSourceType.SCHEDULED_TRANSFER)
+                .sourceId("schedule-1")
+                .dedupeKey("scheduled-transfer:schedule-1:created")
+                .build();
+
+        Notification response = notificationService.createInternal(request);
+
+        assertThat(response.getType()).isEqualTo(NotificationType.SCHEDULED_TRANSFER_CREATED);
+        assertThat(response.getSourceType()).isEqualTo(NotificationSourceType.SCHEDULED_TRANSFER);
+    }
+
+    @Test
     @DisplayName("Rejects missing required create fields")
     void rejectsMissingRequiredCreateFields() {
         assertThatThrownBy(() -> notificationService.createInternal(NotificationCreateRequest.builder()

@@ -1,6 +1,6 @@
-import type { Account, AccountStatus, AuditLogEntry, AuditSummary, CustomerJournal, CustomerStatement, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, LedgerAccountProjection, Limits, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, Page, ReconciliationException, ReconciliationExceptionStatus, ReconciliationRun, ReconciliationSeverity, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, Transaction, TransactionDispute, TransactionStats } from "../types";
+import type { Account, AccountStatus, AuditLogEntry, AuditSummary, CustomerJournal, CustomerStatement, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, LedgerAccountProjection, Limits, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, Page, ReconciliationException, ReconciliationExceptionStatus, ReconciliationRun, ReconciliationSeverity, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, ScheduledTransfer, ScheduledTransferRun, ScheduledTransferStatus, Transaction, TransactionDispute, TransactionStats } from "../types";
 import { apiRequest, toQuery } from "./api";
-import type { AccountValues, DisputeNoteValues, DisputeStatusValues, DisputeValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, TransferValues } from "./schemas";
+import type { AccountValues, DisputeNoteValues, DisputeStatusValues, DisputeValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, ScheduledTransferValues, TransferValues } from "./schemas";
 import { getSession } from "./session";
 
 export function login(values: LoginValues) {
@@ -117,6 +117,49 @@ export function reverseTransaction(transactionId: string, values: ReversalValues
     body: values,
     idempotencyKey
   });
+}
+
+export function createScheduledTransfer(values: ScheduledTransferValues) {
+  return apiRequest<ScheduledTransfer>("transaction", "/api/scheduled-transfers", { method: "POST", body: scheduledTransferPayload(values) });
+}
+
+export function listScheduledTransfers(params: { status?: ScheduledTransferStatus | ""; page?: number; size?: number } = {}) {
+  return apiRequest<Page<ScheduledTransfer>>("transaction", `/api/scheduled-transfers${toQuery({ page: 0, size: 20, ...params })}`);
+}
+
+export function getScheduledTransfer(scheduleId: string) {
+  return apiRequest<ScheduledTransfer>("transaction", `/api/scheduled-transfers/${scheduleId}`);
+}
+
+export function pauseScheduledTransfer(scheduleId: string) {
+  return apiRequest<ScheduledTransfer>("transaction", `/api/scheduled-transfers/${scheduleId}/pause`, { method: "PATCH" });
+}
+
+export function resumeScheduledTransfer(scheduleId: string) {
+  return apiRequest<ScheduledTransfer>("transaction", `/api/scheduled-transfers/${scheduleId}/resume`, { method: "PATCH" });
+}
+
+export function cancelScheduledTransfer(scheduleId: string) {
+  return apiRequest<void>("transaction", `/api/scheduled-transfers/${scheduleId}`, { method: "DELETE" });
+}
+
+export function listScheduledTransferRuns(scheduleId: string) {
+  return apiRequest<Page<ScheduledTransferRun>>("transaction", `/api/scheduled-transfers/${scheduleId}/runs`);
+}
+
+function scheduledTransferPayload(values: ScheduledTransferValues) {
+  return {
+    ...values,
+    firstRunAt: toInstant(values.firstRunAt),
+    endAt: values.endAt ? toInstant(values.endAt) : undefined,
+    frequency: values.scheduleType === "RECURRING" ? values.frequency : undefined,
+    description: values.description || undefined,
+    reference: values.reference || undefined
+  };
+}
+
+function toInstant(value: string) {
+  return new Date(value).toISOString();
 }
 
 export function getReversalStatus(transactionId: string) {
