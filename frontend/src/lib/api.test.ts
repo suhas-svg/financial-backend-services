@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
-import { addRiskCaseNote, claimRiskCase, createRiskCaseFromAlert, exportInvestigationTimelineCsv, getCustomerJournal, getInvestigationSummary, getInvestigationTimeline, listLedgerAccounts, searchAuditEvents, searchRiskAlerts, searchRiskCases, updateAccountStatus, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
+import { addRiskCaseNote, cancelScheduledTransfer, claimRiskCase, createRiskCaseFromAlert, createScheduledTransfer, exportInvestigationTimelineCsv, getCustomerJournal, getInvestigationSummary, getInvestigationTimeline, listLedgerAccounts, listScheduledTransferRuns, listScheduledTransfers, pauseScheduledTransfer, resumeScheduledTransfer, searchAuditEvents, searchRiskAlerts, searchRiskCases, updateAccountStatus, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
 import { clearSession, saveSession } from "./session";
 
 function tokenFor(payload: object) {
@@ -238,5 +238,38 @@ describe("apiRequest", () => {
       "/transaction-api/api/ledger/journals/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
       expect.any(Object)
     );
+  });
+
+  it("maps scheduled transfer requests to the transaction proxy", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify({ content: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    ));
+
+    await createScheduledTransfer({
+      fromAccountId: "101",
+      toAccountId: "202",
+      amount: 75,
+      currency: "USD",
+      description: "Rent",
+      reference: "JULY",
+      scheduleType: "RECURRING",
+      frequency: "MONTHLY",
+      firstRunAt: "2026-07-15T10:00"
+    });
+    await listScheduledTransfers({ status: "ACTIVE" });
+    await pauseScheduledTransfer("schedule-1");
+    await resumeScheduledTransfer("schedule-1");
+    await cancelScheduledTransfer("schedule-1");
+    await listScheduledTransferRuns("schedule-1");
+
+    expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/transaction-api/api/scheduled-transfers?"), expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers/schedule-1/pause", expect.objectContaining({ method: "PATCH" }));
+    expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers/schedule-1/resume", expect.objectContaining({ method: "PATCH" }));
+    expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers/schedule-1", expect.objectContaining({ method: "DELETE" }));
+    expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers/schedule-1/runs", expect.any(Object));
   });
 });

@@ -61,10 +61,10 @@ export type CustomerJournal = {
   postings: CustomerJournalPosting[];
 };
 
-export type NotificationType = "TRANSACTION_COMPLETED" | "TRANSACTION_FAILED" | "ACCOUNT_FROZEN" | "ACCOUNT_UNFROZEN" | "DISPUTE_CREATED" | "DISPUTE_STATUS_UPDATED";
+export type NotificationType = "TRANSACTION_COMPLETED" | "TRANSACTION_FAILED" | "ACCOUNT_FROZEN" | "ACCOUNT_UNFROZEN" | "DISPUTE_CREATED" | "DISPUTE_STATUS_UPDATED" | "SCHEDULED_TRANSFER_CREATED" | "SCHEDULED_TRANSFER_PAUSED" | "SCHEDULED_TRANSFER_RESUMED" | "SCHEDULED_TRANSFER_CANCELED" | "SCHEDULED_TRANSFER_RUN_COMPLETED" | "SCHEDULED_TRANSFER_RUN_FAILED";
 export type NotificationSeverity = "INFO" | "SUCCESS" | "WARNING" | "CRITICAL";
 export type NotificationStatus = "UNREAD" | "READ";
-export type NotificationSourceType = "ACCOUNT" | "TRANSACTION" | "DISPUTE";
+export type NotificationSourceType = "ACCOUNT" | "TRANSACTION" | "DISPUTE" | "SCHEDULED_TRANSFER";
 
 export type Notification = {
   notificationId: number;
@@ -150,6 +150,43 @@ export type Limits = {
   monthlyLimit: number;
   singleTransactionLimit: number;
   currency: string;
+};
+
+export type ScheduledTransferStatus = "ACTIVE" | "PAUSED" | "CANCELED" | "COMPLETED";
+export type ScheduledTransferType = "ONE_TIME" | "RECURRING";
+export type ScheduledTransferFrequency = "WEEKLY" | "BIWEEKLY" | "MONTHLY";
+export type ScheduledTransferRunStatus = "PROCESSING" | "COMPLETED" | "FAILED" | "SKIPPED";
+
+export type ScheduledTransfer = {
+  scheduleId: string;
+  userId: string;
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  currency: string;
+  description?: string;
+  reference?: string;
+  scheduleType: ScheduledTransferType;
+  frequency?: ScheduledTransferFrequency;
+  nextRunAt: string;
+  endAt?: string;
+  status: ScheduledTransferStatus;
+  lastRunAt?: string;
+  lastRunStatus?: ScheduledTransferRunStatus;
+  lastRunFailureReason?: string;
+  lastTransactionId?: string;
+};
+
+export type ScheduledTransferRun = {
+  runId: string;
+  scheduleId: string;
+  scheduledFor: string;
+  startedAt: string;
+  completedAt?: string;
+  status: ScheduledTransferRunStatus;
+  transactionId?: string;
+  idempotencyKey: string;
+  failureReason?: string;
 };
 
 export type AuditLogEntry = {

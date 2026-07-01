@@ -554,6 +554,92 @@ describe("customer statements", () => {
   });
 });
 
+describe("customer scheduled transfers", () => {
+  it("creates a monthly schedule and manages existing schedules through transaction proxy routes", async () => {
+    const user = userEvent.setup();
+    const scheduledTransfer = {
+      scheduleId: "schedule-1",
+      userId: "customer",
+      fromAccountId: "101",
+      toAccountId: "202",
+      amount: 75,
+      currency: "USD",
+      description: "Rent",
+      reference: "RENT",
+      scheduleType: "RECURRING",
+      frequency: "MONTHLY",
+      nextRunAt: "2026-07-15T10:00:00",
+      status: "ACTIVE",
+      lastRunStatus: "COMPLETED"
+    };
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/accounts")) {
+        return jsonResponse({
+          ...emptyPage,
+          content: [sampleAccount, { ...sampleAccount, id: 202, accountType: "SAVINGS", availableBalance: 825, balance: 825 }],
+          totalElements: 2,
+          totalPages: 1
+        });
+      }
+      if (url.includes("/api/scheduled-transfers/schedule-1/pause") && init?.method === "PATCH") {
+        return jsonResponse({ ...scheduledTransfer, status: "PAUSED" });
+      }
+      if (url.includes("/api/scheduled-transfers/schedule-1/resume") && init?.method === "PATCH") {
+        return jsonResponse(scheduledTransfer);
+      }
+      if (url.includes("/api/scheduled-transfers/schedule-1") && init?.method === "DELETE") {
+        return jsonResponse({}, 204);
+      }
+      if (url.includes("/api/scheduled-transfers/schedule-1/runs")) {
+        return jsonResponse(emptyPage);
+      }
+      if (url.includes("/api/scheduled-transfers") && init?.method === "POST") {
+        return jsonResponse(scheduledTransfer, 201);
+      }
+      if (url.includes("/api/scheduled-transfers")) {
+        return jsonResponse({ ...emptyPage, content: [scheduledTransfer], totalElements: 1, totalPages: 1 });
+      }
+      return undefined;
+    });
+
+    renderApp("/scheduled-transfers", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    expect(await screen.findByRole("link", { name: "Scheduled" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Scheduled transfers" })).toBeInTheDocument();
+    expect(await screen.findByText("schedule-1")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("From account"), "101");
+    await user.selectOptions(screen.getByLabelText("To account"), "202");
+    await user.clear(screen.getByLabelText("Amount"));
+    await user.type(screen.getByLabelText("Amount"), "75");
+    await user.selectOptions(screen.getByLabelText("Schedule type"), "RECURRING");
+    await user.selectOptions(screen.getByLabelText("Frequency"), "MONTHLY");
+    await user.type(screen.getByLabelText("First run date"), "2026-07-15T10:00");
+    await user.type(screen.getByLabelText("Description"), "Rent");
+    await user.type(screen.getByLabelText("Reference"), "RENT");
+    await user.click(screen.getByRole("button", { name: "Create schedule" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) =>
+        url.includes("/transaction-api/api/scheduled-transfers")
+        && init?.method === "POST"
+        && String(init.body).includes("\"frequency\":\"MONTHLY\"")
+      )).toBe(true);
+    });
+
+    await user.click(screen.getByRole("button", { name: "Pause schedule-1" }));
+    await user.click(screen.getByRole("button", { name: "Resume schedule-1" }));
+    await user.click(screen.getByRole("button", { name: "Cancel schedule-1" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) => url.includes("/transaction-api/api/scheduled-transfers?") && init?.method === undefined)).toBe(true);
+      expect(calls.some(({ url, init }) => url.includes("/transaction-api/api/scheduled-transfers/schedule-1/pause") && init?.method === "PATCH")).toBe(true);
+      expect(calls.some(({ url, init }) => url.includes("/transaction-api/api/scheduled-transfers/schedule-1/resume") && init?.method === "PATCH")).toBe(true);
+      expect(calls.some(({ url, init }) => url.includes("/transaction-api/api/scheduled-transfers/schedule-1") && init?.method === "DELETE")).toBe(true);
+    });
+  });
+});
+
 describe("customer shell navigation", () => {
   it("shows the customer shell for authenticated users", async () => {
     mockFetch();

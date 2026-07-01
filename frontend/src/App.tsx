@@ -19,6 +19,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { MoveMoneyPage } from "./pages/MoveMoneyPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { ScheduledTransfersPage } from "./pages/ScheduledTransfersPage";
 import { StatementsPage } from "./pages/StatementsPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 
@@ -32,6 +33,7 @@ export function App() {
           <Route index element={<DashboardPage />} />
           <Route path="accounts" element={<AccountsPage />} />
           <Route path="move-money" element={<MoveMoneyPage />} />
+          <Route path="scheduled-transfers" element={<ScheduledTransfersPage />} />
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="disputes" element={<DisputesPage />} />
           <Route path="statements" element={<StatementsPage />} />

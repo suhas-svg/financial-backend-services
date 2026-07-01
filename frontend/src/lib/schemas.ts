@@ -50,6 +50,29 @@ export const transferSchema = z.object({
   currency
 });
 
+export const scheduledTransferSchema = z.object({
+  fromAccountId: z.string().min(1, "Source account is required"),
+  toAccountId: z.string().min(1, "Destination account is required"),
+  amount,
+  currency,
+  description: z.string().max(500).optional(),
+  reference: z.string().max(100).optional(),
+  scheduleType: z.enum(["ONE_TIME", "RECURRING"]),
+  frequency: z.enum(["WEEKLY", "BIWEEKLY", "MONTHLY"]).optional(),
+  firstRunAt: z.string().min(1, "First run date is required"),
+  endAt: z.string().optional()
+}).superRefine((value, ctx) => {
+  if (value.fromAccountId === value.toAccountId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["toAccountId"], message: "Destination must be different" });
+  }
+  if (value.scheduleType === "RECURRING" && !value.frequency) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["frequency"], message: "Frequency is required" });
+  }
+  if (value.scheduleType === "ONE_TIME" && value.frequency) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["frequency"], message: "Frequency is only for recurring schedules" });
+  }
+});
+
 export const reversalSchema = z.object({
   reason: z.string().min(1, "Reason is required").max(500),
   reference: z.string().max(100).optional()
@@ -74,6 +97,7 @@ export type RegisterValues = z.infer<typeof registerSchema>;
 export type AccountValues = z.infer<typeof accountSchema>;
 export type MoneyMovementValues = z.infer<typeof moneyMovementSchema>;
 export type TransferValues = z.infer<typeof transferSchema>;
+export type ScheduledTransferValues = z.infer<typeof scheduledTransferSchema>;
 export type ReversalValues = z.infer<typeof reversalSchema>;
 export type DisputeValues = z.infer<typeof disputeSchema>;
 export type DisputeStatusValues = z.infer<typeof disputeStatusSchema>;
