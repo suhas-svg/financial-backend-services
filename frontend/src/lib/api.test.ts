@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
-import { addRiskCaseNote, cancelScheduledTransfer, claimRiskCase, createRiskCaseFromAlert, createScheduledTransfer, exportInvestigationTimelineCsv, getCustomerJournal, getInvestigationSummary, getInvestigationTimeline, listLedgerAccounts, listScheduledTransferRuns, listScheduledTransfers, pauseScheduledTransfer, resumeScheduledTransfer, searchAuditEvents, searchRiskAlerts, searchRiskCases, updateAccountStatus, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
+import { addRiskCaseNote, cancelScheduledTransfer, claimRiskCase, createRiskCaseFromAlert, createScheduledTransfer, exportInvestigationTimelineCsv, getCustomerJournal, getInvestigationSummary, getInvestigationTimeline, getScheduledTransfer, listLedgerAccounts, listScheduledTransferRuns, listScheduledTransfers, pauseScheduledTransfer, resumeScheduledTransfer, searchAuditEvents, searchRiskAlerts, searchRiskCases, updateAccountStatus, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
 import { clearSession, saveSession } from "./session";
 
 function tokenFor(payload: object) {
@@ -260,6 +260,7 @@ describe("apiRequest", () => {
       firstRunAt: "2026-07-15T10:00"
     });
     await listScheduledTransfers({ status: "ACTIVE" });
+    await getScheduledTransfer("schedule-1");
     await pauseScheduledTransfer("schedule-1");
     await resumeScheduledTransfer("schedule-1");
     await cancelScheduledTransfer("schedule-1");
@@ -267,6 +268,7 @@ describe("apiRequest", () => {
 
     expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers", expect.objectContaining({ method: "POST" }));
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/transaction-api/api/scheduled-transfers?"), expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers/schedule-1", expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers/schedule-1/pause", expect.objectContaining({ method: "PATCH" }));
     expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers/schedule-1/resume", expect.objectContaining({ method: "PATCH" }));
     expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers/schedule-1", expect.objectContaining({ method: "DELETE" }));
