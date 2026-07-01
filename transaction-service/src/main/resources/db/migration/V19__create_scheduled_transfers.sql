@@ -17,10 +17,16 @@ CREATE TABLE scheduled_transfers (
     updated_at TIMESTAMP NOT NULL,
     version BIGINT NOT NULL DEFAULT 0,
     CONSTRAINT ck_scheduled_transfer_amount_positive CHECK (amount > 0),
+    CONSTRAINT ck_scheduled_transfer_currency_shape CHECK (length(currency) = 3),
+    CONSTRAINT ck_scheduled_transfer_type CHECK (schedule_type IN ('ONE_TIME', 'RECURRING')),
     CONSTRAINT ck_scheduled_transfer_frequency CHECK (
         (schedule_type = 'ONE_TIME' AND frequency IS NULL)
         OR (schedule_type = 'RECURRING' AND frequency IS NOT NULL)
-    )
+    ),
+    CONSTRAINT ck_scheduled_transfer_frequency_value CHECK (
+        frequency IS NULL OR frequency IN ('WEEKLY', 'BIWEEKLY', 'MONTHLY')
+    ),
+    CONSTRAINT ck_scheduled_transfer_status CHECK (status IN ('ACTIVE', 'PAUSED', 'CANCELED', 'COMPLETED'))
 );
 
 CREATE TABLE scheduled_transfer_runs (
@@ -33,6 +39,7 @@ CREATE TABLE scheduled_transfer_runs (
     transaction_id VARCHAR(36),
     idempotency_key VARCHAR(160) NOT NULL,
     failure_reason VARCHAR(1000),
+    CONSTRAINT ck_scheduled_transfer_run_status CHECK (status IN ('PROCESSING', 'COMPLETED', 'FAILED', 'SKIPPED')),
     CONSTRAINT fk_scheduled_transfer_runs_schedule
         FOREIGN KEY (schedule_id) REFERENCES scheduled_transfers(schedule_id),
     CONSTRAINT uq_scheduled_transfer_run UNIQUE (schedule_id, scheduled_for)
