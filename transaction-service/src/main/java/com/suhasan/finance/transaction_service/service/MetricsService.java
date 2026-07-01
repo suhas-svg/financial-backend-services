@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -37,6 +38,7 @@ public class MetricsService {
     // Timers for performance metrics
     private final Timer accountValidationTimer;
     private final Timer balanceCheckTimer;
+    private final Timer scheduledTransferExecutionTimer;
     
     // Gauges for current state
     private final AtomicLong activeTransactionsCount = new AtomicLong(0);
@@ -49,6 +51,11 @@ public class MetricsService {
     private final Counter accountNotFoundCounter;
     private final Counter limitExceededCounter;
     private final Counter accountServiceErrorCounter;
+    private final Counter scheduledTransferDueCounter;
+    private final Counter scheduledTransferClaimedCounter;
+    private final Counter scheduledTransferCompletedCounter;
+    private final Counter scheduledTransferFailedCounter;
+    private final Counter scheduledTransferDuplicatePreventedCounter;
     
     public MetricsService(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
@@ -78,6 +85,10 @@ public class MetricsService {
         this.balanceCheckTimer = Timer.builder("balance.check.duration")
                 .description("Time taken to check account balance")
                 .register(meterRegistry);
+
+        this.scheduledTransferExecutionTimer = Timer.builder("scheduled_transfer.execution.duration")
+                .description("Time taken to execute scheduled transfers")
+                .register(meterRegistry);
         
         // Initialize error counters
         this.insufficientFundsCounter = Counter.builder("transaction.error.insufficient_funds.total")
@@ -94,6 +105,26 @@ public class MetricsService {
                 
         this.accountServiceErrorCounter = Counter.builder("account.service.error.total")
                 .description("Total number of Account Service communication errors")
+                .register(meterRegistry);
+
+        this.scheduledTransferDueCounter = Counter.builder("scheduled_transfer.due.total")
+                .description("Total number of due scheduled transfers found by the worker")
+                .register(meterRegistry);
+
+        this.scheduledTransferClaimedCounter = Counter.builder("scheduled_transfer.claimed.total")
+                .description("Total number of scheduled transfer runs claimed for execution")
+                .register(meterRegistry);
+
+        this.scheduledTransferCompletedCounter = Counter.builder("scheduled_transfer.completed.total")
+                .description("Total number of scheduled transfer runs completed successfully")
+                .register(meterRegistry);
+
+        this.scheduledTransferFailedCounter = Counter.builder("scheduled_transfer.failed.total")
+                .description("Total number of scheduled transfer runs that failed")
+                .register(meterRegistry);
+
+        this.scheduledTransferDuplicatePreventedCounter = Counter.builder("scheduled_transfer.duplicate_prevented.total")
+                .description("Total number of duplicate scheduled transfer runs prevented")
                 .register(meterRegistry);
         
         // Initialize gauges
@@ -238,6 +269,28 @@ public class MetricsService {
     public void updatePendingTransactionsCount(long count) {
         pendingTransactionsCount.set(count);
         log.debug("Updated pending transactions count: {}", count);
+    }
+
+    public void recordScheduledTransferDue(int count) {
+        scheduledTransferDueCounter.increment(Math.max(0, count));
+    }
+
+    public void recordScheduledTransferClaimed() {
+        scheduledTransferClaimedCounter.increment();
+    }
+
+    public void recordScheduledTransferCompleted(long durationMs) {
+        scheduledTransferCompletedCounter.increment();
+        scheduledTransferExecutionTimer.record(Math.max(0, durationMs), TimeUnit.MILLISECONDS);
+    }
+
+    public void recordScheduledTransferFailed(long durationMs) {
+        scheduledTransferFailedCounter.increment();
+        scheduledTransferExecutionTimer.record(Math.max(0, durationMs), TimeUnit.MILLISECONDS);
+    }
+
+    public void recordScheduledTransferDuplicatePrevented() {
+        scheduledTransferDuplicatePreventedCounter.increment();
     }
     
     /**
