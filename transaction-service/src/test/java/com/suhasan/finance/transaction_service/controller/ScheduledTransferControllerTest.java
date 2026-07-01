@@ -9,11 +9,14 @@ import com.suhasan.finance.transaction_service.entity.ScheduledTransferStatus;
 import com.suhasan.finance.transaction_service.entity.ScheduledTransferType;
 import com.suhasan.finance.transaction_service.service.ScheduledTransferService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -103,7 +106,13 @@ class ScheduledTransferControllerTest {
                 .andExpect(jsonPath("$.content[0].status").value("ACTIVE"))
                 .andExpect(jsonPath("$.content[0].scheduleType").value("RECURRING"))
                 .andExpect(jsonPath("$.content[0].frequency").value("MONTHLY"))
-                .andExpect(jsonPath("$.content[0].nextRunAt").value("2026-07-15T10:15:30Z"));
+                .andExpect(jsonPath("$.content[0].nextRunAt").value("2026-07-15T10:15:30Z"))
+                .andExpect(jsonPath("$.number").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1))
+                .andExpect(jsonPath("$.first").value(true))
+                .andExpect(jsonPath("$.last").value(true));
 
         mockMvc.perform(get("/api/scheduled-transfers/schedule-1"))
                 .andExpect(status().isOk())
@@ -113,7 +122,9 @@ class ScheduledTransferControllerTest {
                 .andExpect(jsonPath("$.frequency").value("MONTHLY"))
                 .andExpect(jsonPath("$.nextRunAt").value("2026-07-15T10:15:30Z"));
 
-        verify(scheduledTransferService).list(eq("customer"), eq(ScheduledTransferStatus.ACTIVE), any());
+        ArgumentCaptor<Pageable> listPageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(scheduledTransferService).list(eq("customer"), eq(ScheduledTransferStatus.ACTIVE), listPageable.capture());
+        assertDefaultSort(listPageable.getValue(), "nextRunAt", Sort.Direction.ASC);
         verify(scheduledTransferService).get("schedule-1", "customer");
     }
 
@@ -175,9 +186,14 @@ class ScheduledTransferControllerTest {
                 .andExpect(jsonPath("$.content[0].runId").value("run-1"))
                 .andExpect(jsonPath("$.content[0].scheduleId").value("schedule-1"))
                 .andExpect(jsonPath("$.content[0].status").value("COMPLETED"))
-                .andExpect(jsonPath("$.content[0].scheduledFor").value("2026-07-15T10:15:30Z"));
+                .andExpect(jsonPath("$.content[0].scheduledFor").value("2026-07-15T10:15:30Z"))
+                .andExpect(jsonPath("$.number").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalElements").value(1));
 
-        verify(scheduledTransferService).listRuns(eq("schedule-1"), eq("customer"), any());
+        ArgumentCaptor<Pageable> runsPageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(scheduledTransferService).listRuns(eq("schedule-1"), eq("customer"), runsPageable.capture());
+        assertDefaultSort(runsPageable.getValue(), "scheduledFor", Sort.Direction.DESC);
     }
 
     @Test
@@ -203,5 +219,13 @@ class ScheduledTransferControllerTest {
                 .nextRunAt(NEXT_RUN_AT)
                 .status(status)
                 .build();
+    }
+
+    private void assertDefaultSort(Pageable pageable, String property, Sort.Direction direction) {
+        org.assertj.core.api.Assertions.assertThat(pageable.getPageSize()).isEqualTo(20);
+        org.assertj.core.api.Assertions.assertThat(pageable.getSort().getOrderFor(property))
+                .isNotNull()
+                .extracting(Sort.Order::getDirection)
+                .isEqualTo(direction);
     }
 }

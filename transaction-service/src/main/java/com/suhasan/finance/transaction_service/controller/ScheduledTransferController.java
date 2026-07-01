@@ -13,6 +13,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +24,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/scheduled-transfers")
@@ -40,11 +43,12 @@ public class ScheduledTransferController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<ScheduledTransferResponse>> list(
+    public ResponseEntity<PageResponse<ScheduledTransferResponse>> list(
             @RequestParam(required = false) ScheduledTransferStatus status,
             Authentication authentication,
             @PageableDefault(size = 20, sort = "nextRunAt", direction = Sort.Direction.ASC) Pageable pageable) {
-        return ResponseEntity.ok(scheduledTransferService.list(currentUser(authentication), status, pageable));
+        return ResponseEntity.ok(PageResponse.from(
+                scheduledTransferService.list(currentUser(authentication), status, pageable)));
     }
 
     @GetMapping("/{scheduleId}")
@@ -76,14 +80,39 @@ public class ScheduledTransferController {
     }
 
     @GetMapping("/{scheduleId}/runs")
-    public ResponseEntity<Page<ScheduledTransferRunResponse>> runs(
+    public ResponseEntity<PageResponse<ScheduledTransferRunResponse>> runs(
             @PathVariable String scheduleId,
             Authentication authentication,
             @PageableDefault(size = 20, sort = "scheduledFor", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(scheduledTransferService.listRuns(scheduleId, currentUser(authentication), pageable));
+        return ResponseEntity.ok(PageResponse.from(
+                scheduledTransferService.listRuns(scheduleId, currentUser(authentication), pageable)));
     }
 
     private String currentUser(Authentication authentication) {
-        return authentication != null ? authentication.getName() : "SYSTEM";
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AuthenticationCredentialsNotFoundException("Authentication is required");
+        }
+        return authentication.getName();
+    }
+
+    public record PageResponse<T>(
+            List<T> content,
+            int number,
+            int size,
+            long totalElements,
+            int totalPages,
+            boolean first,
+            boolean last) {
+
+        static <T> PageResponse<T> from(Page<T> page) {
+            return new PageResponse<>(
+                    page.getContent(),
+                    page.getNumber(),
+                    page.getSize(),
+                    page.getTotalElements(),
+                    page.getTotalPages(),
+                    page.isFirst(),
+                    page.isLast());
+        }
     }
 }
