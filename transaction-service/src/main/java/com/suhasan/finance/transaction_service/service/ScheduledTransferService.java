@@ -14,6 +14,7 @@ import com.suhasan.finance.transaction_service.entity.ScheduledTransferRunStatus
 import com.suhasan.finance.transaction_service.entity.ScheduledTransferStatus;
 import com.suhasan.finance.transaction_service.entity.ScheduledTransferType;
 import com.suhasan.finance.transaction_service.entity.Transaction;
+import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
 import com.suhasan.finance.transaction_service.repository.ScheduledTransferRepository;
 import com.suhasan.finance.transaction_service.repository.ScheduledTransferRunRepository;
@@ -259,8 +260,9 @@ public class ScheduledTransferService {
         try {
             return runRepository.findByScheduleScheduleIdAndScheduledFor(schedule.getScheduleId(), scheduledFor)
                     .filter(run -> run.getStatus() == ScheduledTransferRunStatus.PROCESSING)
-                    .flatMap(run -> transactionRepository.findFirstByCreatedByAndTypeAndIdempotencyKey(
-                                    schedule.getUserId(), TransactionType.TRANSFER, run.getIdempotencyKey())
+                    .flatMap(run -> transactionRepository.findFirstByCreatedByAndTypeAndStatusAndIdempotencyKey(
+                                    schedule.getUserId(), TransactionType.TRANSFER, TransactionStatus.COMPLETED,
+                                    run.getIdempotencyKey())
                             .map(transaction -> {
                                 finalizeRecoveredRun(schedule, run, scheduledFor, transaction);
                                 metricsService.recordScheduledTransferCompleted(0L);

@@ -34,6 +34,9 @@ public interface TransactionRepository extends JpaRepository<Transaction, String
        Optional<Transaction> findFirstByCreatedByAndTypeAndIdempotencyKey(
                      String createdBy, TransactionType type, String idempotencyKey);
 
+       Optional<Transaction> findFirstByCreatedByAndTypeAndStatusAndIdempotencyKey(
+                     String createdBy, TransactionType type, TransactionStatus status, String idempotencyKey);
+
        long countByCreatedByAndStatusInAndCreatedAtAfter(
                      String createdBy, Collection<TransactionStatus> statuses, LocalDateTime createdAt);
 
