@@ -13,8 +13,11 @@ import com.suhasan.finance.transaction_service.entity.ScheduledTransferRun;
 import com.suhasan.finance.transaction_service.entity.ScheduledTransferRunStatus;
 import com.suhasan.finance.transaction_service.entity.ScheduledTransferStatus;
 import com.suhasan.finance.transaction_service.entity.ScheduledTransferType;
+import com.suhasan.finance.transaction_service.entity.Transaction;
+import com.suhasan.finance.transaction_service.entity.TransactionType;
 import com.suhasan.finance.transaction_service.repository.ScheduledTransferRepository;
 import com.suhasan.finance.transaction_service.repository.ScheduledTransferRunRepository;
+import com.suhasan.finance.transaction_service.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -42,6 +45,7 @@ public class ScheduledTransferService {
     private final ScheduledTransferRepository scheduleRepository;
     private final ScheduledTransferRunRepository runRepository;
     private final TransactionService transactionService;
+    private final TransactionRepository transactionRepository;
     private final ResilientAccountServiceClient accountServiceClient;
     private final MetricsService metricsService;
     private final TransactionTemplate transactionTemplate;
@@ -174,6 +178,10 @@ public class ScheduledTransferService {
 
                     Instant scheduledFor = schedule.getNextRunAt();
                     if (runRepository.existsByScheduleScheduleIdAndScheduledFor(schedule.getScheduleId(), scheduledFor)) {
+                        if (recoverExistingProcessingRun(schedule, scheduledFor)) {
+                            return new ClaimedScheduledTransfer(schedule, null, scheduledFor,
+                                    idempotencyKey(schedule.getScheduleId(), scheduledFor), true);
+                        }
                         metricsService.recordScheduledTransferDuplicatePrevented();
                         continue;
                     }
@@ -190,7 +198,7 @@ public class ScheduledTransferService {
                     try {
                         runRepository.save(run);
                         metricsService.recordScheduledTransferClaimed();
-                        return new ClaimedScheduledTransfer(schedule, run, scheduledFor, idempotencyKey);
+                        return new ClaimedScheduledTransfer(schedule, run, scheduledFor, idempotencyKey, false);
                     } catch (RuntimeException e) {
                         metricsService.recordScheduledTransferFailed(0L);
                         log.warn("Failed to claim scheduled transfer {} due at {}: {}",
@@ -207,6 +215,10 @@ public class ScheduledTransferService {
     }
 
     private boolean executeClaimedTransfer(ClaimedScheduledTransfer claimed) {
+        if (claimed.recovered()) {
+            return true;
+        }
+
         long started = System.currentTimeMillis();
         TransactionResponse transaction;
         try {
@@ -241,6 +253,37 @@ public class ScheduledTransferService {
                     e.getMessage());
             return false;
         }
+    }
+
+    private boolean recoverExistingProcessingRun(ScheduledTransfer schedule, Instant scheduledFor) {
+        try {
+            return runRepository.findByScheduleScheduleIdAndScheduledFor(schedule.getScheduleId(), scheduledFor)
+                    .filter(run -> run.getStatus() == ScheduledTransferRunStatus.PROCESSING)
+                    .flatMap(run -> transactionRepository.findFirstByCreatedByAndTypeAndIdempotencyKey(
+                                    schedule.getUserId(), TransactionType.TRANSFER, run.getIdempotencyKey())
+                            .map(transaction -> {
+                                finalizeRecoveredRun(schedule, run, scheduledFor, transaction);
+                                metricsService.recordScheduledTransferCompleted(0L);
+                                return true;
+                            }))
+                    .orElse(false);
+        } catch (RuntimeException e) {
+            metricsService.recordScheduledTransferFailed(0L);
+            log.warn("Failed to recover processing scheduled transfer {} due at {}: {}",
+                    schedule.getScheduleId(), scheduledFor, e.getMessage());
+            return false;
+        }
+    }
+
+    private void finalizeRecoveredRun(ScheduledTransfer schedule, ScheduledTransferRun run,
+                                      Instant scheduledFor, Transaction transaction) {
+        run.setStatus(ScheduledTransferRunStatus.COMPLETED);
+        run.setTransactionId(transaction.getTransactionId());
+        run.setCompletedAt(Instant.now());
+        schedule.setLastRunAt(scheduledFor);
+        advanceOrComplete(schedule, scheduledFor);
+        runRepository.save(run);
+        scheduleRepository.save(schedule);
     }
 
     private void finalizeSuccessfulRun(ClaimedScheduledTransfer claimed, TransactionResponse transaction) {
@@ -422,6 +465,7 @@ public class ScheduledTransferService {
             ScheduledTransfer schedule,
             ScheduledTransferRun run,
             Instant scheduledFor,
-            String idempotencyKey) {
+            String idempotencyKey,
+            boolean recovered) {
     }
 }
