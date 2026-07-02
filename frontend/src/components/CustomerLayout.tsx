@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeftRight, Banknote, Bell, CalendarClock, CircleHelp, FileText, Gauge, Landmark, LogOut, WalletCards } from "lucide-react";
+import { ArrowLeftRight, Banknote, Bell, CalendarClock, CircleHelp, FileText, Gauge, Landmark, LogOut, Users, WalletCards } from "lucide-react";
 import clsx from "clsx";
 import { Button } from "./ui";
 import { useAuth } from "../state/useAuth";
@@ -9,6 +9,7 @@ import { getNotificationSummary } from "../lib/queries";
 const navItems = [
   { to: "/", label: "Dashboard", icon: Gauge },
   { to: "/accounts", label: "Accounts", icon: WalletCards },
+  { to: "/beneficiaries", label: "Recipients", icon: Users },
   { to: "/move-money", label: "Move Money", icon: ArrowLeftRight },
   { to: "/scheduled-transfers", label: "Scheduled", icon: CalendarClock },
   { to: "/transactions", label: "Transactions", icon: Banknote },

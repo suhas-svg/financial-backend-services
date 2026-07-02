@@ -5,9 +5,9 @@ import { useForm } from "react-hook-form";
 import { Badge, Button, EmptyState, ErrorNotice, Field, Input, Panel, Select } from "../components/ui";
 import { availableBalance } from "../lib/accountBalances";
 import { compactDate, money } from "../lib/format";
-import { cancelScheduledTransfer, createScheduledTransfer, listAccounts, listScheduledTransferRuns, listScheduledTransfers, pauseScheduledTransfer, resumeScheduledTransfer } from "../lib/queries";
+import { cancelScheduledTransfer, createScheduledTransfer, listAccounts, listBeneficiaries, listScheduledTransferRuns, listScheduledTransfers, pauseScheduledTransfer, resumeScheduledTransfer } from "../lib/queries";
 import { scheduledTransferSchema, type ScheduledTransferValues } from "../lib/schemas";
-import type { Account, ScheduledTransfer, ScheduledTransferStatus } from "../types";
+import type { Account, Beneficiary, ScheduledTransfer, ScheduledTransferStatus } from "../types";
 
 const statuses: Array<ScheduledTransferStatus | ""> = ["ACTIVE", "PAUSED", ""];
 
@@ -33,6 +33,7 @@ export function ScheduledTransfersPage() {
   });
 
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => listAccounts() });
+  const beneficiaries = useQuery({ queryKey: ["beneficiaries", "ACTIVE"], queryFn: () => listBeneficiaries({ status: "ACTIVE" }) });
   const schedules = useQuery({ queryKey: ["scheduled-transfers", status], queryFn: () => listScheduledTransfers({ status }) });
   const selected = useMemo(
     () => schedules.data?.content.find((schedule) => schedule.scheduleId === selectedId) ?? schedules.data?.content[0] ?? null,
@@ -130,6 +131,15 @@ export function ScheduledTransfersPage() {
             <Field label="From account" error={form.formState.errors.fromAccountId?.message}>
               <AccountSelect accounts={accounts.data?.content ?? []} value={form.watch("fromAccountId")} {...form.register("fromAccountId")} />
             </Field>
+            <Field label="Saved recipient">
+              <RecipientSelect
+                beneficiaries={beneficiaries.data?.content ?? []}
+                onSelect={(beneficiary) => {
+                  form.setValue("toAccountId", beneficiary.destinationAccountId, { shouldValidate: true });
+                  form.setValue("currency", beneficiary.currency, { shouldValidate: true });
+                }}
+              />
+            </Field>
             <Field label="To account" error={form.formState.errors.toAccountId?.message}>
               <AccountSelect accounts={accounts.data?.content ?? []} value={form.watch("toAccountId")} {...form.register("toAccountId")} />
             </Field>
@@ -224,6 +234,27 @@ const AccountSelect = forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<H
     </Select>
   );
 });
+
+function RecipientSelect({ beneficiaries, onSelect }: { beneficiaries: Beneficiary[]; onSelect: (beneficiary: Beneficiary) => void }) {
+  return (
+    <Select
+      defaultValue=""
+      onChange={(event) => {
+        const beneficiary = beneficiaries.find((item) => item.beneficiaryId === event.target.value);
+        if (beneficiary) {
+          onSelect(beneficiary);
+        }
+      }}
+    >
+      <option value="">Manual destination</option>
+      {beneficiaries.map((beneficiary) => (
+        <option key={beneficiary.beneficiaryId} value={beneficiary.beneficiaryId}>
+          {beneficiary.displayName} - Account {beneficiary.destinationAccountId}
+        </option>
+      ))}
+    </Select>
+  );
+}
 
 function ScheduleTable({
   schedules,

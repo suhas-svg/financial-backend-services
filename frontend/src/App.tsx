@@ -13,6 +13,7 @@ import { AdminDisputesPage } from "./pages/AdminDisputesPage";
 import { AdminRiskAlertsPage } from "./pages/AdminRiskAlertsPage";
 import { AdminRiskCasesPage } from "./pages/AdminRiskCasesPage";
 import { AdminTransactionsPage } from "./pages/AdminTransactionsPage";
+import { BeneficiariesPage } from "./pages/BeneficiariesPage";
 import { DisputesPage } from "./pages/DisputesPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -32,6 +33,7 @@ export function App() {
         <Route element={<CustomerLayout />}>
           <Route index element={<DashboardPage />} />
           <Route path="accounts" element={<AccountsPage />} />
+          <Route path="beneficiaries" element={<BeneficiariesPage />} />
           <Route path="move-money" element={<MoveMoneyPage />} />
           <Route path="scheduled-transfers" element={<ScheduledTransfersPage />} />
           <Route path="transactions" element={<TransactionsPage />} />

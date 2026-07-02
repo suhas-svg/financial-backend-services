@@ -37,6 +37,19 @@ const frozenAccount = {
   statusReason: "Fraud review"
 };
 
+const sampleBeneficiary = {
+  beneficiaryId: "beneficiary-1",
+  userId: "customer",
+  displayName: "Rent account",
+  destinationAccountId: "202",
+  currency: "USD",
+  nickname: "Rent",
+  notes: "Monthly payment",
+  status: "ACTIVE",
+  createdAt: "2026-07-02T10:00:00Z",
+  updatedAt: "2026-07-02T10:00:00Z"
+};
+
 function tokenFor(payload: Record<string, unknown>) {
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   return `${encode({ alg: "HS256", typ: "JWT" })}.${encode(payload)}.signature`;
@@ -103,6 +116,9 @@ function mockFetch(handler?: (url: string, init?: RequestInit) => Promise<Respon
       return jsonResponse({ total: 0, unread: 0, bySeverity: {}, byType: {}, bySourceType: {} });
     }
     if (url.includes("/api/notifications")) {
+      return jsonResponse(emptyPage);
+    }
+    if (url.includes("/api/beneficiaries")) {
       return jsonResponse(emptyPage);
     }
     if (url.includes("/api/transactions/user/stats")) {
@@ -640,6 +656,128 @@ describe("customer scheduled transfers", () => {
   });
 });
 
+describe("customer beneficiaries", () => {
+  it("lists, creates, edits, and disables recipients", async () => {
+    const user = userEvent.setup();
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/beneficiaries/beneficiary-1") && init?.method === "PUT") {
+        return jsonResponse({ ...sampleBeneficiary, displayName: "Updated rent account", notes: "Updated note" });
+      }
+      if (url.includes("/api/beneficiaries/beneficiary-1") && init?.method === "DELETE") {
+        return jsonResponse({ ...sampleBeneficiary, status: "DISABLED", disabledAt: "2026-07-02T11:00:00Z" });
+      }
+      if (url.includes("/api/beneficiaries") && init?.method === "POST") {
+        return jsonResponse(sampleBeneficiary, 201);
+      }
+      if (url.includes("/api/beneficiaries")) {
+        return jsonResponse({ ...emptyPage, content: [sampleBeneficiary], totalElements: 1, totalPages: 1 });
+      }
+      return undefined;
+    });
+
+    renderApp("/beneficiaries", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    expect(await screen.findByRole("heading", { name: "Recipients" })).toBeInTheDocument();
+    expect((await screen.findAllByText("Rent account")).length).toBeGreaterThan(0);
+
+    await user.clear(screen.getByLabelText("Display name"));
+    await user.type(screen.getByLabelText("Display name"), "Rent account");
+    await user.type(screen.getByLabelText("Destination account ID"), "202");
+    await user.click(screen.getByRole("button", { name: "Save recipient" }));
+
+    await user.click(await screen.findByRole("button", { name: "Edit beneficiary-1" }));
+    await user.clear(screen.getByLabelText("Display name"));
+    await user.type(screen.getByLabelText("Display name"), "Updated rent account");
+    await user.type(screen.getByLabelText("Notes"), "Updated note");
+    await user.click(screen.getByRole("button", { name: "Update recipient" }));
+
+    await user.click(await screen.findByRole("button", { name: "Disable beneficiary-1" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) => url.includes("/account-api/api/beneficiaries") && init?.method === "POST")).toBe(true);
+      expect(calls.some(({ url, init }) => url.includes("/account-api/api/beneficiaries/beneficiary-1") && init?.method === "PUT")).toBe(true);
+      expect(calls.some(({ url, init }) => url.includes("/account-api/api/beneficiaries/beneficiary-1") && init?.method === "DELETE")).toBe(true);
+    });
+  });
+
+  it("submits selected recipient destination account in move money transfer", async () => {
+    const user = userEvent.setup();
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/beneficiaries")) {
+        return jsonResponse({ ...emptyPage, content: [sampleBeneficiary], totalElements: 1, totalPages: 1 });
+      }
+      if (url.includes("/api/transactions/transfer") && init?.method === "POST") {
+        return jsonResponse(sampleTransaction({ toAccountId: "202" }), 201);
+      }
+      return undefined;
+    });
+
+    renderApp("/move-money", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    await waitFor(() => expect(screen.getAllByText(/#101 - CHECKING/).length).toBeGreaterThan(0));
+    await user.selectOptions(await screen.findByLabelText("From account"), "101");
+    await user.selectOptions(await screen.findByLabelText("Saved recipient"), "beneficiary-1");
+    await user.clear(screen.getByLabelText("Transfer amount"));
+    await user.type(screen.getByLabelText("Transfer amount"), "25");
+    await user.click(screen.getByRole("button", { name: "Transfer" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) =>
+        url.includes("/transaction-api/api/transactions/transfer")
+        && init?.method === "POST"
+        && String(init.body).includes("\"toAccountId\":\"202\"")
+      )).toBe(true);
+    });
+  });
+
+  it("submits selected recipient destination account in scheduled transfer creation", async () => {
+    const user = userEvent.setup();
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/beneficiaries")) {
+        return jsonResponse({ ...emptyPage, content: [sampleBeneficiary], totalElements: 1, totalPages: 1 });
+      }
+      if (url.includes("/api/scheduled-transfers") && init?.method === "POST") {
+        return jsonResponse({
+          scheduleId: "schedule-1",
+          userId: "customer",
+          fromAccountId: "101",
+          toAccountId: "202",
+          amount: 75,
+          currency: "USD",
+          scheduleType: "RECURRING",
+          frequency: "MONTHLY",
+          nextRunAt: "2026-07-15T10:00:00Z",
+          status: "ACTIVE"
+        }, 201);
+      }
+      if (url.includes("/api/scheduled-transfers")) {
+        return jsonResponse(emptyPage);
+      }
+      return undefined;
+    });
+
+    renderApp("/scheduled-transfers", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    await waitFor(() => expect(screen.getAllByText(/#101 - CHECKING/).length).toBeGreaterThan(0));
+    await user.selectOptions(await screen.findByLabelText("From account"), "101");
+    await user.selectOptions(await screen.findByLabelText("Saved recipient"), "beneficiary-1");
+    await user.clear(screen.getByLabelText("Amount"));
+    await user.type(screen.getByLabelText("Amount"), "75");
+    await user.selectOptions(screen.getByLabelText("Schedule type"), "RECURRING");
+    await user.selectOptions(screen.getByLabelText("Frequency"), "MONTHLY");
+    await user.type(screen.getByLabelText("First run date"), "2026-07-15T10:00");
+    await user.click(screen.getByRole("button", { name: "Create schedule" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) =>
+        url.includes("/transaction-api/api/scheduled-transfers")
+        && init?.method === "POST"
+        && String(init.body).includes("\"toAccountId\":\"202\"")
+      )).toBe(true);
+    });
+  });
+});
+
 describe("customer shell navigation", () => {
   it("shows the customer shell for authenticated users", async () => {
     mockFetch();
@@ -647,6 +785,7 @@ describe("customer shell navigation", () => {
     expect(await screen.findByRole("link", { name: "Financial Console" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Accounts" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Recipients" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Move Money" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Transactions" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Disputes" })).toBeInTheDocument();
@@ -660,6 +799,7 @@ describe("customer shell navigation", () => {
     expect(await screen.findByRole("link", { name: "Financial Console" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Accounts" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Recipients" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Move Money" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Transactions" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Disputes" })).toBeInTheDocument();

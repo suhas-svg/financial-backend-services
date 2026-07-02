@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
-import { addRiskCaseNote, cancelScheduledTransfer, claimRiskCase, createRiskCaseFromAlert, createScheduledTransfer, exportInvestigationTimelineCsv, getCustomerJournal, getInvestigationSummary, getInvestigationTimeline, getScheduledTransfer, listLedgerAccounts, listScheduledTransferRuns, listScheduledTransfers, pauseScheduledTransfer, resumeScheduledTransfer, searchAuditEvents, searchRiskAlerts, searchRiskCases, updateAccountStatus, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
+import { addRiskCaseNote, cancelScheduledTransfer, claimRiskCase, createBeneficiary, createRiskCaseFromAlert, createScheduledTransfer, disableBeneficiary, exportInvestigationTimelineCsv, getCustomerJournal, getInvestigationSummary, getInvestigationTimeline, getScheduledTransfer, listBeneficiaries, listLedgerAccounts, listScheduledTransferRuns, listScheduledTransfers, pauseScheduledTransfer, resumeScheduledTransfer, searchAuditEvents, searchRiskAlerts, searchRiskCases, updateAccountStatus, updateBeneficiary, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
 import { clearSession, saveSession } from "./session";
 
 function tokenFor(payload: object) {
@@ -84,6 +84,37 @@ describe("apiRequest", () => {
         body: JSON.stringify({ status: "FROZEN", reason: "Fraud review" })
       })
     );
+  });
+
+  it("maps beneficiary requests to the account proxy", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify({ content: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    ));
+
+    await listBeneficiaries({ status: "ACTIVE" });
+    await createBeneficiary({ displayName: "Rent", destinationAccountId: "200", currency: "USD", nickname: "Home", notes: "" });
+    await updateBeneficiary("beneficiary-1", { displayName: "Updated", destinationAccountId: "200", currency: "USD", nickname: "", notes: "Note" });
+    await disableBeneficiary("beneficiary-1");
+
+    expect(fetchMock).toHaveBeenCalledWith("/account-api/api/beneficiaries?status=ACTIVE", expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/account-api/api/beneficiaries",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ displayName: "Rent", destinationAccountId: "200", currency: "USD", nickname: "Home", notes: undefined })
+      })
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/account-api/api/beneficiaries/beneficiary-1",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ displayName: "Updated", nickname: undefined, notes: "Note" })
+      })
+    );
+    expect(fetchMock).toHaveBeenCalledWith("/account-api/api/beneficiaries/beneficiary-1", expect.objectContaining({ method: "DELETE" }));
   });
 
   it("maps audit search requests to the transaction proxy", async () => {
