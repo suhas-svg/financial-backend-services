@@ -30,6 +30,23 @@ export type Account = {
   dueDate?: string;
 };
 
+export type BeneficiaryStatus = "ACTIVE" | "DISABLED";
+
+export type Beneficiary = {
+  beneficiaryId: string;
+  userId: string;
+  displayName: string;
+  destinationAccountId: string;
+  currency: "USD" | "EUR" | "GBP";
+  nickname?: string;
+  notes?: string;
+  status: BeneficiaryStatus;
+  createdAt: string;
+  updatedAt: string;
+  disabledAt?: string;
+  version?: number;
+};
+
 export type LedgerAccountProjection = {
   externalAccountId: string;
   currency: string;

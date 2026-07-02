@@ -50,6 +50,14 @@ export const transferSchema = z.object({
   currency
 });
 
+export const beneficiarySchema = z.object({
+  displayName: z.string().min(1, "Display name is required").max(120),
+  destinationAccountId: z.string().min(1, "Destination account is required").max(64),
+  currency,
+  nickname: z.string().max(120).optional(),
+  notes: z.string().max(500).optional()
+});
+
 export const scheduledTransferSchema = z.object({
   fromAccountId: z.string().min(1, "Source account is required"),
   toAccountId: z.string().min(1, "Destination account is required"),
@@ -97,6 +105,7 @@ export type RegisterValues = z.infer<typeof registerSchema>;
 export type AccountValues = z.infer<typeof accountSchema>;
 export type MoneyMovementValues = z.infer<typeof moneyMovementSchema>;
 export type TransferValues = z.infer<typeof transferSchema>;
+export type BeneficiaryValues = z.infer<typeof beneficiarySchema>;
 export type ScheduledTransferValues = z.infer<typeof scheduledTransferSchema>;
 export type ReversalValues = z.infer<typeof reversalSchema>;
 export type DisputeValues = z.infer<typeof disputeSchema>;

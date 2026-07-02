@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accountSchema, moneyMovementSchema, reversalSchema, scheduledTransferSchema } from "./schemas";
+import { accountSchema, beneficiarySchema, moneyMovementSchema, reversalSchema, scheduledTransferSchema } from "./schemas";
 
 describe("form schemas", () => {
   it("validates backend money movement limits and currencies", () => {
@@ -41,5 +41,12 @@ describe("form schemas", () => {
     expect(scheduledTransferSchema.safeParse({ ...base, scheduleType: "ONE_TIME", frequency: "MONTHLY" }).success).toBe(false);
     expect(scheduledTransferSchema.safeParse({ ...base, fromAccountId: "101", toAccountId: "101", frequency: "MONTHLY" }).success).toBe(false);
     expect(scheduledTransferSchema.safeParse({ ...base, frequency: "MONTHLY", firstRunAt: "" }).success).toBe(false);
+  });
+
+  it("validates beneficiary display and destination fields", () => {
+    expect(beneficiarySchema.safeParse({ displayName: "", destinationAccountId: "200", currency: "USD" }).success).toBe(false);
+    expect(beneficiarySchema.safeParse({ displayName: "Rent", destinationAccountId: "", currency: "USD" }).success).toBe(false);
+    expect(beneficiarySchema.safeParse({ displayName: "Rent", destinationAccountId: "200", currency: "INR" }).success).toBe(false);
+    expect(beneficiarySchema.safeParse({ displayName: "Rent", destinationAccountId: "200", currency: "USD", nickname: "Home" }).success).toBe(true);
   });
 });

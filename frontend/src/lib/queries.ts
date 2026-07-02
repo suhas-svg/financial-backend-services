@@ -1,6 +1,6 @@
-import type { Account, AccountStatus, AuditLogEntry, AuditSummary, CustomerJournal, CustomerStatement, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, LedgerAccountProjection, Limits, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, Page, ReconciliationException, ReconciliationExceptionStatus, ReconciliationRun, ReconciliationSeverity, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, ScheduledTransfer, ScheduledTransferRun, ScheduledTransferStatus, Transaction, TransactionDispute, TransactionStats } from "../types";
+import type { Account, AccountStatus, AuditLogEntry, AuditSummary, Beneficiary, BeneficiaryStatus, CustomerJournal, CustomerStatement, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, LedgerAccountProjection, Limits, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, Page, ReconciliationException, ReconciliationExceptionStatus, ReconciliationRun, ReconciliationSeverity, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, ScheduledTransfer, ScheduledTransferRun, ScheduledTransferStatus, Transaction, TransactionDispute, TransactionStats } from "../types";
 import { apiRequest, toQuery } from "./api";
-import type { AccountValues, DisputeNoteValues, DisputeStatusValues, DisputeValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, ScheduledTransferValues, TransferValues } from "./schemas";
+import type { AccountValues, BeneficiaryValues, DisputeNoteValues, DisputeStatusValues, DisputeValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, ScheduledTransferValues, TransferValues } from "./schemas";
 import { getSession } from "./session";
 
 export function login(values: LoginValues) {
@@ -50,6 +50,22 @@ export function deleteAccount(id: number) {
 
 export function updateAccountStatus(id: number, values: { status: AccountStatus; reason: string }) {
   return apiRequest<Account>("account", `/api/accounts/${id}/status`, { method: "PATCH", body: values });
+}
+
+export function listBeneficiaries(params: { status?: BeneficiaryStatus | ""; page?: number; size?: number } = {}) {
+  return apiRequest<Page<Beneficiary>>("account", `/api/beneficiaries${toQuery(params)}`);
+}
+
+export function createBeneficiary(values: BeneficiaryValues) {
+  return apiRequest<Beneficiary>("account", "/api/beneficiaries", { method: "POST", body: beneficiaryCreatePayload(values) });
+}
+
+export function updateBeneficiary(beneficiaryId: string, values: BeneficiaryValues) {
+  return apiRequest<Beneficiary>("account", `/api/beneficiaries/${beneficiaryId}`, { method: "PUT", body: beneficiaryUpdatePayload(values) });
+}
+
+export function disableBeneficiary(beneficiaryId: string) {
+  return apiRequest<Beneficiary>("account", `/api/beneficiaries/${beneficiaryId}`, { method: "DELETE" });
 }
 
 export function listNotifications(params: {
@@ -155,6 +171,24 @@ function scheduledTransferPayload(values: ScheduledTransferValues) {
     frequency: values.scheduleType === "RECURRING" ? values.frequency : undefined,
     description: values.description || undefined,
     reference: values.reference || undefined
+  };
+}
+
+function beneficiaryCreatePayload(values: BeneficiaryValues) {
+  return {
+    displayName: values.displayName,
+    destinationAccountId: values.destinationAccountId,
+    currency: values.currency,
+    nickname: values.nickname || undefined,
+    notes: values.notes || undefined
+  };
+}
+
+function beneficiaryUpdatePayload(values: BeneficiaryValues) {
+  return {
+    displayName: values.displayName,
+    nickname: values.nickname || undefined,
+    notes: values.notes || undefined
   };
 }
 

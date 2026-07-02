@@ -2,11 +2,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseFormRegisterReturn } from "react-hook-form";
 import { useForm } from "react-hook-form";
-import { deposit, listAccounts, transfer, withdraw } from "../lib/queries";
+import { deposit, listAccounts, listBeneficiaries, transfer, withdraw } from "../lib/queries";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { availableBalance, canDebit } from "../lib/accountBalances";
 import { moneyMovementSchema, transferSchema, type MoneyMovementValues, type TransferValues } from "../lib/schemas";
 import { Button, ErrorNotice, Field, Input, Panel, Select } from "../components/ui";
+import type { Beneficiary } from "../types";
 
 function AccountSelect({ field, debitSource = false, amount = 0 }: { field: UseFormRegisterReturn; debitSource?: boolean; amount?: number }) {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => listAccounts() });
@@ -27,6 +28,7 @@ export function MoveMoneyPage() {
   const depositForm = useForm<MoneyMovementValues>({ resolver: zodResolver(moneyMovementSchema), defaultValues: { accountId: "", amount: 0, currency: "USD", description: "", reference: "" } });
   const withdrawForm = useForm<MoneyMovementValues>({ resolver: zodResolver(moneyMovementSchema), defaultValues: { accountId: "", amount: 0, currency: "USD", description: "", reference: "" } });
   const transferForm = useForm<TransferValues>({ resolver: zodResolver(transferSchema), defaultValues: { fromAccountId: "", toAccountId: "", amount: 0, currency: "USD", description: "", reference: "" } });
+  const beneficiaries = useQuery({ queryKey: ["beneficiaries", "ACTIVE"], queryFn: () => listBeneficiaries({ status: "ACTIVE" }) });
   const withdrawAmount = Number(withdrawForm.watch("amount") || 0);
   const transferAmount = Number(transferForm.watch("amount") || 0);
   const invalidate = () => {
@@ -66,10 +68,19 @@ export function MoveMoneyPage() {
           <Field label="From account" error={transferForm.formState.errors.fromAccountId?.message}>
             <AccountSelect field={transferForm.register("fromAccountId")} debitSource amount={transferAmount} />
           </Field>
-          <Field label="To account" error={transferForm.formState.errors.toAccountId?.message}>
-            <AccountSelect field={transferForm.register("toAccountId")} />
+          <Field label="Saved recipient">
+            <RecipientSelect
+              beneficiaries={beneficiaries.data?.content ?? []}
+              onSelect={(beneficiary) => {
+                transferForm.setValue("toAccountId", beneficiary.destinationAccountId, { shouldValidate: true });
+                transferForm.setValue("currency", beneficiary.currency, { shouldValidate: true });
+              }}
+            />
           </Field>
-          <Field label="Amount" error={transferForm.formState.errors.amount?.message}>
+          <Field label="To account" error={transferForm.formState.errors.toAccountId?.message}>
+            <Input className="mt-2" placeholder="Manual destination account" {...transferForm.register("toAccountId")} />
+          </Field>
+          <Field label="Transfer amount" error={transferForm.formState.errors.amount?.message}>
             <Input type="number" step="0.01" {...transferForm.register("amount")} />
           </Field>
           <Field label="Currency" error={transferForm.formState.errors.currency?.message}>
@@ -89,6 +100,27 @@ export function MoveMoneyPage() {
         </form>
       </Panel>
     </div>
+  );
+}
+
+function RecipientSelect({ beneficiaries, onSelect }: { beneficiaries: Beneficiary[]; onSelect: (beneficiary: Beneficiary) => void }) {
+  return (
+    <Select
+      defaultValue=""
+      onChange={(event) => {
+        const beneficiary = beneficiaries.find((item) => item.beneficiaryId === event.target.value);
+        if (beneficiary) {
+          onSelect(beneficiary);
+        }
+      }}
+    >
+      <option value="">Manual destination</option>
+      {beneficiaries.map((beneficiary) => (
+        <option key={beneficiary.beneficiaryId} value={beneficiary.beneficiaryId}>
+          {beneficiary.displayName} - Account {beneficiary.destinationAccountId}
+        </option>
+      ))}
+    </Select>
   );
 }
 
