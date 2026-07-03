@@ -141,7 +141,7 @@ export function ScheduledTransfersPage() {
               />
             </Field>
             <Field label="To account" error={form.formState.errors.toAccountId?.message}>
-              <AccountSelect accounts={accounts.data?.content ?? []} value={form.watch("toAccountId")} {...form.register("toAccountId")} />
+              <Input placeholder="Manual destination account" {...form.register("toAccountId")} />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Amount" error={form.formState.errors.amount?.message}>

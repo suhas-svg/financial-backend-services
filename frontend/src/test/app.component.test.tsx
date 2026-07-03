@@ -625,7 +625,7 @@ describe("customer scheduled transfers", () => {
     expect(await screen.findByText("schedule-1")).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("From account"), "101");
-    await user.selectOptions(screen.getByLabelText("To account"), "202");
+    await user.type(screen.getByLabelText("To account"), "202");
     await user.clear(screen.getByLabelText("Amount"));
     await user.type(screen.getByLabelText("Amount"), "75");
     await user.selectOptions(screen.getByLabelText("Schedule type"), "RECURRING");
