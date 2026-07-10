@@ -5,6 +5,8 @@ import com.suhasan.finance.transaction_service.entity.TransactionType;
 import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Data
@@ -28,6 +30,10 @@ public class TransactionResponse {
     private String idempotencyKey;
     private String processingState;
     private UUID journalId;
+    private Boolean authorizationRequired;
+    private String authorizationChallengeId;
+    private Instant authorizationExpiresAt;
+    private List<String> authorizationReasons;
     
     // Reversal information
     private String originalTransactionId;  // For reversal transactions

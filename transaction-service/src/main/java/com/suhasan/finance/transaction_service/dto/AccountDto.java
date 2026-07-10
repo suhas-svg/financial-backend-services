@@ -2,6 +2,7 @@ package com.suhasan.finance.transaction_service.dto;
 
 import lombok.*;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 /**
  * DTO for Account information from Account Service
@@ -21,6 +22,7 @@ public class AccountDto {
     private String accountType;
     private Boolean active;
     private String status;
+    private LocalDateTime statusUpdatedAt;
 
     // Credit card specific fields
     private BigDecimal creditLimit;

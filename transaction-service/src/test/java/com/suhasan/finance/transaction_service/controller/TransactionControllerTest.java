@@ -9,6 +9,7 @@ import com.suhasan.finance.transaction_service.dto.TransactionResponse;
 import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
 import com.suhasan.finance.transaction_service.service.TransactionService;
+import com.suhasan.finance.transaction_service.service.TransferAuthorizationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +42,9 @@ class TransactionControllerTest {
 
     @MockitoBean
     private TransactionService transactionService;
+
+    @MockitoBean
+    private TransferAuthorizationService transferAuthorizationService;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -98,7 +102,7 @@ class TransactionControllerTest {
     @WithMockUser(username = "user123")
     void processTransfer_Success() throws Exception {
         // Arrange
-        when(transactionService.processTransfer(any(TransferRequest.class), eq("user123")))
+        when(transferAuthorizationService.submit(any(TransferRequest.class), eq("user123"), isNull()))
                 .thenReturn(transactionResponse);
 
         // Act & Assert
@@ -114,7 +118,7 @@ class TransactionControllerTest {
                 .andExpect(jsonPath("$.fromAccountId").value("acc1"))
                 .andExpect(jsonPath("$.toAccountId").value("acc2"));
 
-        verify(transactionService).processTransfer(any(TransferRequest.class), eq("user123"));
+        verify(transferAuthorizationService).submit(any(TransferRequest.class), eq("user123"), isNull());
     }
 
     @Test
@@ -415,7 +419,7 @@ class TransactionControllerTest {
     @WithMockUser(username = "user123")
     void processTransfer_ServiceException() throws Exception {
         // Arrange
-        when(transactionService.processTransfer(any(TransferRequest.class), eq("user123")))
+        when(transferAuthorizationService.submit(any(TransferRequest.class), eq("user123"), isNull()))
                 .thenThrow(new RuntimeException("Service error"));
 
         // Act & Assert
@@ -425,14 +429,14 @@ class TransactionControllerTest {
                 .content(objectMapper.writeValueAsString(transferRequest)))
                 .andExpect(status().isInternalServerError());
 
-        verify(transactionService).processTransfer(any(TransferRequest.class), eq("user123"));
+        verify(transferAuthorizationService).submit(any(TransferRequest.class), eq("user123"), isNull());
     }
 
     @Test
     @WithMockUser(username = "user123")
     void processTransfer_IllegalArgumentException() throws Exception {
         // Arrange
-        when(transactionService.processTransfer(any(TransferRequest.class), eq("user123")))
+        when(transferAuthorizationService.submit(any(TransferRequest.class), eq("user123"), isNull()))
                 .thenThrow(new IllegalArgumentException("Invalid account"));
 
         // Act & Assert
@@ -442,7 +446,7 @@ class TransactionControllerTest {
                 .content(objectMapper.writeValueAsString(transferRequest)))
                 .andExpect(status().isBadRequest());
 
-        verify(transactionService).processTransfer(any(TransferRequest.class), eq("user123"));
+        verify(transferAuthorizationService).submit(any(TransferRequest.class), eq("user123"), isNull());
     }
 
     @Test

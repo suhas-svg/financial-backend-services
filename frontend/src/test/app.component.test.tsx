@@ -456,6 +456,7 @@ describe("transaction filters", () => {
     await user.click(await screen.findByText("txn-1"));
 
     expect(await screen.findByText("Ledger journal")).toBeInTheDocument();
+    expect(screen.getByText("TRANSFER · $42.50")).toBeInTheDocument();
     expect(screen.getByText("POSTED")).toBeInTheDocument();
     expect(screen.getByText("Account 101")).toBeInTheDocument();
     expect(screen.getByText("DEBIT $42.50")).toBeInTheDocument();
@@ -726,7 +727,57 @@ describe("customer beneficiaries", () => {
         url.includes("/transaction-api/api/transactions/transfer")
         && init?.method === "POST"
         && String(init.body).includes("\"toAccountId\":\"202\"")
+        && String(init.body).includes("\"beneficiaryId\":\"beneficiary-1\"")
       )).toBe(true);
+    });
+  });
+
+  it("verifies a challenged transfer before authorizing execution", async () => {
+    const user = userEvent.setup();
+    const authorizationId = "authorization-1";
+    const challengeId = "challenge-1";
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/transactions/transfer") && init?.method === "POST") {
+        return jsonResponse({
+          transactionId: authorizationId,
+          fromAccountId: "101",
+          toAccountId: "202",
+          amount: 6000,
+          currency: "USD",
+          type: "TRANSFER",
+          status: "PENDING",
+          createdAt: "2026-07-10T10:00:00Z",
+          authorizationRequired: true,
+          authorizationChallengeId: challengeId,
+          authorizationReasons: ["HIGH_VALUE_TRANSFER"]
+        }, 202);
+      }
+      if (url.includes(`/api/security/challenges/${challengeId}/verify`)) {
+        return jsonResponse({ challengeId, proof: "opaque-proof", proofExpiresAt: "2026-07-10T10:02:00Z" });
+      }
+      if (url.includes(`/api/transactions/${authorizationId}/authorize`)) {
+        return jsonResponse(sampleTransaction({ transactionId: "transaction-1", amount: 6000 }), 200);
+      }
+      return undefined;
+    });
+
+    renderApp("/move-money", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+    await waitFor(() => expect(screen.getAllByText(/#101 - CHECKING/).length).toBeGreaterThan(0));
+    await user.selectOptions(await screen.findByLabelText("From account"), "101");
+    await user.type(screen.getByLabelText("To account"), "202");
+    await user.clear(screen.getByLabelText("Transfer amount"));
+    await user.type(screen.getByLabelText("Transfer amount"), "6000");
+    await user.click(screen.getByRole("button", { name: "Transfer" }));
+
+    expect(await screen.findByRole("dialog", { name: "Verify this transfer" })).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Authenticator or recovery code"), "123456");
+    await user.click(screen.getByRole("button", { name: "Verify and transfer" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) => url.includes(`/account-api/api/security/challenges/${challengeId}/verify`)
+        && String(init?.body).includes("123456"))).toBe(true);
+      expect(calls.some(({ url, init }) => url.includes(`/transaction-api/api/transactions/${authorizationId}/authorize`)
+        && String(init?.body).includes("opaque-proof"))).toBe(true);
     });
   });
 
@@ -778,6 +829,36 @@ describe("customer beneficiaries", () => {
   });
 });
 
+describe("customer security", () => {
+  it("enrolls TOTP and displays one-time recovery codes", async () => {
+    const user = userEvent.setup();
+    let enrolled = false;
+    mockFetch((url, init) => {
+      if (url.endsWith("/api/security/mfa") && init?.method !== "POST") {
+        return jsonResponse({ enrolled, status: enrolled ? "ACTIVE" : "NOT_ENROLLED", recoveryCodesRemaining: enrolled ? 8 : 0 });
+      }
+      if (url.includes("/api/security/mfa/totp/enroll")) {
+        return jsonResponse({ secret: "JBSWY3DPEHPK3PXP", otpauthUri: "otpauth://totp/Financial" });
+      }
+      if (url.includes("/api/security/mfa/totp/confirm")) {
+        enrolled = true;
+        return jsonResponse({ active: true, recoveryCodes: ["RECOVERY-ONE", "RECOVERY-TWO"] });
+      }
+      return undefined;
+    });
+
+    renderApp("/security", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+    await user.type(await screen.findByLabelText("Current password"), "secret-password");
+    await user.click(screen.getByRole("button", { name: "Set up authenticator" }));
+    expect(await screen.findByText("JBSWY3DPEHPK3PXP")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Authenticator code"), "123456");
+    await user.click(screen.getByRole("button", { name: "Confirm and enable" }));
+
+    expect(await screen.findByText("RECOVERY-ONE")).toBeInTheDocument();
+    expect(screen.getByText("RECOVERY-TWO")).toBeInTheDocument();
+  });
+});
+
 describe("customer shell navigation", () => {
   it("shows the customer shell for authenticated users", async () => {
     mockFetch();
@@ -791,6 +872,7 @@ describe("customer shell navigation", () => {
     expect(screen.getByRole("link", { name: "Disputes" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Statements" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Notifications" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Security" })).toBeInTheDocument();
     expect(screen.queryByText("Operations")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Admin Accounts" })).not.toBeInTheDocument();
     unmount();

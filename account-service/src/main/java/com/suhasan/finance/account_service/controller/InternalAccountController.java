@@ -6,6 +6,7 @@ import com.suhasan.finance.account_service.dto.DebitHoldRequest;
 import com.suhasan.finance.account_service.dto.DebitHoldResponse;
 import com.suhasan.finance.account_service.dto.AccountResponse;
 import com.suhasan.finance.account_service.dto.LedgerProjectionUpdateRequest;
+import com.suhasan.finance.account_service.entity.Account;
 import com.suhasan.finance.account_service.service.AccountService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -15,6 +16,7 @@ import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -29,6 +31,11 @@ import java.math.BigDecimal;
 public class InternalAccountController {
 
     private final AccountService accountService;
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Account> get(@PathVariable Long id) {
+        return ResponseEntity.ok(accountService.findById(id));
+    }
 
     @PutMapping("/{id}/balance")
     public ResponseEntity<Void> updateBalance(@PathVariable Long id,

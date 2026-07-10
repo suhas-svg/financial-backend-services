@@ -78,7 +78,7 @@ export type CustomerJournal = {
   postings: CustomerJournalPosting[];
 };
 
-export type NotificationType = "TRANSACTION_COMPLETED" | "TRANSACTION_FAILED" | "ACCOUNT_FROZEN" | "ACCOUNT_UNFROZEN" | "DISPUTE_CREATED" | "DISPUTE_STATUS_UPDATED" | "SCHEDULED_TRANSFER_CREATED" | "SCHEDULED_TRANSFER_PAUSED" | "SCHEDULED_TRANSFER_RESUMED" | "SCHEDULED_TRANSFER_CANCELED" | "SCHEDULED_TRANSFER_EXECUTED" | "SCHEDULED_TRANSFER_FAILED";
+export type NotificationType = "TRANSACTION_COMPLETED" | "TRANSACTION_FAILED" | "ACCOUNT_FROZEN" | "ACCOUNT_UNFROZEN" | "DISPUTE_CREATED" | "DISPUTE_STATUS_UPDATED" | "SCHEDULED_TRANSFER_CREATED" | "SCHEDULED_TRANSFER_PAUSED" | "SCHEDULED_TRANSFER_RESUMED" | "SCHEDULED_TRANSFER_CANCELED" | "SCHEDULED_TRANSFER_EXECUTED" | "SCHEDULED_TRANSFER_FAILED" | "SECURITY_ACTION_REQUIRED" | "SECURITY_ALERT" | "TRANSFER_AUTHORIZED";
 export type NotificationSeverity = "INFO" | "SUCCESS" | "WARNING" | "CRITICAL";
 export type NotificationStatus = "UNREAD" | "READ";
 export type NotificationSourceType = "ACCOUNT" | "TRANSACTION" | "DISPUTE" | "SCHEDULED_TRANSFER";
@@ -132,7 +132,21 @@ export type Transaction = {
   reversedAt?: string;
   reversedBy?: string;
   reversalReason?: string;
+  authorizationRequired?: boolean;
+  authorizationChallengeId?: string;
+  authorizationExpiresAt?: string;
+  authorizationReasons?: string[];
 };
+
+export type MfaStatus = {
+  enrolled: boolean;
+  status: string;
+  recoveryCodesRemaining: number;
+};
+
+export type MfaEnrollment = { secret: string; otpauthUri: string };
+export type MfaConfirmation = { active: boolean; recoveryCodes: string[] };
+export type ChallengeVerification = { challengeId: string; proof: string; proofExpiresAt: string };
 
 export type TransactionStats = {
   accountId?: string;

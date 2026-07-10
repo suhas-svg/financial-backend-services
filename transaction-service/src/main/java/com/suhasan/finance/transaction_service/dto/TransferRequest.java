@@ -15,6 +15,9 @@ public class TransferRequest {
     
     @NotBlank(message = "To account ID is required")
     private String toAccountId;
+
+    @Size(max = 36, message = "Beneficiary ID cannot exceed 36 characters")
+    private String beneficiaryId;
     
     @NotNull(message = "Amount is required")
     @DecimalMin(value = "0.01", message = "Amount must be greater than 0")

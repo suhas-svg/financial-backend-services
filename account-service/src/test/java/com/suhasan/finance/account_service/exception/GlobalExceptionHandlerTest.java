@@ -51,4 +51,18 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().getPath()).isEqualTo("/api/auth/login");
         assertThat(response.getBody().getStatus()).isEqualTo(401);
     }
+
+    @Test
+    void handleMfaVerification_Returns400Response() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getRequestURI()).thenReturn("/api/security/challenges/challenge-1/verify");
+
+        ResponseEntity<ErrorResponse> response = handler.handleMfaVerification(
+                new MfaVerificationException("Invalid verification credential"), request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getError()).isEqualTo("Verification Failed");
+        assertThat(response.getBody().getStatus()).isEqualTo(400);
+    }
 }

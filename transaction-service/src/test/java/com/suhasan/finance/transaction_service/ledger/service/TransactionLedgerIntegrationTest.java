@@ -139,7 +139,7 @@ class TransactionLedgerIntegrationTest {
                 .status("ACTIVE")
                 .build();
         when(accountServiceClient.getAccount("101")).thenReturn(source);
-        when(accountServiceClient.getAccount("202")).thenReturn(destination);
+        when(accountServiceClient.getAccountInternal("202")).thenReturn(destination);
         when(transactionLimitService.validateTransactionLimits(anyString(), anyString(), any(), any()))
                 .thenReturn(true);
         when(accountLedgerResolver.resolveCustomerAccount("101", source)).thenReturn(sourceLedgerAccountId);

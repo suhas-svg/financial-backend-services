@@ -200,6 +200,18 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(err);
     }
 
+    @ExceptionHandler(MfaVerificationException.class)
+    public ResponseEntity<ErrorResponse> handleMfaVerification(MfaVerificationException ex,
+                                                                HttpServletRequest req) {
+        ErrorResponse err = new ErrorResponse(
+            "Verification Failed",
+            ex.getMessage(),
+            req.getRequestURI(),
+            HttpStatus.BAD_REQUEST.value()
+        );
+        return ResponseEntity.badRequest().body(err);
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex,
                                                              HttpServletRequest req) {
@@ -210,6 +222,18 @@ public class GlobalExceptionHandler {
             HttpStatus.FORBIDDEN.value()
         );
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(err);
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleConflict(IllegalStateException ex,
+                                                         HttpServletRequest req) {
+        ErrorResponse err = new ErrorResponse(
+            "Conflict",
+            ex.getMessage(),
+            req.getRequestURI(),
+            HttpStatus.CONFLICT.value()
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(err);
     }
 
     @ExceptionHandler(AuthenticationException.class)

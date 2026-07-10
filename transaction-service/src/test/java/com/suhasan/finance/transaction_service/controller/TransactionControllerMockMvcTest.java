@@ -9,6 +9,7 @@ import com.suhasan.finance.transaction_service.exception.InsufficientFundsExcept
 import com.suhasan.finance.transaction_service.exception.TransactionAlreadyReversedException;
 import com.suhasan.finance.transaction_service.exception.TransactionLimitExceededException;
 import com.suhasan.finance.transaction_service.service.TransactionService;
+import com.suhasan.finance.transaction_service.service.TransferAuthorizationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +46,9 @@ class TransactionControllerMockMvcTest {
 
     @MockitoBean
     private TransactionService transactionService;
+
+    @MockitoBean
+    private TransferAuthorizationService transferAuthorizationService;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -89,7 +93,7 @@ class TransactionControllerMockMvcTest {
     @WithMockUser(username = "user123")
     void processTransfer_InsufficientFunds_ReturnsBadRequest() throws Exception {
         // Arrange
-        when(transactionService.processTransfer(any(TransferRequest.class), eq("user123")))
+        when(transferAuthorizationService.submit(any(TransferRequest.class), eq("user123"), isNull()))
                 .thenThrow(new InsufficientFundsException("Insufficient funds for transaction"));
 
         // Act & Assert
@@ -102,14 +106,14 @@ class TransactionControllerMockMvcTest {
                 .andExpect(jsonPath("$.message").value("Insufficient funds for transaction"))
                 .andExpect(jsonPath("$.status").value(400));
 
-        verify(transactionService).processTransfer(any(TransferRequest.class), eq("user123"));
+        verify(transferAuthorizationService).submit(any(TransferRequest.class), eq("user123"), isNull());
     }
 
     @Test
     @WithMockUser(username = "user123")
     void processTransfer_TransactionLimitExceeded_ReturnsBadRequest() throws Exception {
         // Arrange
-        when(transactionService.processTransfer(any(TransferRequest.class), eq("user123")))
+        when(transferAuthorizationService.submit(any(TransferRequest.class), eq("user123"), isNull()))
                 .thenThrow(new TransactionLimitExceededException("Daily transaction limit exceeded"));
 
         // Act & Assert
@@ -122,7 +126,7 @@ class TransactionControllerMockMvcTest {
                 .andExpect(jsonPath("$.message").value("Daily transaction limit exceeded"))
                 .andExpect(jsonPath("$.status").value(400));
 
-        verify(transactionService).processTransfer(any(TransferRequest.class), eq("user123"));
+        verify(transferAuthorizationService).submit(any(TransferRequest.class), eq("user123"), isNull());
     }
 
     @Test

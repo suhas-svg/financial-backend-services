@@ -73,6 +73,7 @@ services:
       LOGGING_LEVEL_ROOT: INFO
       JWT_SECRET: ${JWT_SECRET:?Env var JWT_SECRET must be set}
       INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?Env var INTERNAL_JWT_SECRET must be set}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:-}
     depends_on:
       account-postgres:
         condition: service_healthy
@@ -113,6 +114,7 @@ services:
       LOGGING_LEVEL_ROOT: INFO
       JWT_SECRET: ${JWT_SECRET:?Env var JWT_SECRET must be set}
       INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?Env var INTERNAL_JWT_SECRET must be set}
+      STEP_UP_ENABLED: ${STEP_UP_ENABLED:-false}
     depends_on:
       transaction-postgres:
         condition: service_healthy

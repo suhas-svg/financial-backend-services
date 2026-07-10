@@ -1,4 +1,4 @@
-import type { Account, AccountStatus, AuditLogEntry, AuditSummary, Beneficiary, BeneficiaryStatus, CustomerJournal, CustomerStatement, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, LedgerAccountProjection, Limits, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, Page, ReconciliationException, ReconciliationExceptionStatus, ReconciliationRun, ReconciliationSeverity, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, ScheduledTransfer, ScheduledTransferRun, ScheduledTransferStatus, Transaction, TransactionDispute, TransactionStats } from "../types";
+import type { Account, AccountStatus, AuditLogEntry, AuditSummary, Beneficiary, BeneficiaryStatus, ChallengeVerification, CustomerJournal, CustomerStatement, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, LedgerAccountProjection, Limits, MfaConfirmation, MfaEnrollment, MfaStatus, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, Page, ReconciliationException, ReconciliationExceptionStatus, ReconciliationRun, ReconciliationSeverity, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, ScheduledTransfer, ScheduledTransferRun, ScheduledTransferStatus, Transaction, TransactionDispute, TransactionStats } from "../types";
 import { apiRequest, toQuery } from "./api";
 import type { AccountValues, BeneficiaryValues, DisputeNoteValues, DisputeStatusValues, DisputeValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, ScheduledTransferValues, TransferValues } from "./schemas";
 import { getSession } from "./session";
@@ -125,6 +125,38 @@ export function withdraw(values: MoneyMovementValues, idempotencyKey: string) {
 
 export function transfer(values: TransferValues, idempotencyKey: string) {
   return apiRequest<Transaction>("transaction", "/api/transactions/transfer", { method: "POST", body: values, idempotencyKey });
+}
+
+export function getMfaStatus() {
+  return apiRequest<MfaStatus>("account", "/api/security/mfa");
+}
+
+export function enrollMfa(currentPassword: string) {
+  return apiRequest<MfaEnrollment>("account", "/api/security/mfa/totp/enroll", { method: "POST", body: { currentPassword } });
+}
+
+export function confirmMfa(code: string) {
+  return apiRequest<MfaConfirmation>("account", "/api/security/mfa/totp/confirm", { method: "POST", body: { code } });
+}
+
+export function regenerateRecoveryCodes(currentPassword: string) {
+  return apiRequest<{ recoveryCodes: string[] }>("account", "/api/security/mfa/recovery-codes/regenerate", { method: "POST", body: { currentPassword } });
+}
+
+export function disableMfa(currentPassword: string, code: string) {
+  return apiRequest<void>("account", "/api/security/mfa/totp", { method: "DELETE", body: { currentPassword, code } });
+}
+
+export function verifyStepUpChallenge(challengeId: string, credential: string) {
+  return apiRequest<ChallengeVerification>("account", `/api/security/challenges/${challengeId}/verify`, { method: "POST", body: { credential } });
+}
+
+export function authorizeTransfer(authorizationId: string, proof: string) {
+  return apiRequest<Transaction>("transaction", `/api/transactions/${authorizationId}/authorize`, { method: "POST", body: { proof } });
+}
+
+export function cancelTransferAuthorization(authorizationId: string) {
+  return apiRequest<Transaction>("transaction", `/api/transactions/${authorizationId}/authorization`, { method: "DELETE" });
 }
 
 export function reverseTransaction(transactionId: string, values: ReversalValues, idempotencyKey: string) {

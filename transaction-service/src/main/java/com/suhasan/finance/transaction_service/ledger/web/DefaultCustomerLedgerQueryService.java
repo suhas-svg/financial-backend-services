@@ -90,10 +90,18 @@ public class DefaultCustomerLedgerQueryService implements CustomerLedgerQuerySer
         }
         JournalStateEvent state = stateEventRepository.findFirstByJournalIdOrderByEventSequenceDesc(journalId)
                 .orElseThrow(() -> new LedgerAccountNotFoundException("Journal state not found"));
-        BigDecimal customerAmount = postings.stream()
-                .filter(posting -> isOwnedCustomerPosting(customerId, accounts.get(posting.getLedgerAccountId())))
-                .map(JournalPosting::getAmount)
+        BigDecimal customerDebits = customerPostings.stream()
+                .filter(posting -> PostingDirection.DEBIT.name().equals(posting.direction()))
+                .map(CustomerJournalPostingResponse::amount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal customerCredits = customerPostings.stream()
+                .filter(posting -> PostingDirection.CREDIT.name().equals(posting.direction()))
+                .map(CustomerJournalPostingResponse::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // A transfer between two accounts owned by the same customer exposes both
+        // balanced legs. The journal amount is the economic movement, not the sum
+        // of debit and credit legs, so count the larger directional total once.
+        BigDecimal customerAmount = customerDebits.max(customerCredits);
         return new CustomerJournalResponse(
                 journal.getJournalId(),
                 journal.getJournalReference(),
