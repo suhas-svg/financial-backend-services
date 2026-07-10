@@ -29,6 +29,8 @@ financial-backend-services/
 - See available balance as the primary spendable amount and ledger balance as secondary detail.
 - See frozen accounts with hold warnings and status reasons.
 - Deposit, withdraw, and transfer money.
+- Enroll a TOTP authenticator, generate single-use recovery codes, and manage MFA from the Security page.
+- Complete risk-based step-up verification before high-risk transfers are posted.
 - Create one-time or recurring scheduled transfers between accounts.
 - Pause, resume, cancel, and inspect scheduled transfer run history.
 - Use available-balance validation for withdrawals and outgoing transfer sources.
@@ -76,6 +78,8 @@ financial-backend-services/
   - Health, metrics, and deployment endpoints.
   - Customer notification APIs for listing, summary counts, marking one read, and marking all read.
   - Internal/admin notification creation API secured to `ROLE_ADMIN` and `ROLE_INTERNAL_SERVICE`.
+  - Encrypted TOTP enrollment, verification, recovery-code rotation, and MFA disablement.
+  - Short-lived, action-bound step-up challenges and one-time authorization proofs.
 - Transaction service:
   - Deposit, withdrawal, transfer, and scheduled transfer endpoints.
   - Scheduled transfer persistence, authenticated APIs, and worker execution for one-time and recurring transfers.
@@ -93,6 +97,8 @@ financial-backend-services/
   - Customer dispute submission and admin-only dispute queue APIs.
   - Admin-only investigation timeline, summary, and CSV export APIs.
   - Account-service integration for balance updates.
+  - Configurable risk-based transfer authorization for high-value, new-beneficiary, rapid-transfer, and recent-unfreeze signals.
+  - Durable pending authorization records that prevent transaction and ledger posting before successful verification.
   - Best-effort account-service notification emission for completed/failed transfer outcomes, scheduled transfer lifecycle events, and dispute lifecycle updates.
 
 ## Notification Center
@@ -113,6 +119,30 @@ Internal creation API:
 Notification records are customer-owned in `account-service`. Customer endpoints always use the authenticated user, while internal/admin callers may create notifications for any `userId`. The internal endpoint requires `ROLE_ADMIN` or `ROLE_INTERNAL_SERVICE`.
 
 Event sources currently create notifications for account freeze/unfreeze, transfer completion/failure, scheduled transfer creation/pause/resume/cancel/execution/failure, dispute creation, and dispute status changes to `APPROVED`, `DENIED`, or `CLOSED`. Source workflows treat notification delivery as best-effort: failures are logged and do not roll back money movement, scheduled transfer processing, account status changes, or dispute updates. Dedupe keys keep repeated source events from creating duplicate inbox rows.
+
+## Risk-based Step-up Authorization
+
+Risky immediate transfers are paused until the customer verifies a TOTP authenticator code or a single-use recovery code. A challenged request creates only a pending authorization record: no transaction, balance movement, debit hold, or ledger journal is created before verification succeeds.
+
+The default policy challenges a transfer when any of these signals applies:
+
+- The amount is at least `5000`.
+- An external destination was entered manually instead of selected from saved recipients.
+- The selected recipient was created within the last 24 hours.
+- The request would be the fifth completed transfer within 10 minutes.
+- The source account was unfrozen within the last 24 hours.
+
+Transfers between accounts owned by the same customer are not classified as manual external transfers, although another risk signal can still require verification. After successful verification, the account service issues a short-lived proof bound to the customer, exact transfer fingerprint, and authorization record. The transaction service consumes that proof once and executes the original idempotent transfer.
+
+Customer flow:
+
+1. Open `/security`, confirm the current password, and enroll an authenticator app.
+2. Store the generated recovery codes offline; every recovery code is single-use.
+3. Submit a transfer normally. Low-risk transfers continue immediately.
+4. If challenged, enter an authenticator or recovery code in the verification panel.
+5. The authorized transfer completes and appears in transaction history with its balanced ledger journal.
+
+The policy is disabled by default so migrations can be deployed and customers can enroll before enforcement. See [Risk-based step-up authorization](docs/risk-based-step-up-authorization.md) for operational details, policy tuning, and the live smoke test.
 
 ## Technology Stack
 
@@ -162,6 +192,8 @@ The verified Docker path uses `docker-compose.codex.yml` for the complete backen
 ```powershell
 $env:JWT_SECRET = "local-development-jwt-secret-change-me-at-least-32-characters"
 $env:INTERNAL_JWT_SECRET = "local-development-internal-jwt-secret-change-me-at-least-32-characters"
+$env:MFA_ENCRYPTION_KEY = "local-development-mfa-encryption-key-change-me-at-least-32-characters"
+$env:STEP_UP_ENABLED = "true"
 docker compose -f docker-compose.codex.yml -f docker-compose.codex.override.yml up --build -d
 docker compose -f docker-compose.codex.yml -f docker-compose.codex.override.yml ps
 ```
@@ -203,6 +235,7 @@ Authenticated customer pages use these routes:
 - `/transactions` - transaction history, detail, disputes, and reversals
 - `/disputes` - submitted dispute history
 - `/notifications` - notification inbox
+- `/security` - authenticator enrollment, recovery codes, and MFA management
 
 Admin pages are protected by `ROLE_ADMIN` and live under `/admin`:
 
@@ -235,6 +268,20 @@ security.jwt.expiration-in-ms=3600000
 ```
 
 For service-to-service calls, keep the same JWT signing configuration across both services.
+
+Risk-based step-up authorization uses these environment variables:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `MFA_ENCRYPTION_KEY` | empty | Private key material used by account-service to encrypt authenticator secrets at rest. Use at least 32 random characters and plan key rotation carefully. |
+| `STEP_UP_ENABLED` | `false` | Enables transfer policy enforcement. |
+| `STEP_UP_HIGH_VALUE_THRESHOLD` | `5000.00` | Transfer amount that triggers the high-value signal. |
+| `STEP_UP_BENEFICIARY_COOLING_HOURS` | `24` | Age window for newly saved recipients. |
+| `STEP_UP_RAPID_TRANSFER_WINDOW_MINUTES` | `10` | Lookback window for rapid-transfer detection. |
+| `STEP_UP_RAPID_TRANSFER_COUNT` | `5` | Completed-transfer count that triggers verification. |
+| `STEP_UP_RECENT_UNFREEZE_HOURS` | `24` | Risk window after a source account is reactivated. |
+
+Challenges expire after five minutes and authorization proofs after two minutes by default. Account-service also supports `STEP_UP_CHALLENGE_TTL_SECONDS`, `STEP_UP_PROOF_TTL_SECONDS`, and `STEP_UP_MAX_ATTEMPTS`. Never commit the MFA encryption key or other deployment secrets.
 
 Redis is optional for manual local JVM runs of `transaction-service`. The default local configuration disables Redis health so core transaction flows can run with only PostgreSQL and account-service. Compose, E2E, and Helm deployment configs explicitly enable Redis health because those environments provision Redis.
 
@@ -378,6 +425,26 @@ POST /api/transactions/withdraw
 POST /api/transactions/transfer
 POST /api/transactions/{transactionId}/reverse
 ```
+
+Risk-based transfer authorization extends the transfer response with authorization state. A challenged transfer returns a pending authorization instead of a completed transaction; submit its code to the authorization endpoint to continue the original request:
+
+```http
+POST /api/transactions/transfer
+POST /api/transactions/{authorizationId}/authorize
+DELETE /api/transactions/{authorizationId}/authorization
+```
+
+MFA lifecycle endpoints are owned by account-service and always act on the authenticated customer:
+
+```http
+GET  /api/security/mfa
+POST /api/security/mfa/totp/enroll
+POST /api/security/mfa/totp/confirm
+POST /api/security/mfa/recovery-codes/regenerate
+DELETE /api/security/mfa/totp
+```
+
+Enrollment and destructive MFA changes require the current password. Verification accepts an authenticator code or unused recovery code; recovery codes are stored as hashes and returned only when generated.
 
 Scheduled transfer customer routes use the authenticated user and are exposed through the frontend transaction proxy:
 
@@ -632,6 +699,16 @@ Account hold/freeze tests cover default `ACTIVE` accounts, admin-only freeze/unf
 
 Pending debit authorization tests cover account ledger/available initialization, migration backfill, hold placement/capture/release balance effects, idempotent hold transitions, frozen and insufficient-available hold rejection, deposit balance updates, withdrawal and transfer hold orchestration, failed hold audit behavior, compensation after destination credit failure, backward-compatible account DTO handling, and frontend available-balance rendering and validation.
 
+Step-up authorization tests cover TOTP verification, encrypted secret storage, one-time recovery codes, challenge expiry and attempt limits, transfer fingerprint binding, risk-policy signals, pending authorization persistence, retry idempotency, controller behavior, customer Security UI, challenged-transfer verification, and ledger amount rendering for own-account transfers.
+
+For a disposable live Docker smoke test with step-up enabled:
+
+```powershell
+.\scripts\test-step-up-authorization.ps1
+```
+
+The script confirms that funds and journals remain unchanged before authorization, then completes a high-value transfer and verifies balances, transaction state, and ledger postings.
+
 ## Verified Baseline
 
 The merged `main` baseline was revalidated on 2026-06-23:
@@ -683,3 +760,4 @@ transaction-service/mvnw
 - Frontend-specific setup: `frontend/README.md`
 - Transaction history API notes: `transaction-service/TRANSACTION-HISTORY-API.md`
 - Monitoring and observability notes: `transaction-service/MONITORING-OBSERVABILITY-GUIDE.md`
+- Risk-based MFA and transfer authorization: `docs/risk-based-step-up-authorization.md`
