@@ -1,6 +1,8 @@
 package com.suhasan.finance.transaction_service.client;
 
 import com.suhasan.finance.transaction_service.dto.AccountDto;
+import com.suhasan.finance.transaction_service.dto.BeneficiaryInfo;
+import com.suhasan.finance.transaction_service.dto.StepUpClientDtos;
 import com.suhasan.finance.transaction_service.exception.AccountServiceUnavailableException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
@@ -290,6 +292,69 @@ public class ResilientAccountServiceClient {
             return availableCredit != null && availableCredit.compareTo(amount) >= 0;
         }
         return account.spendableBalance().compareTo(amount) >= 0;
+    }
+
+    public AccountDto getAccountInternal(String accountId) {
+        String serviceToken = generateInternalServiceToken();
+        try {
+            return webClientBuilder.baseUrl(accountServiceBaseUrl).build().get()
+                    .uri("/api/internal/accounts/{id}", accountId)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceToken)
+                    .retrieve().bodyToMono(AccountDto.class)
+                    .timeout(Duration.ofMillis(timeout)).block();
+        } catch (Exception e) {
+            throw mapServiceException("internal account lookup", e);
+        }
+    }
+
+    public BeneficiaryInfo getBeneficiary(String beneficiaryId, String userId) {
+        String serviceToken = generateInternalServiceToken();
+        try {
+            return webClientBuilder.baseUrl(accountServiceBaseUrl).build().get()
+                    .uri(builder -> builder.path("/api/internal/beneficiaries/{id}")
+                            .queryParam("userId", userId).build(beneficiaryId))
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceToken)
+                    .retrieve().bodyToMono(BeneficiaryInfo.class)
+                    .timeout(Duration.ofMillis(timeout)).block();
+        } catch (Exception e) {
+            throw mapServiceException("beneficiary lookup", e);
+        }
+    }
+
+    public StepUpClientDtos.CreateChallengeResponse createStepUpChallenge(
+            StepUpClientDtos.CreateChallengeRequest request) {
+        String serviceToken = generateInternalServiceToken();
+        try {
+            return webClientBuilder.baseUrl(accountServiceBaseUrl).build().post()
+                    .uri("/api/internal/security/challenges")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceToken)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(request)
+                    .retrieve().bodyToMono(StepUpClientDtos.CreateChallengeResponse.class)
+                    .timeout(Duration.ofMillis(timeout)).block();
+        } catch (WebClientResponseException.Conflict e) {
+            throw new IllegalStateException("MFA_ENROLLMENT_REQUIRED");
+        } catch (Exception e) {
+            throw mapServiceException("step-up challenge creation", e);
+        }
+    }
+
+    public StepUpClientDtos.ConsumeChallengeResponse consumeStepUpChallenge(
+            String challengeId, StepUpClientDtos.ConsumeChallengeRequest request) {
+        String serviceToken = generateInternalServiceToken();
+        try {
+            return webClientBuilder.baseUrl(accountServiceBaseUrl).build().post()
+                    .uri("/api/internal/security/challenges/{id}/consume", challengeId)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceToken)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(request)
+                    .retrieve().bodyToMono(StepUpClientDtos.ConsumeChallengeResponse.class)
+                    .timeout(Duration.ofMillis(timeout)).block();
+        } catch (WebClientResponseException e) {
+            throw new IllegalStateException("Step-up proof was rejected");
+        } catch (Exception e) {
+            throw mapServiceException("step-up proof consumption", e);
+        }
     }
 
     public boolean checkHealth() {

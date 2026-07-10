@@ -2,6 +2,10 @@ package com.suhasan.finance.transaction_service.entity;
 
 public enum TransactionProcessingState {
     INITIATED("Transaction has been created and processing started"),
+    AWAITING_AUTHORIZATION("Transaction is waiting for step-up authorization"),
+    AUTHORIZED("Step-up authorization has been completed"),
+    AUTHORIZATION_EXPIRED("Step-up authorization expired"),
+    AUTHORIZATION_CANCELLED("Step-up authorization was cancelled"),
     HOLD_PLACED("Debit authorization hold has been placed"),
     HOLD_CAPTURED("Debit authorization hold has been captured"),
     HOLD_RELEASED("Debit authorization hold has been released"),

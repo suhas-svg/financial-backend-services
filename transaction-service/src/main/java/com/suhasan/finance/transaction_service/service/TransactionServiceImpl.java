@@ -243,7 +243,7 @@ public class TransactionServiceImpl implements TransactionService {
             String normalizedIdempotencyKey,
             long startTime) {
         try {
-            AccountDto toAccount = accountServiceClient.getAccount(request.getToAccountId());
+            AccountDto toAccount = accountServiceClient.getAccountInternal(request.getToAccountId());
             if (toAccount == null) {
                 throw new IllegalArgumentException("To account not found");
             }
@@ -1308,6 +1308,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .reversedAt(transaction.getReversedAt())
                 .reversedBy(transaction.getReversedBy())
                 .reversalReason(transaction.getReversalReason())
+                .authorizationRequired(false)
                 .build();
     }
 }

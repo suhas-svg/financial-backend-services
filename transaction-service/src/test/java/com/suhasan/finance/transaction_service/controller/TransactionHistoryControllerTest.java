@@ -2,6 +2,7 @@ package com.suhasan.finance.transaction_service.controller;
 
 import com.suhasan.finance.transaction_service.dto.TransactionStatsResponse;
 import com.suhasan.finance.transaction_service.service.TransactionService;
+import com.suhasan.finance.transaction_service.service.TransferAuthorizationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -32,6 +33,9 @@ class TransactionHistoryControllerTest {
 
     @MockitoBean
     private TransactionService transactionService;
+
+    @MockitoBean
+    private TransferAuthorizationService transferAuthorizationService;
 
     @Test
     @WithMockUser(username = "test-user")

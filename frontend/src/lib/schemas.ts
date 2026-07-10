@@ -44,6 +44,7 @@ export const moneyMovementSchema = z.object({
 export const transferSchema = z.object({
   fromAccountId: z.string().min(1, "Source account is required"),
   toAccountId: z.string().min(1, "Destination account is required"),
+  beneficiaryId: z.string().max(36).optional(),
   amount,
   description: z.string().max(500).optional(),
   reference: z.string().max(100).optional(),

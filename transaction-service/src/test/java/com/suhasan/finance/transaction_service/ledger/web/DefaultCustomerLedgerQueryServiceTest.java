@@ -132,6 +132,28 @@ class DefaultCustomerLedgerQueryServiceTest {
                 .isInstanceOf(LedgerAccountNotFoundException.class);
     }
 
+    @Test
+    void getJournalDoesNotDoubleCountOwnAccountTransferLegs() {
+        UUID journalId = UUID.randomUUID();
+        LedgerAccount source = customerAccount("1001", "customer-1");
+        LedgerAccount destination = customerAccount("2002", "customer-1");
+        JournalTransaction journal = journal(journalId);
+        when(journalRepository.findById(journalId)).thenReturn(Optional.of(journal));
+        when(postingRepository.findByJournalIdOrderByPostingSequence(journalId)).thenReturn(List.of(
+                posting(journalId, source.getLedgerAccountId(), 1, PostingDirection.DEBIT),
+                posting(journalId, destination.getLedgerAccountId(), 2, PostingDirection.CREDIT)));
+        when(accountRepository.findAllById(any())).thenReturn(List.of(source, destination));
+        when(stateEventRepository.findFirstByJournalIdOrderByEventSequenceDesc(journalId))
+                .thenReturn(Optional.of(state(journalId, JournalState.POSTED)));
+
+        CustomerJournalResponse response = service.getJournal("customer-1", journalId);
+
+        assertThat(response.customerAmount()).isEqualByComparingTo("25.00");
+        assertThat(response.postings()).hasSize(2);
+        assertThat(response.postings()).extracting(CustomerJournalPostingResponse::direction)
+                .containsExactly("DEBIT", "CREDIT");
+    }
+
     private LedgerAccount customerAccount(String externalAccountId, String ownerId) {
         return LedgerAccount.builder()
                 .ledgerAccountId(UUID.randomUUID())

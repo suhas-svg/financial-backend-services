@@ -93,6 +93,7 @@ services:
       # if secrets are not injected. Use a secrets manager or .env file in CI/CD.
       JWT_SECRET: ${JWT_SECRET:?Env var JWT_SECRET must be set — no default allowed in production}
       INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?Env var INTERNAL_JWT_SECRET must be set — no default allowed in production}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:-}
     depends_on:
       account-postgres:
         condition: service_healthy
@@ -136,6 +137,7 @@ services:
       # if secrets are not injected. Use a secrets manager or .env file in CI/CD.
       JWT_SECRET: ${JWT_SECRET:?Env var JWT_SECRET must be set — no default allowed in production}
       INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?Env var INTERNAL_JWT_SECRET must be set — no default allowed in production}
+      STEP_UP_ENABLED: ${STEP_UP_ENABLED:-false}
     depends_on:
       transaction-postgres:
         condition: service_healthy

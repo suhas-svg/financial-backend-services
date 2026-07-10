@@ -21,6 +21,7 @@ import { MoveMoneyPage } from "./pages/MoveMoneyPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { ScheduledTransfersPage } from "./pages/ScheduledTransfersPage";
+import { SecurityPage } from "./pages/SecurityPage";
 import { StatementsPage } from "./pages/StatementsPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 
@@ -40,6 +41,7 @@ export function App() {
           <Route path="disputes" element={<DisputesPage />} />
           <Route path="statements" element={<StatementsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="security" element={<SecurityPage />} />
         </Route>
         <Route element={<RequireAuth admin />}>
           <Route path="admin" element={<AdminLayout />}>

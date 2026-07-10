@@ -7,9 +7,11 @@ import com.suhasan.finance.transaction_service.dto.ReversalRequest;
 import com.suhasan.finance.transaction_service.dto.TransactionResponse;
 import com.suhasan.finance.transaction_service.dto.TransactionFilterRequest;
 import com.suhasan.finance.transaction_service.dto.TransactionStatsResponse;
+import com.suhasan.finance.transaction_service.dto.StepUpClientDtos;
 import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
 import com.suhasan.finance.transaction_service.service.TransactionService;
+import com.suhasan.finance.transaction_service.service.TransferAuthorizationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +36,7 @@ import java.util.Map;
 public class TransactionController {
     
     private final TransactionService transactionService;
+    private final TransferAuthorizationService transferAuthorizationService;
     
     /**
      * Process a transfer between accounts
@@ -48,11 +51,28 @@ public class TransactionController {
                 request.getFromAccountId(), request.getToAccountId(), request.getAmount());
         
         String userId = authentication.getName();
-        TransactionResponse response = idempotencyKey == null || idempotencyKey.isBlank()
-                ? transactionService.processTransfer(request, userId)
-                : transactionService.processTransfer(request, userId, idempotencyKey);
+        TransactionResponse response = transferAuthorizationService.submit(request, userId, idempotencyKey);
         
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        HttpStatus status = Boolean.TRUE.equals(response.getAuthorizationRequired())
+                ? HttpStatus.ACCEPTED : HttpStatus.CREATED;
+        return ResponseEntity.status(status).body(response);
+    }
+
+    @PostMapping("/{authorizationId}/authorize")
+    public ResponseEntity<TransactionResponse> authorizeTransfer(
+            @PathVariable String authorizationId,
+            @Valid @RequestBody StepUpClientDtos.AuthorizeTransferRequest request,
+            Authentication authentication) {
+        return ResponseEntity.ok(transferAuthorizationService.authorize(
+                authorizationId, authentication.getName(), request.proof()));
+    }
+
+    @DeleteMapping("/{authorizationId}/authorization")
+    public ResponseEntity<TransactionResponse> cancelTransferAuthorization(
+            @PathVariable String authorizationId,
+            Authentication authentication) {
+        return ResponseEntity.ok(transferAuthorizationService.cancel(
+                authorizationId, authentication.getName()));
     }
     
     /**

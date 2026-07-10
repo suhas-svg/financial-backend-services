@@ -1,13 +1,14 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseFormRegisterReturn } from "react-hook-form";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { deposit, listAccounts, listBeneficiaries, transfer, withdraw } from "../lib/queries";
+import { authorizeTransfer, cancelTransferAuthorization, deposit, listAccounts, listBeneficiaries, transfer, verifyStepUpChallenge, withdraw } from "../lib/queries";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { availableBalance, canDebit } from "../lib/accountBalances";
 import { moneyMovementSchema, transferSchema, type MoneyMovementValues, type TransferValues } from "../lib/schemas";
 import { Button, ErrorNotice, Field, Input, Panel, Select } from "../components/ui";
-import type { Beneficiary } from "../types";
+import type { Beneficiary, Transaction } from "../types";
 
 function AccountSelect({ field, debitSource = false, amount = 0 }: { field: UseFormRegisterReturn; debitSource?: boolean; amount?: number }) {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => listAccounts() });
@@ -27,10 +28,13 @@ export function MoveMoneyPage() {
   const queryClient = useQueryClient();
   const depositForm = useForm<MoneyMovementValues>({ resolver: zodResolver(moneyMovementSchema), defaultValues: { accountId: "", amount: 0, currency: "USD", description: "", reference: "" } });
   const withdrawForm = useForm<MoneyMovementValues>({ resolver: zodResolver(moneyMovementSchema), defaultValues: { accountId: "", amount: 0, currency: "USD", description: "", reference: "" } });
-  const transferForm = useForm<TransferValues>({ resolver: zodResolver(transferSchema), defaultValues: { fromAccountId: "", toAccountId: "", amount: 0, currency: "USD", description: "", reference: "" } });
+  const transferForm = useForm<TransferValues>({ resolver: zodResolver(transferSchema), defaultValues: { fromAccountId: "", toAccountId: "", beneficiaryId: "", amount: 0, currency: "USD", description: "", reference: "" } });
+  const [pendingAuthorization, setPendingAuthorization] = useState<Transaction>();
+  const [verificationCode, setVerificationCode] = useState("");
   const beneficiaries = useQuery({ queryKey: ["beneficiaries", "ACTIVE"], queryFn: () => listBeneficiaries({ status: "ACTIVE" }) });
   const withdrawAmount = Number(withdrawForm.watch("amount") || 0);
   const transferAmount = Number(transferForm.watch("amount") || 0);
+  const destinationField = transferForm.register("toAccountId");
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["accounts"] });
     queryClient.invalidateQueries({ queryKey: ["transactions"] });
@@ -38,7 +42,25 @@ export function MoveMoneyPage() {
   };
   const depositMutation = useMutation({ mutationFn: (values: MoneyMovementValues) => deposit(values, createIdempotencyKey("deposit")), onSuccess: invalidate });
   const withdrawMutation = useMutation({ mutationFn: (values: MoneyMovementValues) => withdraw(values, createIdempotencyKey("withdraw")), onSuccess: invalidate });
-  const transferMutation = useMutation({ mutationFn: (values: TransferValues) => transfer(values, createIdempotencyKey("transfer")), onSuccess: invalidate });
+  const transferMutation = useMutation({
+    mutationFn: (values: TransferValues) => transfer(values, createIdempotencyKey("transfer")),
+    onSuccess: (result) => {
+      if (result.authorizationRequired) setPendingAuthorization(result);
+      else invalidate();
+    }
+  });
+  const authorizeMutation = useMutation({
+    mutationFn: async () => {
+      if (!pendingAuthorization?.authorizationChallengeId) throw new Error("Authorization challenge is missing");
+      const verified = await verifyStepUpChallenge(pendingAuthorization.authorizationChallengeId, verificationCode);
+      return authorizeTransfer(pendingAuthorization.transactionId, verified.proof);
+    },
+    onSuccess: () => { setPendingAuthorization(undefined); setVerificationCode(""); transferForm.reset(); invalidate(); }
+  });
+  const cancelMutation = useMutation({
+    mutationFn: () => cancelTransferAuthorization(pendingAuthorization!.transactionId),
+    onSuccess: () => { setPendingAuthorization(undefined); setVerificationCode(""); }
+  });
 
   return (
     <div className="grid gap-6 xl:grid-cols-3">
@@ -72,13 +94,25 @@ export function MoveMoneyPage() {
             <RecipientSelect
               beneficiaries={beneficiaries.data?.content ?? []}
               onSelect={(beneficiary) => {
-                transferForm.setValue("toAccountId", beneficiary.destinationAccountId, { shouldValidate: true });
-                transferForm.setValue("currency", beneficiary.currency, { shouldValidate: true });
+                transferForm.setValue("beneficiaryId", beneficiary?.beneficiaryId ?? "", { shouldValidate: true });
+                if (beneficiary) {
+                  transferForm.setValue("toAccountId", beneficiary.destinationAccountId, { shouldValidate: true });
+                  transferForm.setValue("currency", beneficiary.currency, { shouldValidate: true });
+                }
               }}
             />
           </Field>
+          <input type="hidden" {...transferForm.register("beneficiaryId")} />
           <Field label="To account" error={transferForm.formState.errors.toAccountId?.message}>
-            <Input className="mt-2" placeholder="Manual destination account" {...transferForm.register("toAccountId")} />
+            <Input
+              className="mt-2"
+              placeholder="Manual destination account"
+              {...destinationField}
+              onChange={(event) => {
+                destinationField.onChange(event);
+                transferForm.setValue("beneficiaryId", "");
+              }}
+            />
           </Field>
           <Field label="Transfer amount" error={transferForm.formState.errors.amount?.message}>
             <Input type="number" step="0.01" {...transferForm.register("amount")} />
@@ -98,20 +132,33 @@ export function MoveMoneyPage() {
           </Field>
           <Button type="submit" disabled={transferMutation.isPending}>Transfer</Button>
         </form>
+        {pendingAuthorization ? (
+          <div role="dialog" aria-modal="true" aria-labelledby="transfer-verification-title" className="mt-4 grid gap-3 rounded-md border border-amber-200 bg-amber-50 p-4">
+            <h3 id="transfer-verification-title" className="font-semibold">Verify this transfer</h3>
+            <p className="text-sm">This transfer needs additional verification before any money moves.</p>
+            {pendingAuthorization.authorizationReasons?.length ? <p className="text-xs text-muted">Checks: {pendingAuthorization.authorizationReasons.map(formatReason).join(", ")}</p> : null}
+            <ErrorNotice message={authorizeMutation.error instanceof Error ? authorizeMutation.error.message : undefined} />
+            <Field label="Authenticator or recovery code">
+              <Input autoFocus autoComplete="one-time-code" value={verificationCode} onChange={(event) => setVerificationCode(event.target.value)} />
+            </Field>
+            <div className="flex gap-2">
+              <Button disabled={!verificationCode || authorizeMutation.isPending} onClick={() => authorizeMutation.mutate()}>Verify and transfer</Button>
+              <Button variant="secondary" disabled={cancelMutation.isPending} onClick={() => cancelMutation.mutate()}>Cancel</Button>
+            </div>
+          </div>
+        ) : null}
       </Panel>
     </div>
   );
 }
 
-function RecipientSelect({ beneficiaries, onSelect }: { beneficiaries: Beneficiary[]; onSelect: (beneficiary: Beneficiary) => void }) {
+function RecipientSelect({ beneficiaries, onSelect }: { beneficiaries: Beneficiary[]; onSelect: (beneficiary?: Beneficiary) => void }) {
   return (
     <Select
       defaultValue=""
       onChange={(event) => {
         const beneficiary = beneficiaries.find((item) => item.beneficiaryId === event.target.value);
-        if (beneficiary) {
-          onSelect(beneficiary);
-        }
+        onSelect(beneficiary);
       }}
     >
       <option value="">Manual destination</option>
@@ -122,6 +169,10 @@ function RecipientSelect({ beneficiaries, onSelect }: { beneficiaries: Beneficia
       ))}
     </Select>
   );
+}
+
+function formatReason(reason: string) {
+  return reason.toLowerCase().replace(/_/g, " ");
 }
 
 function MoneyFields({ form }: { form: ReturnType<typeof useForm<MoneyMovementValues>> }) {

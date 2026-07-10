@@ -2,6 +2,7 @@ package com.suhasan.finance.transaction_service.security;
 
 import com.suhasan.finance.transaction_service.controller.TransactionController;
 import com.suhasan.finance.transaction_service.service.TransactionService;
+import com.suhasan.finance.transaction_service.service.TransferAuthorizationService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,9 @@ class SecurityConfigTest {
 
     @MockitoBean
     private TransactionService transactionService;
+
+    @MockitoBean
+    private TransferAuthorizationService transferAuthorizationService;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Public endpoints
