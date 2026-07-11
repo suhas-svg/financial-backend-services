@@ -97,6 +97,17 @@ public class TransactionServiceImpl implements TransactionService {
             throw new IllegalArgumentException("Insufficient funds");
         }
 
+        String limitReservationKey = firstNonBlank(normalizedIdempotencyKey, transactionId);
+        ResilientAccountServiceClient.SpendingLimitReservationResponse transferLimit = accountServiceClient
+                .reserveSpendingLimit(request.getFromAccountId(), "TRANSFER", request.getAmount(),
+                        limitReservationKey, userId);
+        auditService.logTransactionLimitCheck(request.getFromAccountId(), fromAccount.getAccountType(),
+                TransactionType.TRANSFER, request.getAmount(), transferLimit.isAllowed(),
+                "CUSTOMER_DAILY", transferLimit.getDailyLimit(), userId);
+        if (!transferLimit.isAllowed()) {
+            throw new IllegalArgumentException(firstNonBlank(transferLimit.getReason(), "Daily transfer limit exceeded"));
+        }
+
         Transaction transaction = Transaction.builder()
                 .transactionId(transactionId)
                 .fromAccountId(request.getFromAccountId())
@@ -130,7 +141,7 @@ public class TransactionServiceImpl implements TransactionService {
         metricsService.recordTransactionInitiated(TransactionType.TRANSFER);
 
         if (ledgerAuthoritative) {
-            return processLedgerTransfer(transaction, request, fromAccount, normalizedIdempotencyKey, startTime);
+            return processLedgerTransfer(transaction, request, fromAccount, normalizedIdempotencyKey, limitReservationKey, startTime);
         }
 
         boolean holdPlaced = false;
@@ -232,6 +243,7 @@ public class TransactionServiceImpl implements TransactionService {
             riskEvaluationService.evaluateFailedTransaction(transaction);
             metricsService.recordTransactionFailed(TransactionType.TRANSFER, "PROCESSING_ERROR");
             emitTransactionNotification(transaction);
+            releaseSpendingLimitAfterFailure(request.getFromAccountId(), "TRANSFER", limitReservationKey, userId);
             throw new RuntimeException("Transfer failed: " + e.getMessage());
         }
     }
@@ -241,6 +253,7 @@ public class TransactionServiceImpl implements TransactionService {
             TransferRequest request,
             AccountDto fromAccount,
             String normalizedIdempotencyKey,
+            String limitReservationKey,
             long startTime) {
         try {
             AccountDto toAccount = accountServiceClient.getAccountInternal(request.getToAccountId());
@@ -299,6 +312,7 @@ public class TransactionServiceImpl implements TransactionService {
             riskEvaluationService.evaluateFailedTransaction(transaction);
             metricsService.recordTransactionFailed(TransactionType.TRANSFER, "PROCESSING_ERROR");
             emitTransactionNotification(transaction);
+            releaseSpendingLimitAfterFailure(request.getFromAccountId(), "TRANSFER", limitReservationKey, transaction.getCreatedBy());
             throw new RuntimeException("Transfer failed: " + e.getMessage());
         }
     }
@@ -455,6 +469,17 @@ public class TransactionServiceImpl implements TransactionService {
             throw new IllegalArgumentException("Insufficient funds");
         }
 
+        String limitReservationKey = firstNonBlank(normalizedIdempotencyKey, UUID.randomUUID().toString());
+        ResilientAccountServiceClient.SpendingLimitReservationResponse withdrawalLimit = accountServiceClient
+                .reserveSpendingLimit(accountId, "WITHDRAWAL", amount,
+                        limitReservationKey, userId);
+        auditService.logTransactionLimitCheck(accountId, account.getAccountType(), TransactionType.WITHDRAWAL,
+                amount, withdrawalLimit.isAllowed(), "CUSTOMER_DAILY",
+                withdrawalLimit.getDailyLimit(), userId);
+        if (!withdrawalLimit.isAllowed()) {
+            throw new IllegalArgumentException(firstNonBlank(withdrawalLimit.getReason(), "Daily withdrawal limit exceeded"));
+        }
+
         Transaction transaction = Transaction.builder()
                 .fromAccountId(accountId)
                 .toAccountId("EXTERNAL")
@@ -481,7 +506,7 @@ public class TransactionServiceImpl implements TransactionService {
         }
 
         if (ledgerAuthoritative) {
-            return processLedgerWithdrawal(transaction, account, normalizedIdempotencyKey);
+            return processLedgerWithdrawal(transaction, account, normalizedIdempotencyKey, limitReservationKey);
         }
 
         boolean holdPlaced = false;
@@ -538,12 +563,13 @@ public class TransactionServiceImpl implements TransactionService {
                 riskEvaluationService.evaluateFailedTransaction(transaction);
                 emitTransactionNotification(transaction);
             }
+            releaseSpendingLimitAfterFailure(accountId, "WITHDRAWAL", limitReservationKey, userId);
             throw new RuntimeException("Withdrawal failed: " + e.getMessage());
         }
     }
 
     private TransactionResponse processLedgerWithdrawal(
-            Transaction transaction, AccountDto account, String normalizedIdempotencyKey) {
+            Transaction transaction, AccountDto account, String normalizedIdempotencyKey, String limitReservationKey) {
         try {
             String currency = transaction.getCurrency();
             UUID customerAccountId = accountLedgerResolver.resolveCustomerAccount(
@@ -585,7 +611,18 @@ public class TransactionServiceImpl implements TransactionService {
             transactionRepository.save(transaction);
             riskEvaluationService.evaluateFailedTransaction(transaction);
             emitTransactionNotification(transaction);
+            releaseSpendingLimitAfterFailure(transaction.getFromAccountId(), "WITHDRAWAL", limitReservationKey, transaction.getCreatedBy());
             throw new RuntimeException("Withdrawal failed: " + e.getMessage());
+        }
+    }
+
+    private void releaseSpendingLimitAfterFailure(String accountId, String operationType,
+                                                  String idempotencyKey, String userId) {
+        try {
+            accountServiceClient.releaseSpendingLimit(accountId, operationType, idempotencyKey, userId);
+        } catch (Exception releaseError) {
+            log.error("Failed to release {} spending limit reservation for account {} key {}: {}",
+                    operationType, accountId, idempotencyKey, releaseError.getMessage());
         }
     }
 

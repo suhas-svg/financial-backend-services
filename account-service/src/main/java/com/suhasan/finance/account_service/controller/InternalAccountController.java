@@ -17,10 +17,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
@@ -31,6 +33,17 @@ import java.math.BigDecimal;
 public class InternalAccountController {
 
     private final AccountService accountService;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.suhasan.finance.account_service.service.SpendingLimitService spendingLimitService;
+
+    @PostMapping("/{id}/spending-limit-reservations")
+    public ResponseEntity<com.suhasan.finance.account_service.dto.SpendingLimitDtos.ReserveResponse> reserveLimit(@PathVariable Long id, @Valid @RequestBody com.suhasan.finance.account_service.dto.SpendingLimitDtos.ReserveRequest request) { return ResponseEntity.ok(spendingLimitService.reserve(id, request)); }
+
+    @DeleteMapping("/{id}/spending-limit-reservations/{operationType}/{idempotencyKey}")
+    public ResponseEntity<Void> releaseLimit(@PathVariable Long id, @PathVariable String operationType, @PathVariable String idempotencyKey, @RequestParam String userId) { spendingLimitService.release(id, operationType, idempotencyKey, userId); return ResponseEntity.noContent().build(); }
+
+    @GetMapping("/spending-limit-audit")
+    public java.util.List<com.suhasan.finance.account_service.dto.SpendingLimitDtos.AuditResponse> spendingLimitAudit() { return spendingLimitService.auditEvents(); }
 
     @GetMapping("/{id}")
     public ResponseEntity<Account> get(@PathVariable Long id) {

@@ -63,7 +63,9 @@ test("customer can register, login, create accounts, move money, and view transa
 
   const transfer = panel(page, "Transfer");
   await transfer.getByLabel("From account").selectOption({ index: 1 });
-  await transfer.getByLabel("To account").selectOption({ index: 2 });
+  const destinationAccountId = await transfer.getByLabel("From account").locator("option").nth(2).getAttribute("value");
+  expect(destinationAccountId).toBeTruthy();
+  await transfer.getByLabel("To account").fill(destinationAccountId!);
   await transfer.getByLabel("Amount").fill("15");
   await transfer.getByLabel("Reference").fill("e2e-transfer");
   await submitTransaction(page, transfer.getByRole("button", { name: "Transfer" }), "transfer");
