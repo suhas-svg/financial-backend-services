@@ -70,6 +70,9 @@ class TransactionLedgerIntegrationTest {
             }
             return transaction;
         });
+        lenient().when(accountServiceClient.reserveSpendingLimit(anyString(), anyString(), any(BigDecimal.class), anyString(), anyString()))
+                .thenReturn(new ResilientAccountServiceClient.SpendingLimitReservationResponse(true, false,
+                        new BigDecimal("10000.00"), BigDecimal.ZERO, new BigDecimal("10000.00"), null));
     }
 
     @Test

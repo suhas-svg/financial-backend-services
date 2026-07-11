@@ -6,7 +6,7 @@ import { Badge, Button, EmptyState, Field, Panel, Select } from "../components/u
 import { getNotificationSummary, listNotifications, markAllNotificationsRead, markNotificationRead } from "../lib/queries";
 import type { Notification, NotificationSeverity, NotificationStatus, NotificationType } from "../types";
 
-const notificationTypes: Array<NotificationType | ""> = ["", "TRANSACTION_COMPLETED", "TRANSACTION_FAILED", "ACCOUNT_FROZEN", "ACCOUNT_UNFROZEN", "DISPUTE_CREATED", "DISPUTE_STATUS_UPDATED"];
+const notificationTypes: Array<NotificationType | ""> = ["", "TRANSACTION_COMPLETED", "TRANSACTION_FAILED", "ACCOUNT_FROZEN", "ACCOUNT_UNFROZEN", "DISPUTE_CREATED", "DISPUTE_STATUS_UPDATED", "SCHEDULED_TRANSFER_CREATED", "SCHEDULED_TRANSFER_PAUSED", "SCHEDULED_TRANSFER_RESUMED", "SCHEDULED_TRANSFER_CANCELED", "SCHEDULED_TRANSFER_EXECUTED", "SCHEDULED_TRANSFER_FAILED", "SECURITY_ACTION_REQUIRED", "SECURITY_ALERT", "TRANSFER_AUTHORIZED"];
 const severities: Array<NotificationSeverity | ""> = ["", "INFO", "SUCCESS", "WARNING", "CRITICAL"];
 const statuses: Array<NotificationStatus | ""> = ["", "UNREAD", "READ"];
 

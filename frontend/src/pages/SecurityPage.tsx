@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, ErrorNotice, Field, Input, Panel } from "../components/ui";
-import { confirmMfa, disableMfa, enrollMfa, getMfaStatus, regenerateRecoveryCodes } from "../lib/queries";
+import { confirmMfa, disableMfa, enrollMfa, getMfaStatus, regenerateRecoveryCodes, getSpendingLimits, updateSpendingLimits } from "../lib/queries";
 import type { MfaEnrollment } from "../types";
 
 export function SecurityPage() {
   const queryClient = useQueryClient();
   const status = useQuery({ queryKey: ["mfa-status"], queryFn: getMfaStatus });
+  const limits = useQuery({ queryKey: ["spending-limits"], queryFn: getSpendingLimits });
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [enrollment, setEnrollment] = useState<MfaEnrollment>();
@@ -19,7 +20,9 @@ export function SecurityPage() {
   });
   const regenerate = useMutation({ mutationFn: () => regenerateRecoveryCodes(password), onSuccess: (result) => { setRecoveryCodes(result.recoveryCodes); setPassword(""); refresh(); } });
   const disable = useMutation({ mutationFn: () => disableMfa(password, code), onSuccess: () => { setPassword(""); setCode(""); setRecoveryCodes([]); refresh(); } });
-  const error = [enroll.error, confirm.error, regenerate.error, disable.error].find((value) => value instanceof Error);
+  const [limitDrafts, setLimitDrafts] = useState<Record<number, { transfer: string; withdrawal: string; credential: string }>>({});
+  const updateLimit = useMutation({ mutationFn: ({ accountId, transfer, withdrawal, credential }: { accountId: number; transfer: string; withdrawal: string; credential: string }) => updateSpendingLimits(accountId, { transferDailyLimit: Number(transfer), withdrawalDailyLimit: Number(withdrawal), credential: credential || undefined }), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["spending-limits"] }); setLimitDrafts({}); } });
+  const error = [enroll.error, confirm.error, regenerate.error, disable.error, updateLimit.error].find((value) => value instanceof Error);
 
   return (
     <div className="grid max-w-3xl gap-6">
@@ -55,6 +58,26 @@ export function SecurityPage() {
               </div>
             </div>
           ) : null}
+        </div>
+      </Panel>
+      <Panel title="Transfer and withdrawal limits">
+        <div className="grid gap-4">
+          <p className="text-sm text-muted">Reductions apply immediately. Increases require an authenticator or recovery code and take effect after a 24-hour cooling period.</p>
+          {(Array.isArray(limits.data) ? limits.data : []).map((limit) => {
+            const draft = limitDrafts[limit.accountId] ?? { transfer: String(limit.transferDailyLimit), withdrawal: String(limit.withdrawalDailyLimit), credential: "" };
+            return <div key={limit.accountId} className="grid gap-3 rounded-md border border-line p-4">
+              <div className="font-medium">Account #{limit.accountId}</div>
+              <p className="text-xs text-muted">Used today: transfers {limit.transferUsedToday.toFixed(2)} · withdrawals {limit.withdrawalUsedToday.toFixed(2)}</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Daily transfer limit"><Input type="number" min="0" step="0.01" value={draft.transfer} onChange={(e) => setLimitDrafts((all) => ({ ...all, [limit.accountId]: { ...draft, transfer: e.target.value } }))} /></Field>
+                <Field label="Daily withdrawal limit"><Input type="number" min="0" step="0.01" value={draft.withdrawal} onChange={(e) => setLimitDrafts((all) => ({ ...all, [limit.accountId]: { ...draft, withdrawal: e.target.value } }))} /></Field>
+              </div>
+              <Field label="Authenticator or recovery code (for increases)"><Input value={draft.credential} onChange={(e) => setLimitDrafts((all) => ({ ...all, [limit.accountId]: { ...draft, credential: e.target.value } }))} /></Field>
+              {limit.pendingEffectiveAt ? <p className="text-sm text-amber-700">Verified increase pending until {new Date(limit.pendingEffectiveAt).toLocaleString()}.</p> : null}
+              <Button disabled={!draft.transfer || !draft.withdrawal || updateLimit.isPending} onClick={() => updateLimit.mutate({ accountId: limit.accountId, ...draft })}>Save limits</Button>
+            </div>;
+          })}
+          {!limits.isLoading && !limits.data?.length ? <p className="text-sm text-muted">Create an account before configuring spending limits.</p> : null}
         </div>
       </Panel>
       {recoveryCodes.length ? (

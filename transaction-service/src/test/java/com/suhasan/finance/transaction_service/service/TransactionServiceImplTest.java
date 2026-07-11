@@ -108,9 +108,29 @@ class TransactionServiceImplTest {
                                 .createdAt(LocalDateTime.now())
                                 .build();
 
+                when(accountServiceClient.reserveSpendingLimit(anyString(), anyString(), any(BigDecimal.class), anyString(), anyString()))
+                                .thenReturn(new ResilientAccountServiceClient.SpendingLimitReservationResponse(
+                                                true, false, new BigDecimal("10000.00"), BigDecimal.ZERO,
+                                                new BigDecimal("10000.00"), null));
+
                 when(transactionLimitService.validateTransactionLimits(anyString(), anyString(),
                                 any(TransactionType.class), any(BigDecimal.class)))
                                 .thenReturn(true);
+        }
+
+        @Test
+        void processTransfer_DailyLimitRejectsBeforeTransactionCreation() {
+                when(accountServiceClient.getAccount("acc1")).thenReturn(fromAccount);
+                when(accountServiceClient.reserveSpendingLimit(eq("acc1"), eq("TRANSFER"),
+                                eq(BigDecimal.valueOf(100)), anyString(), eq(userId)))
+                                .thenReturn(new ResilientAccountServiceClient.SpendingLimitReservationResponse(
+                                                false, false, new BigDecimal("100.00"), new BigDecimal("80.00"),
+                                                new BigDecimal("20.00"), "Daily spending limit exceeded"));
+                IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                                () -> transactionService.processTransfer(transferRequest, userId, "limit-key"));
+                assertTrue(error.getMessage().contains("Daily spending limit exceeded"));
+                verify(transactionRepository, never()).save(any());
+                verify(accountServiceClient, never()).placeDebitHold(anyString(), anyString(), any(), anyString(), anyString());
         }
 
         @Test
@@ -252,6 +272,7 @@ class TransactionServiceImplTest {
                 assertTrue(exception.getMessage().contains("Capture unavailable"));
                 verify(accountServiceClient).releaseDebitHold(eq("acc1"), anyString(), anyString(),
                                 eq("TRANSFER_CAPTURE_FAILED"));
+                verify(accountServiceClient).releaseSpendingLimit(eq("acc1"), eq("TRANSFER"), anyString(), eq(userId));
                 verify(auditService).logSystemEvent(eq("DEBIT_HOLD_REJECTED"), eq("transaction-service"),
                                 contains("Capture unavailable"), anyMap());
                 verify(auditService).logSystemEvent(eq("DEBIT_HOLD_RELEASED"), eq("transaction-service"),
@@ -524,6 +545,7 @@ class TransactionServiceImplTest {
                 assertTrue(exception.getMessage().contains("Capture service unavailable"));
                 verify(accountServiceClient).releaseDebitHold(eq(accountId), anyString(), anyString(),
                                 eq("WITHDRAWAL_CAPTURE_FAILED"));
+                verify(accountServiceClient).releaseSpendingLimit(eq(accountId), eq("WITHDRAWAL"), anyString(), eq(userId));
                 verify(auditService).logSystemEvent(eq("DEBIT_HOLD_REJECTED"), eq("transaction-service"),
                                 contains("Capture service unavailable"), anyMap());
                 verify(auditService).logSystemEvent(eq("DEBIT_HOLD_RELEASED"), eq("transaction-service"),

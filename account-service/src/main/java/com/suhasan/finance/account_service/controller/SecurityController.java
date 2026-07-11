@@ -16,6 +16,14 @@ import org.springframework.web.bind.annotation.*;
 public class SecurityController {
     private final MfaService mfaService;
     private final StepUpChallengeService challengeService;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.suhasan.finance.account_service.service.SpendingLimitService spendingLimitService;
+
+    @GetMapping("/spending-limits")
+    public java.util.List<com.suhasan.finance.account_service.dto.SpendingLimitDtos.LimitResponse> limits(Authentication authentication) { return spendingLimitService.list(authentication.getName()); }
+
+    @PutMapping("/spending-limits/{accountId}")
+    public com.suhasan.finance.account_service.dto.SpendingLimitDtos.LimitResponse updateLimits(@PathVariable Long accountId, @Valid @RequestBody com.suhasan.finance.account_service.dto.SpendingLimitDtos.UpdateRequest request, Authentication authentication) { return spendingLimitService.update(accountId, authentication.getName(), request); }
 
     @GetMapping("/mfa")
     public MfaResponses.StatusResponse status(Authentication authentication) {

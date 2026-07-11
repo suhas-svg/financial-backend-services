@@ -131,6 +131,14 @@ export function getMfaStatus() {
   return apiRequest<MfaStatus>("account", "/api/security/mfa");
 }
 
+export function getSpendingLimits() {
+  return apiRequest<import("../types").SpendingLimit[]>("account", "/api/security/spending-limits");
+}
+
+export function updateSpendingLimits(accountId: number, values: { transferDailyLimit: number; withdrawalDailyLimit: number; credential?: string }) {
+  return apiRequest<import("../types").SpendingLimit>("account", `/api/security/spending-limits/${accountId}`, { method: "PUT", body: values });
+}
+
 export function enrollMfa(currentPassword: string) {
   return apiRequest<MfaEnrollment>("account", "/api/security/mfa/totp/enroll", { method: "POST", body: { currentPassword } });
 }

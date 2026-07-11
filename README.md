@@ -30,6 +30,7 @@ financial-backend-services/
 - See frozen accounts with hold warnings and status reasons.
 - Deposit, withdraw, and transfer money.
 - Enroll a TOTP authenticator, generate single-use recovery codes, and manage MFA from the Security page.
+- Configure per-account daily transfer and withdrawal limits from Security; reductions are immediate and MFA-verified increases cool for 24 hours.
 - Complete risk-based step-up verification before high-risk transfers are posted.
 - Create one-time or recurring scheduled transfers between accounts.
 - Pause, resume, cancel, and inspect scheduled transfer run history.
@@ -761,3 +762,4 @@ transaction-service/mvnw
 - Transaction history API notes: `transaction-service/TRANSACTION-HISTORY-API.md`
 - Monitoring and observability notes: `transaction-service/MONITORING-OBSERVABILITY-GUIDE.md`
 - Risk-based MFA and transfer authorization: `docs/risk-based-step-up-authorization.md`
+- Customer spending controls and transfer limits: `docs/customer-spending-controls.md`

@@ -147,6 +147,16 @@ export type MfaStatus = {
 export type MfaEnrollment = { secret: string; otpauthUri: string };
 export type MfaConfirmation = { active: boolean; recoveryCodes: string[] };
 export type ChallengeVerification = { challengeId: string; proof: string; proofExpiresAt: string };
+export type SpendingLimit = {
+  accountId: number;
+  transferDailyLimit: number;
+  withdrawalDailyLimit: number;
+  transferUsedToday: number;
+  withdrawalUsedToday: number;
+  pendingTransferDailyLimit?: number;
+  pendingWithdrawalDailyLimit?: number;
+  pendingEffectiveAt?: string;
+};
 
 export type TransactionStats = {
   accountId?: string;

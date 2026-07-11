@@ -830,6 +830,26 @@ describe("customer beneficiaries", () => {
 });
 
 describe("customer security", () => {
+  it("shows daily usage and submits customer spending limits", async () => {
+    const user = userEvent.setup();
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    mockFetch((url, init) => {
+      calls.push({ url, init });
+      if (url.endsWith("/api/security/mfa")) return jsonResponse({ enrolled: true, status: "ACTIVE", recoveryCodesRemaining: 8 });
+      if (url.endsWith("/api/security/spending-limits") && init?.method !== "PUT") return jsonResponse([{ accountId: 101, transferDailyLimit: 5000, withdrawalDailyLimit: 1000, transferUsedToday: 750, withdrawalUsedToday: 100 }]);
+      if (url.endsWith("/api/security/spending-limits/101") && init?.method === "PUT") return jsonResponse({ accountId: 101, transferDailyLimit: 4000, withdrawalDailyLimit: 900, transferUsedToday: 750, withdrawalUsedToday: 100 });
+      return undefined;
+    });
+    renderApp("/security", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+    expect(await screen.findByText(/Used today: transfers 750.00/)).toBeInTheDocument();
+    const transfer = screen.getByLabelText("Daily transfer limit");
+    await user.clear(transfer); await user.type(transfer, "4000");
+    const withdrawal = screen.getByLabelText("Daily withdrawal limit");
+    await user.clear(withdrawal); await user.type(withdrawal, "900");
+    await user.click(screen.getByRole("button", { name: "Save limits" }));
+    await waitFor(() => expect(calls.some(({ url, init }) => url.endsWith("/api/security/spending-limits/101") && init?.method === "PUT" && String(init.body).includes('"transferDailyLimit":4000'))).toBe(true));
+  });
+
   it("enrolls TOTP and displays one-time recovery codes", async () => {
     const user = userEvent.setup();
     let enrolled = false;

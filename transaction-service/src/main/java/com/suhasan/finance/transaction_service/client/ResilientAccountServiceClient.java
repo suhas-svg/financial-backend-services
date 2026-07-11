@@ -383,6 +383,36 @@ public class ResilientAccountServiceClient {
         }
     }
 
+    public SpendingLimitReservationResponse reserveSpendingLimit(String accountId, String operationType,
+                                                                  BigDecimal amount, String idempotencyKey,
+                                                                  String userId) {
+        String serviceToken = generateInternalServiceToken();
+        try {
+            return webClientBuilder.baseUrl(accountServiceBaseUrl).build().post()
+                    .uri("/api/internal/accounts/{id}/spending-limit-reservations", accountId)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceToken)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(new SpendingLimitReservationRequest(operationType, amount, idempotencyKey, userId))
+                    .retrieve().bodyToMono(SpendingLimitReservationResponse.class)
+                    .timeout(Duration.ofMillis(timeout)).block();
+        } catch (Exception e) {
+            throw mapServiceException("spending limit enforcement", e);
+        }
+    }
+
+    public void releaseSpendingLimit(String accountId, String operationType, String idempotencyKey, String userId) {
+        String serviceToken = generateInternalServiceToken();
+        try {
+            webClientBuilder.baseUrl(accountServiceBaseUrl).build().delete()
+                    .uri(builder -> builder.path("/api/internal/accounts/{id}/spending-limit-reservations/{type}/{key}")
+                            .queryParam("userId", userId).build(accountId, operationType, idempotencyKey))
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceToken)
+                    .retrieve().bodyToMono(Void.class).timeout(Duration.ofMillis(timeout)).block();
+        } catch (Exception e) {
+            throw mapServiceException("spending limit reservation release", e);
+        }
+    }
+
     @CacheEvict(value = "account:validation", key = "#accountId")
     public LedgerProjectionUpdateResponse applyLedgerProjection(
             String accountId,
@@ -581,6 +611,19 @@ public class ResilientAccountServiceClient {
         private String sourceType;
         private String sourceId;
         private String dedupeKey;
+    }
+
+    public record SpendingLimitReservationRequest(String operationType, BigDecimal amount,
+                                                  String idempotencyKey, String userId) {}
+
+    @Data @NoArgsConstructor @AllArgsConstructor
+    public static class SpendingLimitReservationResponse {
+        private boolean allowed;
+        private boolean replay;
+        private BigDecimal dailyLimit;
+        private BigDecimal dailyUsed;
+        private BigDecimal remaining;
+        private String reason;
     }
 
     @Data
