@@ -1,6 +1,6 @@
 import { useMutation, useQueries } from "@tanstack/react-query";
 import { triggerAccountHealthCheck, getAccountHealth, getAccountMetrics, getAlertStatus, getAvailableMetrics, getDeploymentInfo, getDetailedHealth, getSystemStats, getTransactionMonitoringStats } from "../lib/queries";
-import { Badge, Button, Panel, Stat } from "../components/ui";
+import { Badge, Button, PageHeader, Panel, Stat } from "../components/ui";
 
 export function AdminMonitoringPage() {
   const results = useQueries({
@@ -21,15 +21,9 @@ export function AdminMonitoringPage() {
   const alertSummary = getAlertSummary(alerts.data);
 
   return (
-    <div className="grid gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Monitoring</h1>
-          <p className="text-sm text-muted">Privileged service health, deployment, alert, and metric summaries.</p>
-        </div>
-        <Button onClick={() => healthCheck.mutate()} disabled={healthCheck.isPending}>Run health check</Button>
-      </div>
-      <div className="grid gap-3 md:grid-cols-4">
+    <div className="admin-page grid gap-6 lg:gap-8">
+      <PageHeader eyebrow="Platform reliability" title="Service health" detail="Live service health, deployment posture, alert state, and operational performance metrics." action={<Button onClick={() => healthCheck.mutate()} disabled={healthCheck.isPending}>{healthCheck.isPending ? "Running check..." : "Run health check"}</Button>} />
+      <div className="admin-metric-grid grid gap-3 md:grid-cols-4">
         <Stat label="Account health" value={<StatusText value={statusText(accountHealth.data, accountHealth.isLoading)} />} />
         <Stat label="Transaction health" value={<StatusText value={statusText(transactionHealth.data, transactionHealth.isLoading, "healthy")} />} />
         <Stat label="Alerts" value={<StatusText value={alerts.isLoading ? "loading" : alertSummary.label} />} />
@@ -124,7 +118,7 @@ function MetricPanel({ title, rows, isLoading, error }: { title: string; rows: M
           {rows.map((row) => (
             <div key={row.label} className="rounded-md border border-line bg-white p-3">
               <dt className="text-xs font-medium uppercase tracking-wide text-muted">{row.label}</dt>
-              <dd className="mt-1 text-sm font-semibold text-ink">
+              <dd className="admin-metric-value mt-2 text-lg font-bold text-ink">
                 {row.tone ? <Badge tone={row.tone}>{row.value}</Badge> : row.value}
               </dd>
             </div>

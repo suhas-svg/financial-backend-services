@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
-import { Badge, Button, EmptyState, Input, Panel, Stat } from "../components/ui";
+import { Badge, Button, EmptyState, Input, PageHeader, Panel, Stat } from "../components/ui";
 import { exportInvestigationTimelineCsv, getInvestigationSummary, getInvestigationTimeline } from "../lib/queries";
 import type { InvestigationItemType, InvestigationTimelineItem } from "../types";
 
@@ -38,11 +38,8 @@ export function AdminInvestigationsPage() {
   };
 
   return (
-    <div className="investigation-screen grid gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Investigations</h1>
-        <p className="text-sm text-muted">Read-only timeline for transaction, audit, risk alert, and case context.</p>
-      </div>
+    <div className="admin-page investigation-screen grid gap-6 lg:gap-8">
+      <PageHeader eyebrow="Evidence workspace" title="Investigations" detail="Build a read-only timeline across transactions, audit events, risk alerts, cases, and disputes." />
 
       <Panel
         title="Search context"
@@ -53,7 +50,7 @@ export function AdminInvestigationsPage() {
           </div>
         )}
       >
-        <div className="grid gap-2 md:grid-cols-4 xl:grid-cols-7">
+        <div className="admin-filter-grid grid gap-2 md:grid-cols-4 xl:grid-cols-7">
           <Input placeholder="User ID" value={filters.userId} onChange={(event) => updateFilter(setFilters, "userId", event.target.value)} />
           <Input placeholder="Transaction ID" value={filters.transactionId} onChange={(event) => updateFilter(setFilters, "transactionId", event.target.value)} />
           <Input placeholder="Account ID" value={filters.accountId} onChange={(event) => updateFilter(setFilters, "accountId", event.target.value)} />
@@ -65,7 +62,7 @@ export function AdminInvestigationsPage() {
         {exportState === "error" ? <p className="mt-3 text-sm text-danger">Could not export investigation CSV.</p> : null}
       </Panel>
 
-      <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-7">
+      <div className="admin-metric-grid grid gap-3 md:grid-cols-4 xl:grid-cols-7">
         <Stat label="Transactions" value={formatNumber(summary.data?.transactions)} />
         <Stat label="Audit events" value={formatNumber(summary.data?.auditEvents)} />
         <Stat label="Risk alerts" value={formatNumber(summary.data?.riskAlerts)} />
@@ -77,7 +74,7 @@ export function AdminInvestigationsPage() {
 
       <Panel title="Investigation report" className="investigation-report">
         <div className="grid gap-5">
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="admin-metric-grid grid gap-3 md:grid-cols-3">
             <ReportBlock title="Report scope" value={activeFilters.length ? activeFilters.map((entry) => `${entry.label}: ${entry.value}`).join(" | ") : "All investigation records"} />
             <ReportBlock title="Key finding" value={summary.data?.highSeverityItems ? "High-risk items require review" : "No high-risk items in scope"} tone={summary.data?.highSeverityItems ? "bad" : "good"} />
             <ReportBlock title="Included timeline items" value={`${timelineItems.length} item${timelineItems.length === 1 ? "" : "s"}`} />

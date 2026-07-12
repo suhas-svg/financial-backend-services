@@ -918,9 +918,9 @@ describe("customer shell navigation", () => {
     expect(await screen.findByRole("link", { name: "Operations Console" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Operations overview" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Overview" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Admin Accounts" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Monitoring" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Ops Transactions" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Accounts" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Service health" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Transactions" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Audit Log" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Reconciliation" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Risk Alerts" })).toBeInTheDocument();
@@ -928,6 +928,48 @@ describe("customer shell navigation", () => {
     expect(screen.getByRole("link", { name: "Disputes" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Investigations" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Move Money" })).not.toBeInTheDocument();
+  });
+
+  it("supports collapsible desktop navigation, mobile drawer controls, and operational search", async () => {
+    const user = userEvent.setup();
+    mockFetch();
+    renderApp("/admin", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
+
+    await screen.findByRole("heading", { name: "Operations overview" });
+    await user.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+    expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Open navigation" }));
+    expect(screen.getByRole("complementary", { name: "Mobile admin navigation" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close menu" }));
+
+    await user.type(screen.getByRole("textbox", { name: "Global operational search" }), "risk cases");
+    expect(screen.getByLabelText("Operational search results")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Risk Cases" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Use dark mode" }));
+    expect(document.documentElement).toHaveClass("dark");
+    expect(window.localStorage.getItem("operations-theme")).toBe("dark");
+    await user.click(screen.getByRole("button", { name: "Use light mode" }));
+    expect(document.documentElement).not.toHaveClass("dark");
+  });
+
+  it("aggregates attention queues and recent audit activity on the operations dashboard", async () => {
+    mockFetch((url) => {
+      if (url.includes("/api/risk/summary")) return jsonResponse({ totalAlerts: 4, openAlerts: 3, highSeverityAlerts: 2, escalatedAlerts: 1 });
+      if (url.includes("/api/risk/cases/summary")) return jsonResponse({ totalCases: 3, openCases: 1, inReviewCases: 1, resolvedCases: 1, closedCases: 0, unassignedCases: 1 });
+      if (url.includes("/api/disputes/admin/summary")) return jsonResponse({ totalDisputes: 2, openDisputes: 1, inReviewDisputes: 0, approvedDisputes: 0, deniedDisputes: 0, closedDisputes: 1, unassignedDisputes: 1 });
+      if (url.includes("/api/monitoring/stats/transactions")) return jsonResponse({ dailyVolume: 12, successRate: 1 });
+      if (url.includes("/api/audit/events")) return jsonResponse({ ...emptyPage, content: [{ eventId: "evt-1", eventType: "TRANSACTION", action: "TRANSACTION_REVERSED", outcome: "SUCCESS", userId: "ops", transactionId: "txn-1", createdAt: "2026-07-12T10:00:00" }], totalElements: 1 });
+      if (url.includes("/api/audit/summary")) return jsonResponse({ totalEvents: 8, failureEvents: 1, reversalEvents: 1, securityEvents: 0 });
+      return undefined;
+    });
+    renderApp("/admin", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
+
+    expect(await screen.findByRole("heading", { name: "Needs attention" })).toBeInTheDocument();
+    expect(await screen.findByText("TRANSACTION_REVERSED")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Recent operational activity" })).toBeInTheDocument();
+    expect(screen.getByText("100% success rate")).toBeInTheDocument();
   });
 
   it("redirects non-admin users from the admin overview to the customer dashboard", async () => {
@@ -1794,7 +1836,7 @@ describe("admin monitoring", () => {
 
     renderApp("/admin/monitoring", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
 
-    expect(await screen.findByRole("heading", { name: "Monitoring" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Service health" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText("0 active").length).toBeGreaterThan(0));
     expect(screen.getByText("Health checks")).toBeInTheDocument();
     expect(screen.getByText("Total meters")).toBeInTheDocument();

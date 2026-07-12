@@ -8,7 +8,7 @@ import { accountSchema, type AccountValues } from "../lib/schemas";
 import { compactDate, money } from "../lib/format";
 import { availableBalance, ledgerBalance } from "../lib/accountBalances";
 import type { Account } from "../types";
-import { Button, ErrorNotice, Field, Input, Panel, Select } from "../components/ui";
+import { Button, ErrorNotice, Field, Input, PageHeader, Panel, Select } from "../components/ui";
 import { StatusBadge } from "../components/StatusBadge";
 
 export function AdminAccountsPage() {
@@ -81,7 +81,9 @@ export function AdminAccountsPage() {
   };
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+    <div className="admin-page grid gap-6 lg:gap-8">
+      <PageHeader eyebrow="Customer operations" title="Account operations" detail="Create, inspect, update, freeze, and manage customer accounts across the platform." />
+      <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
       <div className="grid gap-6">
       <Panel title={editing ? `Edit account #${editing.id}` : "Create managed account"}>
         <form className="grid gap-4" onSubmit={form.handleSubmit((values) => (editing ? updateMutation.mutate(values) : createMutation.mutate(values)))}>
@@ -156,7 +158,7 @@ export function AdminAccountsPage() {
       <Panel
         title="Admin account oversight"
         action={
-          <div className="grid grid-cols-3 gap-2">
+          <div className="admin-filter-grid grid grid-cols-3 gap-2">
             <Input placeholder="Owner ID" value={ownerId} onChange={(event) => setOwnerId(event.target.value)} />
             <Select value={accountType} onChange={(event) => setAccountType(event.target.value)}>
               <option value="">All types</option>
@@ -223,6 +225,7 @@ export function AdminAccountsPage() {
           </table>
         </div>
       </Panel>
+      </div>
     </div>
   );
 }

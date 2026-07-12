@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
-import { Badge, Button, EmptyState, Input, Panel, Select, Stat } from "../components/ui";
+import { Badge, Button, EmptyState, Input, PageHeader, Panel, Select, Stat } from "../components/ui";
 import { createRiskCaseFromAlert, getRiskSummary, searchRiskAlerts, searchRiskCases, updateRiskAlertStatus } from "../lib/queries";
 import type { RiskAlert, RiskAlertStatus } from "../types";
 
@@ -53,13 +53,10 @@ export function AdminRiskAlertsPage() {
   });
 
   return (
-    <div className="grid gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Risk Alerts</h1>
-        <p className="text-sm text-muted">Operational review queue for conservative transaction risk rules.</p>
-      </div>
+    <div className="admin-page grid gap-6 lg:gap-8">
+      <PageHeader eyebrow="Risk operations" title="Risk Alerts" detail="Prioritize transaction risk signals, document outcomes, and escalate findings into cases." />
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="admin-metric-grid grid gap-3 md:grid-cols-4">
         <Stat label="Total alerts" value={formatNumber(summary.data?.totalAlerts)} />
         <Stat label="Open" value={<Badge tone={summary.data?.openAlerts ? "warn" : "good"}>{formatNumber(summary.data?.openAlerts)}</Badge>} />
         <Stat label="High severity" value={<Badge tone={summary.data?.highSeverityAlerts ? "bad" : "neutral"}>{formatNumber(summary.data?.highSeverityAlerts)}</Badge>} />
@@ -70,7 +67,7 @@ export function AdminRiskAlertsPage() {
         <Panel
           title="Review queue"
           action={
-            <div className="grid w-full max-w-6xl grid-cols-7 gap-2">
+            <div className="admin-filter-grid grid w-full max-w-6xl grid-cols-7 gap-2">
               <Select value={filters.status} onChange={(event) => updateFilter(setFilters, "status", event.target.value)}>
                 <option value="">All status</option>
                 <option value="OPEN">Open</option>

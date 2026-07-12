@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
-import { Badge, Button, EmptyState, Input, Panel, Select, Stat } from "../components/ui";
+import { Badge, Button, EmptyState, Input, PageHeader, Panel, Select, Stat } from "../components/ui";
 import { addDisputeNote, claimDispute, getDisputeSummary, searchAdminDisputes, updateDisputeStatus } from "../lib/queries";
 import type { DisputeReasonCode, DisputeStatus, TransactionDispute } from "../types";
 
@@ -55,13 +55,10 @@ export function AdminDisputesPage() {
   });
 
   return (
-    <div className="grid gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Disputes</h1>
-        <p className="text-sm text-muted">Admin queue for customer transaction dispute review.</p>
-      </div>
+    <div className="admin-page grid gap-6 lg:gap-8">
+      <PageHeader eyebrow="Customer protection" title="Disputes" detail="Review, assign, investigate, and resolve customer transaction disputes." />
 
-      <div className="grid gap-3 md:grid-cols-5">
+      <div className="admin-metric-grid grid gap-3 md:grid-cols-5">
         <Stat label="Total disputes" value={formatNumber(summary.data?.totalDisputes)} />
         <Stat label="Open" value={<Badge tone={summary.data?.openDisputes ? "warn" : "good"}>{formatNumber(summary.data?.openDisputes)}</Badge>} />
         <Stat label="In review" value={formatNumber(summary.data?.inReviewDisputes)} />
@@ -73,7 +70,7 @@ export function AdminDisputesPage() {
         <Panel
           title="Dispute queue"
           action={
-            <div className="grid w-full max-w-5xl grid-cols-7 gap-2">
+            <div className="admin-filter-grid grid w-full max-w-5xl grid-cols-7 gap-2">
               <Select value={filters.status} onChange={(event) => updateFilter(setFilters, "status", event.target.value)}>
                 <option value="">All status</option>
                 <option value="OPEN">Open</option>

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { searchTransactions } from "../lib/queries";
 import type { Transaction } from "../types";
-import { Button, EmptyState, Input, Panel, Select } from "../components/ui";
+import { Button, EmptyState, Input, PageHeader, Panel, Select } from "../components/ui";
 import { TransactionDetail, TransactionTable } from "./TransactionsPage";
 
 export function AdminTransactionsPage() {
@@ -11,11 +11,13 @@ export function AdminTransactionsPage() {
   const transactions = useQuery({ queryKey: ["admin-transactions", filters], queryFn: () => searchTransactions(filters) });
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
+    <div className="admin-page grid gap-6 lg:gap-8">
+      <PageHeader eyebrow="Money movement" title="Transaction operations" detail="Search transaction activity, inspect processing context, and perform controlled reversals." />
+      <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
       <Panel
         title="Operations transaction search"
         action={
-          <div className="grid grid-cols-4 gap-2">
+          <div className="admin-filter-grid grid grid-cols-4 gap-2">
             <Input placeholder="Account" value={filters.accountId} onChange={(event) => setFilters((prev) => ({ ...prev, accountId: event.target.value }))} />
             <Input placeholder="Reference" value={filters.reference} onChange={(event) => setFilters((prev) => ({ ...prev, reference: event.target.value }))} />
             <Select value={filters.type} onChange={(event) => setFilters((prev) => ({ ...prev, type: event.target.value }))}>
@@ -47,6 +49,7 @@ export function AdminTransactionsPage() {
       >
         {selected ? <TransactionDetail transaction={selected} allowReverse /> : <EmptyState title="No transaction selected" detail="Select a transaction to view reversal controls." />}
       </Panel>
+      </div>
     </div>
   );
 }
