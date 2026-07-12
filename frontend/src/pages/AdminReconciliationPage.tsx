@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Badge, Button, EmptyState, ErrorNotice, Input, Panel, Select, Stat } from "../components/ui";
+import { Badge, Button, EmptyState, ErrorNotice, Input, PageHeader, Panel, Select, Stat } from "../components/ui";
 import { addReconciliationExceptionNote, assignReconciliationException, listReconciliationExceptions, listReconciliationRuns, runReconciliation, updateReconciliationExceptionStatus } from "../lib/queries";
 import type { ReconciliationException, ReconciliationExceptionStatus, ReconciliationRun, ReconciliationSeverity } from "../types";
 
@@ -78,26 +78,12 @@ export function AdminReconciliationPage() {
   const criticalExceptions = exceptions.data?.filter((item) => item.severity === "CRITICAL").length ?? 0;
 
   return (
-    <div className="grid gap-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Reconciliation</h1>
-          <p className="text-sm text-muted">Daily ledger controls, immutable exception handling, and operator resolution workflow.</p>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium text-ink">Business date</span>
-            <Input type="date" value={businessDate} onChange={(event) => setBusinessDate(event.target.value)} />
-          </label>
-          <Button onClick={() => runMutation.mutate()} disabled={runMutation.isPending}>
-            Run daily reconciliation
-          </Button>
-        </div>
-      </div>
+    <div className="admin-page grid gap-6 lg:gap-8">
+      <PageHeader eyebrow="Ledger control" title="Reconciliation" detail="Run daily ledger controls, prioritize immutable exceptions, and record operator resolution evidence." action={<div className="flex flex-col gap-2 sm:flex-row sm:items-end"><label className="grid gap-1 text-sm"><span className="font-medium text-ink dark:text-slate-200">Business date</span><Input type="date" value={businessDate} onChange={(event) => setBusinessDate(event.target.value)} /></label><Button onClick={() => runMutation.mutate()} disabled={runMutation.isPending}>{runMutation.isPending ? "Running..." : "Run daily reconciliation"}</Button></div>} />
 
       <ErrorNotice message={errorMessage(runs.error) || errorMessage(exceptions.error) || errorMessage(runMutation.error) || errorMessage(resolveMutation.error) || errorMessage(assignMutation.error) || errorMessage(noteMutation.error)} />
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="admin-metric-grid grid gap-3 md:grid-cols-4">
         <Stat label="Latest run" value={latestRun ? latestRun.status : "No runs"} />
         <Stat label="Business date" value={latestRun?.businessDate || businessDate} />
         <Stat label="Open exceptions" value={<Badge tone={openExceptions ? "warn" : "good"}>{openExceptions}</Badge>} />
@@ -108,7 +94,7 @@ export function AdminReconciliationPage() {
         <Panel
           title="Exception queue"
           action={
-            <div className="grid w-full max-w-md grid-cols-2 gap-2">
+            <div className="admin-filter-grid grid w-full max-w-md grid-cols-2 gap-2">
               <label className="sr-only" htmlFor="reconciliation-exception-status">Exception status</label>
               <Select
                 id="reconciliation-exception-status"

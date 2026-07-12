@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
-import { Badge, Button, EmptyState, Input, Panel, Select, Stat } from "../components/ui";
+import { Badge, Button, EmptyState, Input, PageHeader, Panel, Select, Stat } from "../components/ui";
 import { getAuditSummary, searchAuditEvents } from "../lib/queries";
 import type { AuditLogEntry } from "../types";
 
@@ -21,13 +21,10 @@ export function AdminAuditLogPage() {
   const summary = useQuery({ queryKey: ["audit-summary", filters.from, filters.to], queryFn: () => getAuditSummary({ from: filters.from, to: filters.to }) });
 
   return (
-    <div className="grid gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Audit Log</h1>
-        <p className="text-sm text-muted">Privileged transaction and security event history.</p>
-      </div>
+    <div className="admin-page grid gap-6 lg:gap-8">
+      <PageHeader eyebrow="Governance" title="Audit Log" detail="Privileged transaction and security event history." />
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="admin-metric-grid grid gap-3 md:grid-cols-4">
         <Stat label="Total events" value={formatNumber(summary.data?.totalEvents)} />
         <Stat label="Failures" value={<Badge tone={summary.data?.failureEvents ? "bad" : "good"}>{formatNumber(summary.data?.failureEvents)}</Badge>} />
         <Stat label="Reversals" value={formatNumber(summary.data?.reversalEvents)} />
@@ -38,7 +35,7 @@ export function AdminAuditLogPage() {
         <Panel
           title="Audit events"
           action={
-            <div className="grid w-full max-w-5xl grid-cols-6 gap-2">
+            <div className="admin-filter-grid grid w-full max-w-5xl grid-cols-6 gap-2">
               <Select value={filters.action} onChange={(event) => updateFilter(setFilters, "action", event.target.value)}>
                 <option value="">All actions</option>
                 <option value="TRANSACTION_INITIATED">Transaction initiated</option>

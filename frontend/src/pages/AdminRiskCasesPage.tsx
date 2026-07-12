@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
-import { Badge, Button, EmptyState, Input, Panel, Select, Stat } from "../components/ui";
+import { Badge, Button, EmptyState, Input, PageHeader, Panel, Select, Stat } from "../components/ui";
 import { addRiskCaseNote, claimRiskCase, getRiskCaseSummary, searchRiskCases, updateRiskCaseStatus } from "../lib/queries";
 import type { RiskCase, RiskCasePriority, RiskCaseStatus } from "../types";
 
@@ -56,13 +56,10 @@ export function AdminRiskCasesPage() {
   });
 
   return (
-    <div className="grid gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Risk Cases</h1>
-        <p className="text-sm text-muted">Internal case workflow for risk alerts that need admin investigation.</p>
-      </div>
+    <div className="admin-page grid gap-6 lg:gap-8">
+      <PageHeader eyebrow="Case management" title="Risk Cases" detail="Own, investigate, document, and resolve operational risk cases." />
 
-      <div className="grid gap-3 md:grid-cols-5">
+      <div className="admin-metric-grid grid gap-3 md:grid-cols-5">
         <Stat label="Total cases" value={formatNumber(summary.data?.totalCases)} />
         <Stat label="Open" value={<Badge tone={summary.data?.openCases ? "warn" : "good"}>{formatNumber(summary.data?.openCases)}</Badge>} />
         <Stat label="In review" value={formatNumber(summary.data?.inReviewCases)} />
@@ -74,7 +71,7 @@ export function AdminRiskCasesPage() {
         <Panel
           title="Case queue"
           action={
-            <div className="grid w-full max-w-6xl grid-cols-8 gap-2">
+            <div className="admin-filter-grid grid w-full max-w-6xl grid-cols-8 gap-2">
               <Select value={filters.status} onChange={(event) => updateFilter(setFilters, "status", event.target.value)}>
                 <option value="">All status</option>
                 <option value="OPEN">Open</option>
