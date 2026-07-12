@@ -911,6 +911,41 @@ describe("customer shell navigation", () => {
     expect(screen.queryByRole("link", { name: "Admin Accounts" })).not.toBeInTheDocument();
   });
 
+  it("supports customer navigation controls, quick search, and notification access", async () => {
+    const user = userEvent.setup();
+    mockFetch((url) => {
+      if (url.includes("/api/notifications/summary")) {
+        return jsonResponse({ total: 3, unread: 2, bySeverity: {}, byType: {}, bySourceType: {} });
+      }
+      return undefined;
+    });
+    renderApp("/", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    await screen.findByRole("heading", { name: "Dashboard" });
+    await user.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+    expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open navigation" }));
+    expect(screen.getByRole("complementary", { name: "Mobile customer navigation" })).toHaveAttribute("aria-hidden", "false");
+    await user.click(screen.getByRole("button", { name: "Close menu" }));
+    await user.type(screen.getByRole("textbox", { name: "Search customer console" }), "recipient");
+    expect(screen.getByLabelText("Customer search results")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Recipients" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Notifications, 2 unread" })).toBeInTheDocument();
+  });
+
+  it("persists the customer theme preference", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("customer-theme", "dark");
+    mockFetch();
+    renderApp("/", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    await screen.findByRole("heading", { name: "Dashboard" });
+    expect(document.documentElement).toHaveClass("dark");
+    await user.click(screen.getByRole("button", { name: "Use light mode" }));
+    expect(document.documentElement).not.toHaveClass("dark");
+    expect(window.localStorage.getItem("customer-theme")).toBe("light");
+  });
+
   it("shows the admin operations shell for admin users at the admin overview", async () => {
     mockFetch();
     renderApp("/admin", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));

@@ -253,3 +253,63 @@ select.admin-control {
 @media (max-width: 639px) {
   .admin-filter-grid { grid-template-columns: 1fr !important; }
 }
+
+
+/* Customer Financial Console */
+.customer-sidebar { transition: width 180ms ease; }
+.customer-nav-link { position:relative; display:flex; min-height:44px; align-items:center; gap:.75rem; border-radius:.8rem; padding:0 .8rem; color:rgba(209,250,229,.68); font-size:.875rem; font-weight:600; transition:background-color 150ms,color 150ms,transform 150ms; }
+.customer-nav-link:hover { background:rgba(255,255,255,.08); color:#fff; }
+.customer-nav-link-active { background:rgba(110,231,183,.15); color:#a7f3d0; box-shadow:inset 0 0 0 1px rgba(167,243,208,.12); }
+.customer-unread-badge { display:grid; min-width:1.25rem; height:1.25rem; place-items:center; border-radius:999px; background:#fb7185; padding:0 .3rem; color:#fff; font-size:.625rem; font-weight:800; }
+.customer-icon-button { display:inline-grid; height:2.5rem; width:2.5rem; flex:none; place-items:center; border:1px solid #d8dee8; border-radius:.75rem; color:#475569; transition:background-color 150ms,color 150ms; }
+.customer-icon-button:hover { background:#ecfdf5; color:#047857; }
+.customer-search { height:2.5rem; width:100%; border:1px solid #d8dee8; border-radius:.8rem; background:#f8fafc; padding:0 4rem 0 2.25rem; font-size:.875rem; outline:none; transition:background-color 150ms,border-color 150ms,box-shadow 150ms; }
+.customer-search:focus { border-color:#10b981; background:#fff; box-shadow:0 0 0 4px rgba(16,185,129,.1); }
+.customer-page > div { width:100%; }
+.customer-page section { border-radius:1.25rem; }
+.customer-page section:not(.customer-hero) { box-shadow:0 1px 2px rgba(15,23,42,.04),0 12px 36px rgba(15,23,42,.045); }
+.customer-page table { min-width:680px; font-variant-numeric:tabular-nums; }
+.customer-page thead { background:#f8fafc; color:#64748b; }
+.customer-page th { padding:.75rem 1rem; font-size:.6875rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; white-space:nowrap; }
+.customer-page td { padding:.85rem 1rem; border-top:1px solid #edf1f4; vertical-align:middle; }
+.customer-page tbody tr { transition:background-color 120ms; }
+.customer-page tbody tr:hover { background:#f8fafc; }
+.customer-page input:not(.customer-search),.customer-page select,.customer-page textarea { border-radius:.75rem; font-variant-numeric:tabular-nums; }
+.customer-page h1 { letter-spacing:-.025em; }
+.customer-page button:focus-visible,.customer-page a:focus-visible,.customer-page input:focus-visible,.customer-page select:focus-visible,.customer-console header button:focus-visible,.customer-console aside a:focus-visible { outline:2px solid #10b981; outline-offset:2px; }
+.customer-hero { position:relative; }
+.customer-hero::after { content:""; position:absolute; width:26rem; height:26rem; right:-9rem; top:-14rem; border-radius:999px; background:radial-gradient(circle,rgba(110,231,183,.24),rgba(110,231,183,0) 68%); }
+.customer-hero-stat { min-height:8rem; border:1px solid rgba(255,255,255,.1); border-radius:1rem; background:rgba(255,255,255,.07); padding:1rem; backdrop-filter:blur(8px); }
+.customer-hero-stat span,.customer-hero-stat small { display:block; color:rgba(236,253,245,.64); font-size:.75rem; }
+.customer-hero-stat strong { display:block; margin:.45rem 0 .25rem; font-size:1.55rem; font-variant-numeric:tabular-nums; letter-spacing:-.03em; }
+.customer-action { display:inline-flex; height:2.5rem; align-items:center; justify-content:center; gap:.5rem; border-radius:.75rem; padding:0 1rem; font-size:.875rem; font-weight:700; transition:background-color 150ms; }
+.customer-action-light { border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.08); color:#fff; }
+.customer-action-light:hover { background:rgba(255,255,255,.14); }
+.customer-account-card { border:1px solid #e2e8f0; border-radius:1rem; background:linear-gradient(145deg,#fff,#f8fafc); padding:1.1rem; }
+.customer-text-link { display:inline-flex; align-items:center; gap:.35rem; color:#047857; font-size:.8125rem; font-weight:700; }
+.customer-quick-action { display:flex; align-items:center; gap:.8rem; border:1px solid #e2e8f0; border-radius:1rem; padding:.85rem; transition:border-color 150ms,transform 150ms,box-shadow 150ms; }
+.customer-quick-action:hover { border-color:#6ee7b7; transform:translateY(-1px); box-shadow:0 8px 24px rgba(15,23,42,.06); }
+.customer-quick-action > span { display:grid; height:2.5rem; width:2.5rem; flex:none; place-items:center; border-radius:.75rem; }
+.customer-quick-action > span svg { height:1.1rem; width:1.1rem; }
+.customer-quick-action strong,.customer-quick-action small { display:block; }
+.customer-quick-action strong { font-size:.875rem; }
+.customer-quick-action small { margin-top:.1rem; color:#64748b; font-size:.7rem; line-height:1rem; }
+.dark .customer-console .customer-search { border-color:#334155; background:#0f1f1b; color:#f8fafc; }
+.dark .customer-console .customer-icon-button { border-color:#334155; color:#cbd5e1; }
+.dark .customer-console .customer-icon-button:hover { background:#11342c; color:#6ee7b7; }
+.dark .customer-page .bg-white,.dark .customer-page .bg-panel { background-color:#0d1b18 !important; }
+.dark .customer-page section:not(.customer-hero),.dark .customer-account-card { border-color:#263b36; background:#0d1b18; color:#f1f5f9; }
+.dark .customer-page .border-line,.dark .customer-page td { border-color:#263b36 !important; }
+.dark .customer-page .text-ink,.dark .customer-page .text-slate-950,.dark .customer-page .text-slate-900 { color:#f1f5f9 !important; }
+.dark .customer-page .text-muted,.dark .customer-page .text-slate-600,.dark .customer-page .text-slate-500 { color:#94a3b8 !important; }
+.dark .customer-page thead { background:#11231f; color:#94a3b8; }
+.dark .customer-page tbody tr:hover { background:#11231f; }
+.dark .customer-page input,.dark .customer-page select,.dark .customer-page textarea { border-color:#334b45 !important; background:#091411 !important; color:#f8fafc !important; }
+@media (max-width:639px) {
+  .customer-page { padding:1rem; }
+  .customer-page > div { gap:1rem; }
+  .customer-page section:not(.customer-hero) > div:first-child:not(:only-child) { align-items:flex-start; flex-direction:column; gap:.6rem; padding-top:.85rem; padding-bottom:.85rem; }
+  .customer-page section:not(.customer-hero) > div:first-child:not(:only-child) > :last-child { width:100%; overflow-x:auto; }
+  .customer-hero { padding:1.25rem; border-radius:1.25rem; }
+  .customer-hero-stat { min-height:6.75rem; }
+}
