@@ -192,6 +192,12 @@
 			<artifactId>embedded-redis</artifactId>
 			<version>0.7.3</version>
 			<scope>test</scope>
+			<exclusions>
+				<exclusion>
+					<groupId>org.slf4j</groupId>
+					<artifactId>slf4j-simple</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		
 		<!-- Performance Testing Dependencies -->
@@ -337,6 +343,7 @@
 				<artifactId>maven-surefire-plugin</artifactId>
 				<version>3.2.5</version>
 				<configuration>
+					<argLine>@{argLine} -Xshare:off -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
 					<includes>
 						<include>**/*Test.java</include>
 					</includes>
