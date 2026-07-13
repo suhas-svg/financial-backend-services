@@ -36,7 +36,7 @@ test("customer can register, login, create accounts, move money, and view transa
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(page.getByText(username)).toBeVisible();
 
-  await page.getByRole("link", { name: "Accounts" }).click();
+  await page.getByRole("navigation", { name: "Customer navigation" }).getByRole("link", { name: "Accounts", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Create account" })).toBeVisible();
   await page.getByLabel("Opening balance").fill("200");
   await page.getByRole("button", { name: "Create account" }).click();
@@ -48,7 +48,7 @@ test("customer can register, login, create accounts, move money, and view transa
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("row").filter({ hasText: "$50.00" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Move Money" }).click();
+  await page.getByRole("navigation", { name: "Customer navigation" }).getByRole("link", { name: "Move Money", exact: true }).click();
   const deposit = panel(page, "Deposit");
   await deposit.getByLabel("Account").selectOption({ index: 1 });
   await deposit.getByLabel("Amount").fill("25");
@@ -70,13 +70,26 @@ test("customer can register, login, create accounts, move money, and view transa
   await transfer.getByLabel("Reference").fill("e2e-transfer");
   await submitTransaction(page, transfer.getByRole("button", { name: "Transfer" }), "transfer");
 
-  await page.getByRole("link", { name: "Transactions" }).click();
+  await page.getByRole("navigation", { name: "Customer navigation" }).getByRole("link", { name: "Transactions", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Transaction history" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "DEPOSIT" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "WITHDRAWAL" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "TRANSFER" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Dashboard" }).click();
+  await page.getByRole("navigation", { name: "Customer navigation" }).getByRole("link", { name: "Dashboard", exact: true }).click();
   await expect(page.getByText("Available balance")).toBeVisible();
-  await expect(page.getByText("Success rate")).toBeVisible();
+  await expect(page.getByText(/success rate/i)).toBeVisible();
+
+  const customerRoutes = [
+    ["/beneficiaries", "Recipients"],
+    ["/scheduled-transfers", "Scheduled transfers"],
+    ["/disputes", "Disputes"],
+    ["/statements", "Statements"],
+    ["/notifications", "Notifications"],
+    ["/security", "Security"]
+  ] as const;
+  for (const [route, heading] of customerRoutes) {
+    await page.goto(route);
+    await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+  }
 });

@@ -17,31 +17,45 @@ test("admin can open monitoring pages when logged in with admin credentials", as
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await page.goto("/admin");
   await expect(page.getByRole("heading", { name: "Operations overview" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Admin Accounts", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Monitoring", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Ops Transactions", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Audit Log", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Risk Alerts", exact: true })).toBeVisible();
+  const adminNavigation = page.getByRole("navigation", { name: "Admin navigation" });
+  await expect(adminNavigation.getByRole("link", { name: "Accounts", exact: true })).toBeVisible();
+  await expect(adminNavigation.getByRole("link", { name: "Service health", exact: true })).toBeVisible();
+  await expect(adminNavigation.getByRole("link", { name: "Transactions", exact: true })).toBeVisible();
+  await expect(adminNavigation.getByRole("link", { name: "Audit Log", exact: true })).toBeVisible();
+  await expect(adminNavigation.getByRole("link", { name: "Risk Alerts", exact: true })).toBeVisible();
 
-  await page.getByRole("link", { name: "Monitoring", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Monitoring" })).toBeVisible();
-  await expect(page.getByText("Account health")).toBeVisible();
-  await expect(page.getByText("Transaction health")).toBeVisible();
+  await adminNavigation.getByRole("link", { name: "Service health", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Service health" })).toBeVisible();
+  await expect(page.getByText("Account metrics")).toBeVisible();
+  await expect(page.getByText("Transaction stats")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Available metrics" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Audit Log", exact: true }).click();
+  await page.getByRole("navigation", { name: "Admin navigation" }).getByRole("link", { name: "Audit Log", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Audit Log" })).toBeVisible();
   await expect(page.getByText("Total events")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Audit events" })).toBeVisible();
   await expect(page.getByPlaceholder("User ID")).toBeVisible();
   await expect(page.getByPlaceholder("Transaction ID")).toBeVisible();
 
-  await page.getByRole("link", { name: "Risk Alerts", exact: true }).click();
+  await page.getByRole("navigation", { name: "Admin navigation" }).getByRole("link", { name: "Risk Alerts", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Risk Alerts" })).toBeVisible();
   await expect(page.getByText("Total alerts")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Review queue" })).toBeVisible();
   await expect(page.getByPlaceholder("User ID")).toBeVisible();
   await expect(page.getByPlaceholder("Transaction ID")).toBeVisible();
+
+  const adminRoutes = [
+    ["/admin/accounts", "Account operations"],
+    ["/admin/transactions", "Transaction operations"],
+    ["/admin/reconciliation", "Reconciliation"],
+    ["/admin/risk-cases", "Risk Cases"],
+    ["/admin/disputes", "Disputes"],
+    ["/admin/investigations", "Investigations"]
+  ] as const;
+  for (const [route, heading] of adminRoutes) {
+    await page.goto(route);
+    await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+  }
 });
 
 test("normal user cannot see or open admin routes", async ({ page }) => {
@@ -56,9 +70,9 @@ test("normal user cannot see or open admin routes", async ({ page }) => {
   await signIn(page, username, customerPassword);
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(page.getByText("Operations")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Admin Accounts" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Operations Console" })).toHaveCount(0);
 
   await page.goto("/admin/monitoring");
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Monitoring" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Service health" })).toHaveCount(0);
 });
