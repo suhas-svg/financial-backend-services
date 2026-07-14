@@ -30,6 +30,8 @@ class LedgerReconciliationServiceTest {
     @Mock private JournalStateEventRepository stateRepository;
     @Mock private LedgerBalanceProjectionRepository projectionRepository;
     @Mock private ReconciliationExceptionNoteRepository noteRepository;
+    @Mock private LedgerAccountRepository accountRepository;
+    @Mock private ReconciliationCheckResultRepository checkResultRepository;
 
     private LedgerReconciliationService service;
     private LocalDate businessDate;
@@ -43,7 +45,9 @@ class LedgerReconciliationServiceTest {
                 postingRepository,
                 stateRepository,
                 projectionRepository,
-                noteRepository);
+                noteRepository,
+                accountRepository,
+                checkResultRepository);
         businessDate = LocalDate.of(2026, 6, 24);
     }
 
@@ -87,10 +91,8 @@ class LedgerReconciliationServiceTest {
 
         assertThat(result.status()).isEqualTo(ReconciliationRunStatus.COMPLETED_WITH_EXCEPTIONS);
         assertThat(result.criticalExceptions()).isEqualTo(1);
-        verify(exceptionRepository).linkExistingToRun(existing, result.runId());
-        verify(exceptionRepository, never()).save(argThat(saved ->
-                saved instanceof ReconciliationException
-                        && ((ReconciliationException) saved).getFingerprint().equals(existing.getFingerprint())));
+        verify(exceptionRepository).linkToRun(result.runId(), existing.getExceptionId(), false);
+        verify(exceptionRepository).save(existing);
     }
 
     @Test
@@ -125,6 +127,40 @@ class LedgerReconciliationServiceTest {
                                 "projection:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb:posted-balance")));
         verify(projectionRepository, never()).save(any());
         assertThat(projection.getPostedBalance()).isEqualByComparingTo("99.00");
+    }
+
+    @Test
+    void projectionRecomputationIncludesOpeningBalanceAndImmutableReversedJournalHistory() {
+        UUID accountId = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID clearingId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        UUID originalId = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        UUID reversalId = UUID.fromString("44444444-4444-4444-4444-444444444444");
+        JournalTransaction original = journal(originalId, "JRN-ORIGINAL", businessDate);
+        JournalTransaction reversal = journal(reversalId, "JRN-REVERSAL", businessDate);
+        LedgerBalanceProjection customerProjection = LedgerBalanceProjection.open(accountId, new BigDecimal("100.00"));
+        LedgerBalanceProjection clearingProjection = LedgerBalanceProjection.open(clearingId, BigDecimal.ZERO);
+
+        when(runRepository.tryAcquireDailyRunLock(businessDate, ReconciliationType.DAILY_LEDGER)).thenReturn(true);
+        when(runRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(journalRepository.findAllByEffectiveDateLessThanEqual(businessDate)).thenReturn(List.of(original, reversal));
+        when(stateRepository.findFirstByJournalIdOrderByEventSequenceDesc(originalId))
+                .thenReturn(Optional.of(state(originalId, JournalState.REVERSED)));
+        when(stateRepository.findFirstByJournalIdOrderByEventSequenceDesc(reversalId))
+                .thenReturn(Optional.of(state(reversalId, JournalState.POSTED)));
+        when(postingRepository.findByJournalIdOrderByPostingSequence(originalId)).thenReturn(List.of(
+                posting(originalId, clearingId, PostingDirection.DEBIT, "1.25"),
+                posting(originalId, accountId, PostingDirection.CREDIT, "1.25")));
+        when(postingRepository.findByJournalIdOrderByPostingSequence(reversalId)).thenReturn(List.of(
+                posting(reversalId, clearingId, PostingDirection.CREDIT, "1.25"),
+                posting(reversalId, accountId, PostingDirection.DEBIT, "1.25")));
+        when(projectionRepository.findAll()).thenReturn(List.of(customerProjection, clearingProjection));
+
+        ReconciliationRunResult result = service.runDaily(businessDate, "ops");
+
+        assertThat(result.status()).isEqualTo(ReconciliationRunStatus.COMPLETED);
+        assertThat(result.totalExceptions()).isZero();
+        verify(exceptionRepository, never()).save(argThat(value -> value.getCheckCode() == ReconciliationCheckCode.PROJECTION_RECOMPUTATION));
+        verify(checkResultRepository, times(2)).save(any(ReconciliationCheckResult.class));
     }
 
     @Test

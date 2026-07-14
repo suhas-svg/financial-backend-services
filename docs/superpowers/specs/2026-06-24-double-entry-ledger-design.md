@@ -320,6 +320,7 @@ Runs are immutable summaries with append-only check results. Reruns create new r
 - Journal and posting currency consistency.
 - Legal lifecycle transitions and required reversal links.
 - Projection recomputation versus stored projection.
+- Projection recomputation starts from the projection's persisted opening balance and includes immutable postings whose latest journal state is `POSTED` or `REVERSED`; a reversal journal offsets rather than erases the original journal.
 - Compatibility mirror version and amount drift.
 - Missing transaction, dispute, risk-case, or audit linkage.
 - Stale pending journals beyond the configured threshold.
@@ -331,6 +332,8 @@ Runs are immutable summaries with append-only check results. Reruns create new r
 ### 12.3 Exception queue
 
 `reconciliation_exceptions` uses a stable fingerprint to deduplicate the same unresolved discrepancy across runs. States are `OPEN`, `ACKNOWLEDGED`, `IN_PROGRESS`, `RESOLVED`, and `WAIVED`. Resolution and waiver require a note; waiver additionally requires an admin reason and remains auditable.
+
+Every detected exception is linked to its run and stores currency, expected amount, actual amount, delta, ledger or journal identifiers, and detection time. A later run may automatically resolve an exception only when the corrected control confirms that its fingerprint is no longer present; the system resolution note remains auditable.
 
 Severity is deterministic. Unbalanced journals, unexplained projection drift, and failed compensation are critical. Mirror lag within the retry window is informational and becomes warning/high severity only after configured thresholds.
 

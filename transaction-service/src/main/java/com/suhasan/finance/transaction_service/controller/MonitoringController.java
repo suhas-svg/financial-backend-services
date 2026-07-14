@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -149,7 +150,7 @@ public class MonitoringController {
             
             // HTTP metrics
             Map<String, Object> http = new HashMap<>();
-            http.put("requestsTotal", getCounterValue("http.server.requests"));
+            http.put("requestsTotal", getTimerCount("http.server.requests"));
             http.put("avgResponseTime", getTimerMean("http.server.requests"));
             http.put("errorRate", getHttpErrorRate());
             stats.put("http", http);
@@ -240,8 +241,21 @@ public class MonitoringController {
     }
     
     private double getTimerMean(String name) {
-        return Search.in(meterRegistry).name(name).timer() != null ? 
-                Search.in(meterRegistry).name(name).timer().mean(java.util.concurrent.TimeUnit.MILLISECONDS) : 0.0;
+        var timers = Search.in(meterRegistry).name(name).timers();
+        long count = timers.stream().mapToLong(io.micrometer.core.instrument.Timer::count).sum();
+        if (count == 0) {
+            return 0.0;
+        }
+        double totalMilliseconds = timers.stream()
+                .mapToDouble(timer -> timer.totalTime(TimeUnit.MILLISECONDS))
+                .sum();
+        return totalMilliseconds / count;
+    }
+
+    private long getTimerCount(String name) {
+        return Search.in(meterRegistry).name(name).timers().stream()
+                .mapToLong(io.micrometer.core.instrument.Timer::count)
+                .sum();
     }
     
     private long getJvmMemoryUsed() {
@@ -267,13 +281,17 @@ public class MonitoringController {
     }
     
     private double getHttpErrorRate() {
-        double totalRequests = getCounterValue("http.server.requests");
+        double totalRequests = getTimerCount("http.server.requests");
         double errorRequests = Search.in(meterRegistry)
                 .name("http.server.requests")
-                .tag("status", "5xx")
-                .counters()
+                .tagKeys("status")
+                .timers()
                 .stream()
-                .mapToDouble(counter -> counter.count())
+                .filter(timer -> {
+                    String status = timer.getId().getTag("status");
+                    return status != null && status.startsWith("5");
+                })
+                .mapToDouble(io.micrometer.core.instrument.Timer::count)
                 .sum();
         
         return totalRequests > 0 ? errorRequests / totalRequests : 0.0;

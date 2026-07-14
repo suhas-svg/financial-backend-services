@@ -169,6 +169,19 @@ class TransactionDisputeServiceTest {
     }
 
     @Test
+    void updateStatusRejectsTransitionsFromTerminalDisputes() {
+        TransactionDispute dispute = dispute("dispute-1", DisputeStatus.CLOSED);
+        when(disputeRepository.findById("dispute-1")).thenReturn(Optional.of(dispute));
+
+        assertThatThrownBy(() -> disputeService.updateStatus(
+                "dispute-1",
+                new DisputeStatusUpdateRequest(DisputeStatus.IN_REVIEW, "Reopen"),
+                "ops"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Closed disputes cannot change status");
+    }
+
+    @Test
     void listCustomerDisputes_FiltersByCurrentUser() {
         when(disputeRepository.findAll(any(Specification.class), any(PageRequest.class)))
                 .thenReturn(Page.empty());

@@ -24,6 +24,9 @@ public class LedgerBalanceProjection {
     @Column(name = "posted_balance", nullable = false, precision = 19, scale = 2)
     private BigDecimal postedBalance;
 
+    @Column(name = "opening_balance", nullable = false, precision = 19, scale = 2)
+    private BigDecimal openingBalance;
+
     @Column(name = "pending_balance", nullable = false, precision = 19, scale = 2)
     private BigDecimal pendingBalance;
 
@@ -51,6 +54,7 @@ public class LedgerBalanceProjection {
         }
         LedgerBalanceProjection projection = new LedgerBalanceProjection();
         projection.ledgerAccountId = ledgerAccountId;
+        projection.openingBalance = postedBalance;
         projection.postedBalance = postedBalance;
         projection.pendingDebits = BigDecimal.ZERO;
         projection.pendingCredits = BigDecimal.ZERO;

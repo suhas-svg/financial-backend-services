@@ -139,6 +139,9 @@ public class TransactionDisputeService {
             throw new IllegalArgumentException("Dispute status is required");
         }
         TransactionDispute dispute = findDispute(disputeId);
+        if (dispute.getStatus().isClosedStatus()) {
+            throw new IllegalArgumentException("Closed disputes cannot change status");
+        }
         dispute.setStatus(request.getStatus());
         dispute.setResolutionNote(trimOrNull(request.getResolutionNote()));
         if (request.getStatus().isClosedStatus() && dispute.getClosedAt() == null) {

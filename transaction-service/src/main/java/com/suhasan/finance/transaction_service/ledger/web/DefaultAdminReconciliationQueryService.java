@@ -4,6 +4,7 @@ import com.suhasan.finance.transaction_service.ledger.domain.*;
 import com.suhasan.finance.transaction_service.ledger.repository.ReconciliationExceptionRepository;
 import com.suhasan.finance.transaction_service.ledger.repository.ReconciliationExceptionNoteRepository;
 import com.suhasan.finance.transaction_service.ledger.repository.ReconciliationRunRepository;
+import com.suhasan.finance.transaction_service.ledger.repository.LedgerAccountRepository;
 import com.suhasan.finance.transaction_service.ledger.service.LedgerReconciliationService;
 import com.suhasan.finance.transaction_service.ledger.service.ReconciliationRunResult;
 import org.springframework.stereotype.Service;
@@ -21,16 +22,19 @@ public class DefaultAdminReconciliationQueryService implements AdminReconciliati
     private final ReconciliationRunRepository runRepository;
     private final ReconciliationExceptionRepository exceptionRepository;
     private final ReconciliationExceptionNoteRepository noteRepository;
+    private final LedgerAccountRepository accountRepository;
 
     public DefaultAdminReconciliationQueryService(
             LedgerReconciliationService reconciliationService,
             ReconciliationRunRepository runRepository,
             ReconciliationExceptionRepository exceptionRepository,
-            ReconciliationExceptionNoteRepository noteRepository) {
+            ReconciliationExceptionNoteRepository noteRepository,
+            LedgerAccountRepository accountRepository) {
         this.reconciliationService = reconciliationService;
         this.runRepository = runRepository;
         this.exceptionRepository = exceptionRepository;
         this.noteRepository = noteRepository;
+        this.accountRepository = accountRepository;
     }
 
     @Override
@@ -45,13 +49,9 @@ public class DefaultAdminReconciliationQueryService implements AdminReconciliati
     @Override
     public ReconciliationRunResponse runDaily(LocalDate businessDate, String requestedBy) {
         ReconciliationRunResult result = reconciliationService.runDaily(businessDate, requestedBy);
-        return new ReconciliationRunResponse(
-                result.runId(),
-                result.businessDate(),
-                ReconciliationType.DAILY_LEDGER.name(),
-                result.status().name(),
-                result.totalExceptions(),
-                result.criticalExceptions());
+        return runRepository.findById(result.runId())
+                .map(this::toRunResponse)
+                .orElseThrow(() -> new IllegalStateException("Completed reconciliation run was not persisted"));
     }
 
     @Override
@@ -108,11 +108,17 @@ public class DefaultAdminReconciliationQueryService implements AdminReconciliati
                 run.getBusinessDate(),
                 run.getReconciliationType().name(),
                 run.getStatus().name(),
+                run.getRequestedBy(),
+                run.getStartedAt(),
+                run.getCompletedAt(),
                 run.getTotalExceptions(),
                 run.getCriticalExceptions());
     }
 
     private ReconciliationExceptionResponse toExceptionResponse(ReconciliationException exception) {
+        LedgerAccount ledgerAccount = exception.getLedgerAccountId() == null
+                ? null
+                : accountRepository.findById(exception.getLedgerAccountId()).orElse(null);
         return new ReconciliationExceptionResponse(
                 exception.getExceptionId(),
                 exception.getCheckCode().name(),
@@ -120,6 +126,15 @@ public class DefaultAdminReconciliationQueryService implements AdminReconciliati
                 exception.getStatus().name(),
                 exception.getFingerprint(),
                 exception.getSummary(),
+                exceptionRepository.findLatestRunId(exception.getExceptionId()).orElse(null),
+                exception.getJournalId(),
+                exception.getLedgerAccountId(),
+                ledgerAccount == null ? null : ledgerAccount.getExternalAccountId(),
+                exception.getCurrency(),
+                exception.getExpectedAmount(),
+                exception.getActualAmount(),
+                exception.getDeltaAmount(),
+                exception.getCreatedAt(),
                 exception.getAssignedTo(),
                 exception.getResolutionNote(),
                 noteRepository.findByExceptionIdOrderByCreatedAtDesc(exception.getExceptionId()).stream()
