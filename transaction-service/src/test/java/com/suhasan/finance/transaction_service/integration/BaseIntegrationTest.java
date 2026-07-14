@@ -37,6 +37,10 @@ import javax.sql.DataSource;
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @TestPropertySource(properties = {
         "spring.jpa.hibernate.ddl-auto=create-drop",
+        "account-service.timeout=1000",
+        "account-service.resilience.time-limiter.timeout=1000",
+        "account-service.resilience.retry.max-attempts=1",
+        "account-service.resilience.circuit-breaker.minimum-number-of-calls=100",
         "logging.level.org.springframework.web=DEBUG",
         "logging.level.com.suhasan.finance.transaction_service=DEBUG"
 })

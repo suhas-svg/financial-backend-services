@@ -45,7 +45,6 @@ public class AuthService {
             try {
                 // 1) Check uniqueness
                 if (userRepo.findByUsername(req.getUsername()).isPresent()) {
-                    registrationFailedCounter.increment();
                     throw new IllegalArgumentException("Username already taken");
                 }
                 // 2) Load or create ROLE_USER
