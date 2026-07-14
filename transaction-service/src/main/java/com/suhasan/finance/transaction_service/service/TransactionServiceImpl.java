@@ -653,6 +653,13 @@ public class TransactionServiceImpl implements TransactionService {
     @Override
     @Transactional(noRollbackFor = Exception.class)
     @CacheEvict(value = "transaction:history", allEntries = true)
+    public TransactionResponse reverseTransaction(String transactionId, String reason, String userId) {
+        return reverseTransaction(transactionId, reason, userId, null);
+    }
+
+    @Override
+    @Transactional(noRollbackFor = Exception.class)
+    @CacheEvict(value = "transaction:history", allEntries = true)
     public TransactionResponse reverseTransaction(String transactionId, String reason, String userId,
             String idempotencyKey) {
         log.info("Processing reversal request for transaction {} by user {}", transactionId, userId);

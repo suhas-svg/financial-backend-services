@@ -39,6 +39,42 @@ public class AccountServiceStubs {
                         .withHeader("Content-Type", "application/json")
                         .withBody("{\"accountId\":1,\"operationId\":\"default-op\",\"applied\":true,\"newBalance\":10000.00,\"version\":1,\"status\":\"APPLIED\"}")));
 
+        wireMockServer.stubFor(post(urlMatching("/api/internal/accounts/.*/spending-limit-reservations"))
+                .atPriority(10)
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("{\"allowed\":true,\"replay\":false,\"dailyLimit\":10000.00,\"dailyUsed\":0.00,\"remaining\":10000.00,\"reason\":null}")));
+
+        wireMockServer.stubFor(delete(urlMatching("/api/internal/accounts/.*/spending-limit-reservations/.*"))
+                .atPriority(10)
+                .willReturn(aResponse().withStatus(204)));
+
+        wireMockServer.stubFor(post(urlMatching("/api/internal/accounts/.*/holds"))
+                .atPriority(10)
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("{\"holdId\":\"default-hold\",\"accountId\":1,\"applied\":true,\"ledgerBalance\":10000.00,\"availableBalance\":9000.00,\"version\":1,\"status\":\"PLACED\",\"message\":null}")));
+
+        wireMockServer.stubFor(post(urlMatching("/api/internal/accounts/.*/holds/.*/capture"))
+                .atPriority(10)
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("{\"holdId\":\"default-hold\",\"accountId\":1,\"applied\":true,\"ledgerBalance\":9000.00,\"availableBalance\":9000.00,\"version\":2,\"status\":\"CAPTURED\",\"message\":null}")));
+
+        wireMockServer.stubFor(post(urlMatching("/api/internal/accounts/.*/holds/.*/release"))
+                .atPriority(10)
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("{\"holdId\":\"default-hold\",\"accountId\":1,\"applied\":true,\"ledgerBalance\":10000.00,\"availableBalance\":10000.00,\"version\":2,\"status\":\"RELEASED\",\"message\":null}")));
+
+        wireMockServer.stubFor(put(urlMatching("/api/internal/accounts/.*/balance"))
+                .atPriority(10)
+                .willReturn(aResponse().withStatus(204)));
+
         wireMockServer.stubFor(put(urlMatching("/api/accounts/.*/balance"))
                 .atPriority(10)
                 .willReturn(aResponse()
@@ -238,8 +274,11 @@ public class AccountServiceStubs {
         int legacyCalls = wireMockServer.countRequestsMatching(
                 putRequestedFor(urlEqualTo("/api/accounts/" + accountId + "/balance")).build()
         ).getCount();
+        int holdCalls = wireMockServer.countRequestsMatching(
+                postRequestedFor(urlMatching("/api/internal/accounts/" + accountId + "/holds(?:/.*)?")).build()
+        ).getCount();
 
-        if (internalCalls + legacyCalls <= 0) {
+        if (internalCalls + legacyCalls + holdCalls <= 0) {
             wireMockServer.verify(1, postRequestedFor(urlEqualTo("/api/internal/accounts/" + accountId + "/balance-ops")));
         }
     }

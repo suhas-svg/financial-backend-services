@@ -82,7 +82,7 @@ class FullSystemIntegrationE2ETest {
                         .withNetwork(network)
                         .withNetworkAliases("account-service-e2e")
                         .withEnv("SPRING_PROFILES_ACTIVE", "e2e")
-                        .withEnv("SPRING_DATASOURCE_URL", "jdbc:postgresql://postgres-e2e:5432/fullsystem_test")
+                        .withEnv("SPRING_DATASOURCE_URL", "jdbc:postgresql://postgres-e2e:5432/fullsystem_test?currentSchema=account_service")
                         .withEnv("SPRING_DATASOURCE_USERNAME", "testuser")
                         .withEnv("SPRING_DATASOURCE_PASSWORD", "testpass")
                         .withEnv("JWT_SECRET", "test-only-jwt-secret-key-32-bytes-min")
@@ -95,7 +95,8 @@ class FullSystemIntegrationE2ETest {
         @DynamicPropertySource
         static void configureProperties(DynamicPropertyRegistry registry) {
                 // PostgreSQL configuration
-                registry.add("spring.datasource.url", postgres::getJdbcUrl);
+                registry.add("spring.datasource.url",
+                                () -> postgres.getJdbcUrl() + "&currentSchema=transaction_service");
                 registry.add("spring.datasource.username", postgres::getUsername);
                 registry.add("spring.datasource.password", postgres::getPassword);
                 registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
