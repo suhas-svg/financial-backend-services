@@ -1650,6 +1650,8 @@ describe("admin disputes", () => {
         && String(init.body).includes("Customer claim accepted.")
       )).toBe(true);
     });
+    expect(await screen.findByText("This dispute is closed. Status transitions are no longer available.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve dispute" })).not.toBeInTheDocument();
   });
 });
 

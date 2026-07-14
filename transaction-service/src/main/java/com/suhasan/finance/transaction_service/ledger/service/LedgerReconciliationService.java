@@ -19,6 +19,8 @@ public class LedgerReconciliationService {
     private final JournalStateEventRepository stateRepository;
     private final LedgerBalanceProjectionRepository projectionRepository;
     private final ReconciliationExceptionNoteRepository noteRepository;
+    private final LedgerAccountRepository accountRepository;
+    private final ReconciliationCheckResultRepository checkResultRepository;
 
     public LedgerReconciliationService(
             ReconciliationRunRepository runRepository,
@@ -27,7 +29,9 @@ public class LedgerReconciliationService {
             JournalPostingRepository postingRepository,
             JournalStateEventRepository stateRepository,
             LedgerBalanceProjectionRepository projectionRepository,
-            ReconciliationExceptionNoteRepository noteRepository) {
+            ReconciliationExceptionNoteRepository noteRepository,
+            LedgerAccountRepository accountRepository,
+            ReconciliationCheckResultRepository checkResultRepository) {
         this.runRepository = runRepository;
         this.exceptionRepository = exceptionRepository;
         this.journalRepository = journalRepository;
@@ -35,6 +39,8 @@ public class LedgerReconciliationService {
         this.stateRepository = stateRepository;
         this.projectionRepository = projectionRepository;
         this.noteRepository = noteRepository;
+        this.accountRepository = accountRepository;
+        this.checkResultRepository = checkResultRepository;
     }
 
     @Transactional
@@ -48,35 +54,65 @@ public class LedgerReconciliationService {
                 ReconciliationRun.start(businessDate, ReconciliationType.DAILY_LEDGER, requestedBy));
         ReconciliationCounters counters = new ReconciliationCounters();
         Map<UUID, BigDecimal> recomputedPostedBalances = new HashMap<>();
+        int checkedJournals = 0;
+        int journalExceptions = 0;
 
         for (JournalTransaction journal : journalRepository.findAllByEffectiveDateLessThanEqual(businessDate)) {
             Optional<JournalStateEvent> latestState =
                     stateRepository.findFirstByJournalIdOrderByEventSequenceDesc(journal.getJournalId());
-            if (latestState.isEmpty() || latestState.get().getState() != JournalState.POSTED) {
+            if (latestState.isEmpty()
+                    || (latestState.get().getState() != JournalState.POSTED
+                    && latestState.get().getState() != JournalState.REVERSED)) {
                 continue;
             }
+            checkedJournals++;
             List<JournalPosting> postings = postingRepository
                     .findByJournalIdOrderByPostingSequence(journal.getJournalId());
-            reconcileJournalBalance(run.getRunId(), journal, postings, counters);
+            journalExceptions += reconcileJournalBalance(run.getRunId(), journal, postings, counters);
             accumulatePostedBalances(postings, recomputedPostedBalances);
         }
 
-        for (LedgerBalanceProjection projection : Optional.ofNullable(projectionRepository.findAll()).orElse(List.of())) {
-            BigDecimal recomputed = recomputedPostedBalances.getOrDefault(
+        checkResultRepository.save(ReconciliationCheckResult.completed(
+                run.getRunId(),
+                ReconciliationCheckCode.JOURNAL_BALANCE_BY_CURRENCY,
+                ReconciliationSeverity.CRITICAL,
+                checkedJournals,
+                journalExceptions,
+                "Verified debit and credit equality for immutable posted journal history"));
+
+        List<LedgerBalanceProjection> projections = Optional.ofNullable(projectionRepository.findAll()).orElse(List.of());
+        Map<UUID, LedgerAccount> accounts = accountRepository.findAllById(
+                        projections.stream().map(LedgerBalanceProjection::getLedgerAccountId).toList())
+                .stream().collect(java.util.stream.Collectors.toMap(LedgerAccount::getLedgerAccountId, account -> account));
+        Set<String> observedProjectionFingerprints = new HashSet<>();
+        int projectionExceptions = 0;
+        for (LedgerBalanceProjection projection : projections) {
+            BigDecimal journalMovement = recomputedPostedBalances.getOrDefault(
                     projection.getLedgerAccountId(), BigDecimal.ZERO);
+            BigDecimal recomputed = projection.getOpeningBalance().add(journalMovement);
             if (projection.getPostedBalance().compareTo(recomputed) != 0) {
+                String fingerprint = "projection:" + projection.getLedgerAccountId() + ":posted-balance";
+                observedProjectionFingerprints.add(fingerprint);
+                LedgerAccount account = accounts.get(projection.getLedgerAccountId());
                 recordException(
                         run.getRunId(),
-                        ReconciliationException.open(
-                                ReconciliationCheckCode.PROJECTION_RECOMPUTATION,
-                                ReconciliationSeverity.CRITICAL,
-                                "projection:" + projection.getLedgerAccountId() + ":posted-balance",
-                                null,
+                        ReconciliationException.projectionDrift(
                                 projection.getLedgerAccountId(),
-                                "Projection posted balance does not match recomputed journal total"),
+                                account == null ? null : account.getCurrency(),
+                                recomputed,
+                                projection.getPostedBalance()),
                         counters);
+                projectionExceptions++;
             }
         }
+        resolveClearedProjectionExceptions(observedProjectionFingerprints);
+        checkResultRepository.save(ReconciliationCheckResult.completed(
+                run.getRunId(),
+                ReconciliationCheckCode.PROJECTION_RECOMPUTATION,
+                ReconciliationSeverity.CRITICAL,
+                projections.size(),
+                projectionExceptions,
+                "Compared projections with opening balance plus immutable journal movement"));
 
         run.complete(counters.totalExceptions, counters.criticalExceptions);
         runRepository.save(run);
@@ -121,7 +157,7 @@ public class LedgerReconciliationService {
         return exception;
     }
 
-    private void reconcileJournalBalance(
+    private int reconcileJournalBalance(
             UUID runId,
             JournalTransaction journal,
             List<JournalPosting> postings,
@@ -135,22 +171,23 @@ public class LedgerReconciliationService {
         Set<String> currencies = new HashSet<>();
         currencies.addAll(debits.keySet());
         currencies.addAll(credits.keySet());
+        int exceptions = 0;
         for (String currency : currencies) {
             BigDecimal debit = debits.getOrDefault(currency, BigDecimal.ZERO);
             BigDecimal credit = credits.getOrDefault(currency, BigDecimal.ZERO);
             if (debit.compareTo(credit) != 0) {
                 recordException(
                         runId,
-                        ReconciliationException.open(
-                                ReconciliationCheckCode.JOURNAL_BALANCE_BY_CURRENCY,
-                                ReconciliationSeverity.CRITICAL,
-                                "journal:" + journal.getJournalId() + ":" + currency + ":journal-balance",
+                        ReconciliationException.journalImbalance(
                                 journal.getJournalId(),
-                                null,
-                                "Journal debit and credit totals differ for " + currency),
+                                currency,
+                                debit,
+                                credit),
                         counters);
+                exceptions++;
             }
         }
+        return exceptions;
     }
 
     private void accumulatePostedBalances(
@@ -175,9 +212,26 @@ public class LedgerReconciliationService {
         Optional<ReconciliationException> existing =
                 exceptionRepository.findOpenByFingerprint(exception.getFingerprint());
         if (existing.isPresent()) {
-            exceptionRepository.linkExistingToRun(existing.get(), runId);
+            existing.get().refreshEvidenceFrom(exception);
+            exceptionRepository.save(existing.get());
+            exceptionRepository.linkToRun(runId, existing.get().getExceptionId(), false);
         } else {
             exceptionRepository.save(exception);
+            exceptionRepository.linkToRun(runId, exception.getExceptionId(), true);
+        }
+    }
+
+    private void resolveClearedProjectionExceptions(Set<String> observedFingerprints) {
+        for (ReconciliationException exception : exceptionRepository.findActiveByCheckCode(
+                ReconciliationCheckCode.PROJECTION_RECOMPUTATION)) {
+            if (!observedFingerprints.contains(exception.getFingerprint())) {
+                exception.updateStatus(
+                        ReconciliationExceptionStatus.RESOLVED,
+                        "Automatically resolved after corrected reconciliation confirmed no projection drift",
+                        "system",
+                        exception.getVersion());
+                exceptionRepository.save(exception);
+            }
         }
     }
 

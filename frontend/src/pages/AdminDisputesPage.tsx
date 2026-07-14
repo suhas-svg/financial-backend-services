@@ -188,6 +188,7 @@ function DisputeDetail({
   onAddNote: () => void;
   isUpdating: boolean;
 }) {
+  const isTerminal = ["APPROVED", "DENIED", "CLOSED"].includes(dispute.status);
   const rows = [
     ["Dispute number", dispute.disputeNumber],
     ["Status", dispute.status],
@@ -249,12 +250,18 @@ function DisputeDetail({
           onChange={(event) => onResolutionNoteChange(event.target.value)}
         />
       </label>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <Button variant="secondary" disabled={isUpdating} onClick={() => onStatusChange("IN_REVIEW")}>Mark in review</Button>
-        <Button variant="secondary" disabled={isUpdating} onClick={() => onStatusChange("APPROVED")}>Approve dispute</Button>
-        <Button variant="secondary" disabled={isUpdating} onClick={() => onStatusChange("DENIED")}>Deny dispute</Button>
-        <Button variant="danger" disabled={isUpdating} onClick={() => onStatusChange("CLOSED")}>Close dispute</Button>
-      </div>
+      {isTerminal ? (
+        <p className="rounded-md border border-line bg-surface px-3 py-2 text-sm text-muted">
+          This dispute is closed. Status transitions are no longer available.
+        </p>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button variant="secondary" disabled={isUpdating || dispute.status === "IN_REVIEW"} onClick={() => onStatusChange("IN_REVIEW")}>Mark in review</Button>
+          <Button variant="secondary" disabled={isUpdating} onClick={() => onStatusChange("APPROVED")}>Approve dispute</Button>
+          <Button variant="secondary" disabled={isUpdating} onClick={() => onStatusChange("DENIED")}>Deny dispute</Button>
+          <Button variant="danger" disabled={isUpdating} onClick={() => onStatusChange("CLOSED")}>Close dispute</Button>
+        </div>
+      )}
     </div>
   );
 }

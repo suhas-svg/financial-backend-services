@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @Entity
@@ -37,6 +38,18 @@ public class ReconciliationException {
 
     @Column(name = "summary", nullable = false, length = 500)
     private String summary;
+
+    @Column(name = "currency", length = 3)
+    private String currency;
+
+    @Column(name = "expected_amount", precision = 19, scale = 2)
+    private BigDecimal expectedAmount;
+
+    @Column(name = "actual_amount", precision = 19, scale = 2)
+    private BigDecimal actualAmount;
+
+    @Column(name = "delta_amount", precision = 19, scale = 2)
+    private BigDecimal deltaAmount;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 40)
@@ -78,6 +91,55 @@ public class ReconciliationException {
                 .createdAt(now)
                 .updatedAt(now)
                 .build();
+    }
+
+    public static ReconciliationException projectionDrift(
+            UUID ledgerAccountId,
+            String currency,
+            BigDecimal expectedAmount,
+            BigDecimal actualAmount) {
+        ReconciliationException exception = open(
+                ReconciliationCheckCode.PROJECTION_RECOMPUTATION,
+                ReconciliationSeverity.CRITICAL,
+                "projection:" + ledgerAccountId + ":posted-balance",
+                null,
+                ledgerAccountId,
+                "Projection posted balance does not match opening balance plus immutable journal movement");
+        exception.currency = currency;
+        exception.expectedAmount = expectedAmount;
+        exception.actualAmount = actualAmount;
+        exception.deltaAmount = actualAmount.subtract(expectedAmount);
+        return exception;
+    }
+
+    public static ReconciliationException journalImbalance(
+            UUID journalId,
+            String currency,
+            BigDecimal debitAmount,
+            BigDecimal creditAmount) {
+        ReconciliationException exception = open(
+                ReconciliationCheckCode.JOURNAL_BALANCE_BY_CURRENCY,
+                ReconciliationSeverity.CRITICAL,
+                "journal:" + journalId + ":" + currency + ":journal-balance",
+                journalId,
+                null,
+                "Journal debit and credit totals differ for " + currency);
+        exception.currency = currency;
+        exception.expectedAmount = debitAmount;
+        exception.actualAmount = creditAmount;
+        exception.deltaAmount = creditAmount.subtract(debitAmount);
+        return exception;
+    }
+
+    public void refreshEvidenceFrom(ReconciliationException current) {
+        this.journalId = current.journalId;
+        this.ledgerAccountId = current.ledgerAccountId;
+        this.summary = current.summary;
+        this.currency = current.currency;
+        this.expectedAmount = current.expectedAmount;
+        this.actualAmount = current.actualAmount;
+        this.deltaAmount = current.deltaAmount;
+        this.updatedAt = LocalDateTime.now();
     }
 
     public void updateStatus(ReconciliationExceptionStatus status, String note, String actor, long expectedVersion) {

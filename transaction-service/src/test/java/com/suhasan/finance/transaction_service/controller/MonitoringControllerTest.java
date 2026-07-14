@@ -135,6 +135,22 @@ class MonitoringControllerTest {
     }
 
     @Test
+    void systemStatsAggregateTaggedHttpTimersIntoServiceWideMetrics() {
+        Timer ok = Timer.builder("http.server.requests").tag("status", "200").register(meterRegistry);
+        Timer error = Timer.builder("http.server.requests").tag("status", "500").register(meterRegistry);
+        ok.record(Duration.ofMillis(100));
+        ok.record(Duration.ofMillis(200));
+        error.record(Duration.ofMillis(300));
+
+        var response = controller.getSystemStats();
+
+        Map<String, Object> http = map(response.getBody().get("http"));
+        assertThat(http).containsEntry("requestsTotal", 3L);
+        assertThat((double) http.get("avgResponseTime")).isEqualTo(200.0d);
+        assertThat((double) http.get("errorRate")).isCloseTo(1.0d / 3.0d, org.assertj.core.data.Offset.offset(0.0001d));
+    }
+
+    @Test
     void alertEndpointsReturnStateClearSuppressionAndReportFailures() {
         when(alertingService.getAlertStatistics()).thenReturn(Map.of("warningAlerts", 2.0d));
 

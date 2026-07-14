@@ -64,6 +64,9 @@ financial-backend-services/
 - Reconstruct investigation context across transactions, audit events, risk alerts, risk cases, and case notes.
 - Print investigation reports with current filters, key findings, and a timeline preview.
 - Export investigation timelines as admin-only CSV files using the same investigation filters used by the timeline view.
+- Run daily ledger reconciliation against each projection's persisted opening balance plus complete immutable posting history, including journals later compensated by reversals.
+- Inspect reconciliation run ownership, timestamps, per-check results, run-to-exception links, and expected/actual balance evidence.
+- Treat approved, denied, and closed disputes as terminal in both the API and operations console.
 
 ### Backend Services
 
@@ -252,6 +255,7 @@ Admin pages are protected by `ROLE_ADMIN` and live under `/admin`:
 - `/admin/risk-cases`
 - `/admin/disputes`
 - `/admin/investigations`
+- `/admin/reconciliation`
 
 The Vite dev server proxies browser requests through:
 
