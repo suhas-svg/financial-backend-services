@@ -7,7 +7,7 @@ import { authorizeTransfer, cancelTransferAuthorization, deposit, listAccounts, 
 import { createIdempotencyKey } from "../lib/idempotency";
 import { availableBalance, canDebit } from "../lib/accountBalances";
 import { moneyMovementSchema, transferSchema, type MoneyMovementValues, type TransferValues } from "../lib/schemas";
-import { Button, ErrorNotice, Field, Input, Panel, Select } from "../components/ui";
+import { Button, ErrorNotice, Field, Input, Panel, Select, StatusNotice } from "../components/ui";
 import type { Beneficiary, Transaction } from "../types";
 
 function AccountSelect({ field, debitSource = false, amount = 0 }: { field: UseFormRegisterReturn; debitSource?: boolean; amount?: number }) {
@@ -31,6 +31,9 @@ export function MoveMoneyPage() {
   const transferForm = useForm<TransferValues>({ resolver: zodResolver(transferSchema), defaultValues: { fromAccountId: "", toAccountId: "", beneficiaryId: "", amount: 0, currency: "USD", description: "", reference: "" } });
   const [pendingAuthorization, setPendingAuthorization] = useState<Transaction>();
   const [verificationCode, setVerificationCode] = useState("");
+  const [depositStatus, setDepositStatus] = useState<string>();
+  const [withdrawStatus, setWithdrawStatus] = useState<string>();
+  const [transferStatus, setTransferStatus] = useState<string>();
   const beneficiaries = useQuery({ queryKey: ["beneficiaries", "ACTIVE"], queryFn: () => listBeneficiaries({ status: "ACTIVE" }) });
   const withdrawAmount = Number(withdrawForm.watch("amount") || 0);
   const transferAmount = Number(transferForm.watch("amount") || 0);
@@ -40,13 +43,36 @@ export function MoveMoneyPage() {
     queryClient.invalidateQueries({ queryKey: ["transactions"] });
     queryClient.invalidateQueries({ queryKey: ["stats"] });
   };
-  const depositMutation = useMutation({ mutationFn: (values: MoneyMovementValues) => deposit(values, createIdempotencyKey("deposit")), onSuccess: invalidate });
-  const withdrawMutation = useMutation({ mutationFn: (values: MoneyMovementValues) => withdraw(values, createIdempotencyKey("withdraw")), onSuccess: invalidate });
+  const depositMutation = useMutation({
+    mutationFn: (values: MoneyMovementValues) => deposit(values, createIdempotencyKey("deposit")),
+    onMutate: () => setDepositStatus(undefined),
+    onSuccess: (result, values) => {
+      setDepositStatus(`Deposit complete. ${formatMoney(result.amount, result.currency)} was added to account #${values.accountId}.`);
+      depositForm.reset();
+      invalidate();
+    }
+  });
+  const withdrawMutation = useMutation({
+    mutationFn: (values: MoneyMovementValues) => withdraw(values, createIdempotencyKey("withdraw")),
+    onMutate: () => setWithdrawStatus(undefined),
+    onSuccess: (result, values) => {
+      setWithdrawStatus(`Withdrawal complete. ${formatMoney(result.amount, result.currency)} was withdrawn from account #${values.accountId}.`);
+      withdrawForm.reset();
+      invalidate();
+    }
+  });
   const transferMutation = useMutation({
     mutationFn: (values: TransferValues) => transfer(values, createIdempotencyKey("transfer")),
+    onMutate: () => setTransferStatus(undefined),
     onSuccess: (result) => {
-      if (result.authorizationRequired) setPendingAuthorization(result);
-      else invalidate();
+      if (result.authorizationRequired) {
+        setPendingAuthorization(result);
+        setTransferStatus("Transfer is awaiting additional verification. No money has moved yet.");
+      } else {
+        setTransferStatus(`Transfer complete. ${formatMoney(result.amount, result.currency)} was sent from account #${result.fromAccountId} to account #${result.toAccountId}.`);
+        transferForm.reset();
+        invalidate();
+      }
     }
   });
   const authorizeMutation = useMutation({
@@ -55,7 +81,13 @@ export function MoveMoneyPage() {
       const verified = await verifyStepUpChallenge(pendingAuthorization.authorizationChallengeId, verificationCode);
       return authorizeTransfer(pendingAuthorization.transactionId, verified.proof);
     },
-    onSuccess: () => { setPendingAuthorization(undefined); setVerificationCode(""); transferForm.reset(); invalidate(); }
+    onSuccess: (result) => {
+      setPendingAuthorization(undefined);
+      setVerificationCode("");
+      setTransferStatus(`Transfer complete. ${formatMoney(result.amount, result.currency)} was sent from account #${result.fromAccountId} to account #${result.toAccountId}.`);
+      transferForm.reset();
+      invalidate();
+    }
   });
   const cancelMutation = useMutation({
     mutationFn: () => cancelTransferAuthorization(pendingAuthorization!.transactionId),
@@ -67,26 +99,35 @@ export function MoveMoneyPage() {
       <Panel title="Deposit">
         <form className="grid gap-4" onSubmit={depositForm.handleSubmit((values) => depositMutation.mutate(values))}>
           <ErrorNotice message={depositMutation.error instanceof Error ? depositMutation.error.message : undefined} />
+          <StatusNotice
+            pending={depositMutation.isPending}
+            message={depositMutation.isPending ? "Deposit is processing. You do not need to submit it again." : depositStatus}
+          />
           <Field label="Account" error={depositForm.formState.errors.accountId?.message}>
             <AccountSelect field={depositForm.register("accountId")} />
           </Field>
           <MoneyFields form={depositForm} />
-          <Button type="submit" disabled={depositMutation.isPending}>Deposit</Button>
+          <Button type="submit" disabled={depositMutation.isPending}>{depositMutation.isPending ? "Processing deposit..." : "Deposit"}</Button>
         </form>
       </Panel>
       <Panel title="Withdraw">
         <form className="grid gap-4" onSubmit={withdrawForm.handleSubmit((values) => withdrawMutation.mutate(values))}>
           <ErrorNotice message={withdrawMutation.error instanceof Error ? withdrawMutation.error.message : undefined} />
+          <StatusNotice
+            pending={withdrawMutation.isPending}
+            message={withdrawMutation.isPending ? "Withdrawal is processing. You do not need to submit it again." : withdrawStatus}
+          />
           <Field label="Withdraw account" error={withdrawForm.formState.errors.accountId?.message}>
             <AccountSelect field={withdrawForm.register("accountId")} debitSource amount={withdrawAmount} />
           </Field>
           <MoneyFields form={withdrawForm} />
-          <Button type="submit" disabled={withdrawMutation.isPending}>Withdraw</Button>
+          <Button type="submit" disabled={withdrawMutation.isPending}>{withdrawMutation.isPending ? "Processing withdrawal..." : "Withdraw"}</Button>
         </form>
       </Panel>
       <Panel title="Transfer">
         <form className="grid gap-4" onSubmit={transferForm.handleSubmit((values) => transferMutation.mutate(values))}>
           <ErrorNotice message={transferMutation.error instanceof Error ? transferMutation.error.message : undefined} />
+          <StatusNotice pending={transferMutation.isPending || Boolean(pendingAuthorization)} message={transferMutation.isPending ? "Transfer is processing. You do not need to submit it again." : transferStatus} />
           <Field label="From account" error={transferForm.formState.errors.fromAccountId?.message}>
             <AccountSelect field={transferForm.register("fromAccountId")} debitSource amount={transferAmount} />
           </Field>
@@ -130,7 +171,7 @@ export function MoveMoneyPage() {
           <Field label="Reference" error={transferForm.formState.errors.reference?.message}>
             <Input {...transferForm.register("reference")} />
           </Field>
-          <Button type="submit" disabled={transferMutation.isPending}>Transfer</Button>
+          <Button type="submit" disabled={transferMutation.isPending}>{transferMutation.isPending ? "Processing transfer..." : "Transfer"}</Button>
         </form>
         {pendingAuthorization ? (
           <div role="dialog" aria-modal="true" aria-labelledby="transfer-verification-title" className="mt-4 grid gap-3 rounded-md border border-amber-200 bg-amber-50 p-4">
@@ -173,6 +214,10 @@ function RecipientSelect({ beneficiaries, onSelect }: { beneficiaries: Beneficia
 
 function formatReason(reason: string) {
   return reason.toLowerCase().replace(/_/g, " ");
+}
+
+function formatMoney(amount: number, currency: string) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount);
 }
 
 function MoneyFields({ form }: { form: ReturnType<typeof useForm<MoneyMovementValues>> }) {

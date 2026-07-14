@@ -90,7 +90,25 @@ export function EmptyState({ title, detail }: { title: string; detail: string })
 
 export function ErrorNotice({ message }: { message?: string }) {
   if (!message) return null;
-  return <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-danger">{message}</div>;
+  return <div role="alert" aria-live="assertive" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-danger">{message}</div>;
+}
+
+export function StatusNotice({ message, pending = false }: { message?: string; pending?: boolean }) {
+  if (!message) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={clsx(
+        "rounded-md border p-3 text-sm",
+        pending
+          ? "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200"
+          : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200"
+      )}
+    >
+      {message}
+    </div>
+  );
 }
 
 export function Skeleton({ className }: { className?: string }) {

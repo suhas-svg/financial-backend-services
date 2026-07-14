@@ -752,6 +752,8 @@ describe("customer beneficiaries", () => {
     await user.type(screen.getByLabelText("Destination account ID"), "202");
     await user.click(screen.getByRole("button", { name: "Save recipient" }));
 
+    expect(await screen.findByRole("status")).toHaveTextContent("Rent account was saved and is ready to use.");
+
     await user.click(await screen.findByRole("button", { name: "Edit beneficiary-1" }));
     await user.clear(screen.getByLabelText("Display name"));
     await user.type(screen.getByLabelText("Display name"), "Updated rent account");
@@ -765,6 +767,41 @@ describe("customer beneficiaries", () => {
       expect(calls.some(({ url, init }) => url.includes("/account-api/api/beneficiaries/beneficiary-1") && init?.method === "PUT")).toBe(true);
       expect(calls.some(({ url, init }) => url.includes("/account-api/api/beneficiaries/beneficiary-1") && init?.method === "DELETE")).toBe(true);
     });
+  });
+
+  it("directs customers to Move Money instead of saving one of their own accounts", async () => {
+    const user = userEvent.setup();
+    const { calls } = mockFetch();
+
+    renderApp("/beneficiaries", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    await screen.findByRole("heading", { name: "Recipients" });
+    await user.type(screen.getByLabelText("Display name"), "My checking");
+    await user.type(screen.getByLabelText("Destination account ID"), "101");
+    await user.click(screen.getByRole("button", { name: "Save recipient" }));
+
+    expect(await screen.findByText("This is one of your accounts. Use Move Money to transfer between your own accounts.")).toBeInTheDocument();
+    expect(calls.some(({ url, init }) => url.includes("/account-api/api/beneficiaries") && init?.method === "POST")).toBe(false);
+  });
+
+  it("shows the backend rejection when recipient creation fails", async () => {
+    const user = userEvent.setup();
+    mockFetch((url, init) => {
+      if (url.includes("/api/beneficiaries") && init?.method === "POST") {
+        return jsonResponse({ message: "Destination account not found" }, 400);
+      }
+      return undefined;
+    });
+
+    renderApp("/beneficiaries", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    await screen.findByRole("heading", { name: "Recipients" });
+    await user.type(screen.getByLabelText("Display name"), "Unknown recipient");
+    await user.type(screen.getByLabelText("Destination account ID"), "999");
+    await user.click(screen.getByRole("button", { name: "Save recipient" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Destination account not found");
+    expect(screen.getByLabelText("Display name")).toHaveValue("Unknown recipient");
   });
 
   it("submits selected recipient destination account in move money transfer", async () => {
@@ -1243,6 +1280,79 @@ describe("admin account status controls", () => {
 });
 
 describe("money movement account holds", () => {
+  it("keeps a deposit visibly processing until the server confirms completion", async () => {
+    const user = userEvent.setup();
+    let resolveDeposit!: (response: Response) => void;
+    const pendingDeposit = new Promise<Response>((resolve) => {
+      resolveDeposit = resolve;
+    });
+    mockFetch((url, init) => {
+      if (url.includes("/api/transactions/deposit") && init?.method === "POST") {
+        return pendingDeposit;
+      }
+      return undefined;
+    });
+
+    renderApp("/move-money", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+    await waitFor(() => expect(screen.getAllByText(/#101 - CHECKING/).length).toBeGreaterThan(0));
+
+    await user.selectOptions(screen.getAllByLabelText("Account")[0], "101");
+    await user.clear(screen.getAllByLabelText("Amount")[0]);
+    await user.type(screen.getAllByLabelText("Amount")[0], "25");
+    await user.click(screen.getByRole("button", { name: "Deposit" }));
+
+    expect(await screen.findByRole("button", { name: "Processing deposit..." })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Deposit is processing. You do not need to submit it again.");
+
+    resolveDeposit(new Response(JSON.stringify(sampleTransaction({ type: "DEPOSIT", fromAccountId: "EXTERNAL", toAccountId: "101", amount: 25 })), {
+      status: 201,
+      headers: { "Content-Type": "application/json" }
+    }));
+
+    expect(await screen.findByText("Deposit complete. $25.00 was added to account #101.")).toBeInTheDocument();
+  });
+
+  it("shows confirmed success and resets each completed money form", async () => {
+    const user = userEvent.setup();
+    mockFetch((url, init) => {
+      if (url.includes("/api/transactions/deposit") && init?.method === "POST") {
+        return jsonResponse(sampleTransaction({ type: "DEPOSIT", fromAccountId: "EXTERNAL", toAccountId: "101", amount: 25 }), 201);
+      }
+      if (url.includes("/api/transactions/withdraw") && init?.method === "POST") {
+        return jsonResponse(sampleTransaction({ type: "WITHDRAWAL", fromAccountId: "101", toAccountId: "EXTERNAL", amount: 10 }), 201);
+      }
+      if (url.includes("/api/transactions/transfer") && init?.method === "POST") {
+        return jsonResponse(sampleTransaction({ fromAccountId: "101", toAccountId: "202", amount: 15 }), 201);
+      }
+      return undefined;
+    });
+
+    renderApp("/move-money", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+    await waitFor(() => expect(screen.getAllByText(/#101 - CHECKING/).length).toBeGreaterThan(0));
+
+    await user.selectOptions(screen.getAllByLabelText("Account")[0], "101");
+    await user.clear(screen.getAllByLabelText("Amount")[0]);
+    await user.type(screen.getAllByLabelText("Amount")[0], "25");
+    await user.click(screen.getByRole("button", { name: "Deposit" }));
+    expect(await screen.findByText("Deposit complete. $25.00 was added to account #101.")).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Account")[0]).toHaveValue("");
+
+    await user.selectOptions(screen.getByLabelText("Withdraw account"), "101");
+    await user.clear(screen.getAllByLabelText("Amount")[1]);
+    await user.type(screen.getAllByLabelText("Amount")[1], "10");
+    await user.click(screen.getByRole("button", { name: "Withdraw" }));
+    expect(await screen.findByText("Withdrawal complete. $10.00 was withdrawn from account #101.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Withdraw account")).toHaveValue("");
+
+    await user.selectOptions(screen.getByLabelText("From account"), "101");
+    await user.type(screen.getByLabelText("To account"), "202");
+    await user.clear(screen.getByLabelText("Transfer amount"));
+    await user.type(screen.getByLabelText("Transfer amount"), "15");
+    await user.click(screen.getByRole("button", { name: "Transfer" }));
+    expect(await screen.findByText("Transfer complete. $15.00 was sent from account #101 to account #202.")).toBeInTheDocument();
+    expect(screen.getByLabelText("From account")).toHaveValue("");
+  });
+
   it("keeps frozen accounts selectable for deposit but disabled for debits", async () => {
     mockFetch((url) => {
       if (url.includes("/api/accounts")) {
