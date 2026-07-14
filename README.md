@@ -229,6 +229,7 @@ Open the Vite URL printed in the terminal, normally `http://127.0.0.1:5173`.
 
 Authenticated customer pages use these routes:
 
+- `/login` - customer sign-in, with an Operations sign-in mode at `/login?portal=admin`
 - `/` - dashboard
 - `/accounts` - customer accounts
 - `/move-money` - deposits, withdrawals, and transfers
