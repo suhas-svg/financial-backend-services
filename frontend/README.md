@@ -21,11 +21,12 @@ Run the backend services first, then open the Vite URL printed by `npm run dev`.
 ## Implemented Areas
 
 - Customer app:
-  - Register and login with JWT session persistence in `sessionStorage`
+  - Register and use the modern customer login portal with JWT session persistence in `sessionStorage`
   - Account list, create, type filter, and delete
   - Deposit, withdrawal, and transfer with generated `Idempotency-Key` headers
   - Transaction history, search filters, detail view, limits, and user stats
 - Admin app:
+  - Use the dedicated Operations sign-in mode at `/login?portal=admin`, with admin-role verification before entering `/admin`
   - Admin-only navigation based on JWT `roles`
   - Cross-user account search
   - Monitoring panels for account and transaction service endpoints

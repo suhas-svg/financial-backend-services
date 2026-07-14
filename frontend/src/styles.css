@@ -2,6 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Shared customer and operations authentication experience. */
+.auth-story {
+  background:
+    radial-gradient(circle at 18% 16%, rgba(16, 185, 129, .2), transparent 28%),
+    radial-gradient(circle at 86% 78%, rgba(14, 165, 233, .18), transparent 32%),
+    linear-gradient(145deg, #071a18 0%, #0f172a 52%, #07111f 100%);
+}
+.auth-story::before {
+  background-image:
+    linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+  background-size: 44px 44px;
+  content: "";
+  inset: 0;
+  mask-image: linear-gradient(to bottom, black, transparent 92%);
+  position: absolute;
+}
+.auth-story::after {
+  border: 1px solid rgba(167, 243, 208, .08);
+  border-radius: 999px;
+  content: "";
+  height: 34rem;
+  position: absolute;
+  right: -17rem;
+  top: 9rem;
+  width: 34rem;
+}
+.auth-glass-card { background: rgba(255, 255, 255, .045); }
+.auth-form-panel::before {
+  background:
+    radial-gradient(circle at 84% 12%, rgba(8, 145, 178, .1), transparent 34%),
+    radial-gradient(circle at 18% 88%, rgba(16, 185, 129, .08), transparent 30%);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+.auth-mobile-glow { background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, .18), transparent 70%); }
+.auth-dark-card { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035), 0 30px 90px -35px rgba(0, 0, 0, .85); }
+.auth-dark-input {
+  background-color: rgba(2, 6, 23, .72) !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+.auth-dark-input:focus {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, .1) !important;
+}
+.auth-dark-card .bg-red-50 {
+  background-color: rgba(127, 29, 29, .18) !important;
+  border-color: rgba(248, 113, 113, .3) !important;
+  color: #fca5a5 !important;
+}
+.auth-shell input:-webkit-autofill,
+.auth-shell input:-webkit-autofill:hover,
+.auth-shell input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #07111f inset;
+  -webkit-text-fill-color: #f8fafc;
+  caret-color: #f8fafc;
+}
+
 /* Operations Console visual system. */
 .admin-sidebar { transition: width 180ms ease; }
 .admin-nav-link { display:flex; min-height:44px; align-items:center; gap:.75rem; border-radius:.75rem; padding:0 .75rem; color:#94a3b8; font-size:.875rem; font-weight:600; transition:background-color 150ms,color 150ms; }

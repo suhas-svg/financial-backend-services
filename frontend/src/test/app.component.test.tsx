@@ -180,6 +180,72 @@ afterEach(() => {
 });
 
 describe("auth screens", () => {
+  it("offers distinct customer and admin sign in portals", async () => {
+    const user = userEvent.setup();
+    renderApp("/login");
+
+    expect(screen.getByRole("button", { name: "Customer banking" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Create an account" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Admin operations" }));
+
+    expect(screen.getByRole("button", { name: "Admin operations" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("heading", { name: "Operations sign in" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Create an account" })).not.toBeInTheDocument();
+  });
+
+  it("routes authorized admins to the Operations Console", async () => {
+    const user = userEvent.setup();
+    mockFetch((url) => {
+      if (url.includes("/api/auth/login")) {
+        return jsonResponse({ accessToken: tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }) });
+      }
+      return undefined;
+    });
+
+    renderApp("/login?portal=admin");
+    await user.type(screen.getByLabelText("Username"), "ops");
+    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByLabelText("Operations Console")).toBeInTheDocument();
+  });
+
+  it("keeps customer accounts out of the Operations Console", async () => {
+    const user = userEvent.setup();
+    mockFetch((url) => {
+      if (url.includes("/api/auth/login")) {
+        return jsonResponse({ accessToken: tokenFor({ sub: "customer", roles: ["ROLE_USER"] }) });
+      }
+      return undefined;
+    });
+
+    renderApp("/login?portal=admin");
+    await user.type(screen.getByLabelText("Username"), "customer");
+    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByText("This account does not have access to the Operations Console.")).toBeInTheDocument();
+    expect(sessionStorage.getItem("financial-console-token")).toBeNull();
+  });
+
+  it("opens the redesigned registration page from customer sign in", async () => {
+    const user = userEvent.setup();
+    renderApp("/login");
+
+    await user.click(screen.getByRole("link", { name: "Create an account" }));
+
+    expect(await screen.findByRole("heading", { name: "Create your account" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Financial Console login" })).toBeInTheDocument();
+    expect(screen.getByText("Your financial home starts here.")).toBeInTheDocument();
+
+    const password = screen.getByLabelText("Password");
+    expect(password).toHaveAttribute("type", "password");
+    await user.click(screen.getByRole("button", { name: "Show password" }));
+    expect(password).toHaveAttribute("type", "text");
+  });
+
   it("shows login success and failure states", async () => {
     const user = userEvent.setup();
     let loginAttempts = 0;
@@ -233,10 +299,10 @@ describe("auth screens", () => {
 
     await user.type(screen.getByLabelText("Username"), "new_customer");
     await user.type(screen.getByLabelText("Password"), "password123");
-    await user.click(screen.getByRole("button", { name: "Register" }));
+    await user.click(screen.getByRole("button", { name: "Create account" }));
     expect(await screen.findByText("Username already exists")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Register" }));
+    await user.click(screen.getByRole("button", { name: "Create account" }));
     expect(await screen.findByText("Registered new_customer. You can sign in now.")).toBeInTheDocument();
   });
 });
