@@ -2,8 +2,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Badge, Button, EmptyState, ErrorNotice, Field, Input, Panel, Select } from "../components/ui";
-import { createBeneficiary, disableBeneficiary, listBeneficiaries, updateBeneficiary } from "../lib/queries";
+import { Badge, Button, EmptyState, ErrorNotice, Field, Input, Panel, Select, StatusNotice } from "../components/ui";
+import { createBeneficiary, disableBeneficiary, listAccounts, listBeneficiaries, updateBeneficiary } from "../lib/queries";
 import { beneficiarySchema, type BeneficiaryValues } from "../lib/schemas";
 import type { Beneficiary } from "../types";
 
@@ -19,8 +19,10 @@ export function BeneficiariesPage() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string>();
   const form = useForm<BeneficiaryValues>({ resolver: zodResolver(beneficiarySchema), defaultValues });
   const beneficiaries = useQuery({ queryKey: ["beneficiaries", "ACTIVE"], queryFn: () => listBeneficiaries({ status: "ACTIVE" }) });
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => listAccounts() });
   const selected = useMemo(
     () => beneficiaries.data?.content.find((beneficiary) => beneficiary.beneficiaryId === selectedId) ?? beneficiaries.data?.content[0] ?? null,
     [beneficiaries.data, selectedId]
@@ -35,26 +37,32 @@ export function BeneficiariesPage() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["beneficiaries"] });
   const createMutation = useMutation({
     mutationFn: createBeneficiary,
+    onMutate: () => setStatusMessage(undefined),
     onSuccess: (beneficiary) => {
       setSelectedId(beneficiary.beneficiaryId);
+      setStatusMessage(`${beneficiary.displayName} was saved and is ready to use.`);
       form.reset(defaultValues);
       invalidate();
     }
   });
   const updateMutation = useMutation({
     mutationFn: (values: BeneficiaryValues) => updateBeneficiary(editingId!, values),
+    onMutate: () => setStatusMessage(undefined),
     onSuccess: (beneficiary) => {
       setSelectedId(beneficiary.beneficiaryId);
       setEditingId(null);
+      setStatusMessage(`${beneficiary.displayName} was updated.`);
       form.reset(defaultValues);
       invalidate();
     }
   });
   const disableMutation = useMutation({
     mutationFn: disableBeneficiary,
-    onSuccess: () => {
+    onMutate: () => setStatusMessage(undefined),
+    onSuccess: (beneficiary) => {
       setSelectedId(null);
       setEditingId(null);
+      setStatusMessage(`${beneficiary.displayName} was disabled.`);
       form.reset(defaultValues);
       invalidate();
     }
@@ -73,6 +81,15 @@ export function BeneficiariesPage() {
   };
 
   const submit = (values: BeneficiaryValues) => {
+    if (!editingId && accounts.data?.content.some((account) => String(account.id) === values.destinationAccountId.trim())) {
+      setStatusMessage(undefined);
+      createMutation.reset();
+      form.setError("destinationAccountId", {
+        type: "validate",
+        message: "This is one of your accounts. Use Move Money to transfer between your own accounts."
+      });
+      return;
+    }
     if (editingId) {
       updateMutation.mutate(values);
     } else {
@@ -89,6 +106,7 @@ export function BeneficiariesPage() {
         <p className="text-sm text-muted">{beneficiaries.data?.totalElements ?? 0} active recipients</p>
       </div>
       <ErrorNotice message={error} />
+      <StatusNotice message={statusMessage} />
       <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
         <Panel title={editingId ? "Edit recipient" : "Save recipient"}>
           <form className="grid gap-4" onSubmit={form.handleSubmit(submit)}>
@@ -113,7 +131,7 @@ export function BeneficiariesPage() {
             </Field>
             <div className="flex gap-2">
               <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
-                {editingId ? "Update recipient" : "Save recipient"}
+                {createMutation.isPending ? "Saving recipient..." : updateMutation.isPending ? "Updating recipient..." : editingId ? "Update recipient" : "Save recipient"}
               </Button>
               {editingId ? <Button type="button" variant="secondary" onClick={() => { setEditingId(null); form.reset(defaultValues); }}>Cancel</Button> : null}
             </div>

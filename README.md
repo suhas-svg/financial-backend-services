@@ -29,6 +29,8 @@ financial-backend-services/
 - See available balance as the primary spendable amount and ledger balance as secondary detail.
 - See frozen accounts with hold warnings and status reasons.
 - Deposit, withdraw, and transfer money.
+- Show explicit processing and confirmed-success states for deposits, withdrawals, and transfers, and reset each form only after the backend confirms completion.
+- Save external recipient accounts with immediate guidance when a customer enters one of their own accounts; own-account movement stays in the standard transfer flow.
 - Enroll a TOTP authenticator, generate single-use recovery codes, and manage MFA from the Security page.
 - Configure per-account daily transfer and withdrawal limits from Security; reductions are immediate and MFA-verified increases cool for 24 hours.
 - Complete risk-based step-up verification before high-risk transfers are posted.
