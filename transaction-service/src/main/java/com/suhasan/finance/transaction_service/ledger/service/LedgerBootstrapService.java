@@ -7,6 +7,7 @@ import com.suhasan.finance.transaction_service.ledger.repository.LedgerBalancePr
 import com.suhasan.finance.transaction_service.repository.TransactionRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -16,7 +17,7 @@ import java.util.*;
 @Service
 public class LedgerBootstrapService {
 
-    private static final List<String> DEFAULT_SYSTEM_CURRENCIES = List.of("USD", "EUR", "GBP");
+    private static final List<String> DEFAULT_SYSTEM_CURRENCIES = List.of("USD", "EUR", "GBP", "INR");
 
     private static final List<LedgerAccountKind> SYSTEM_ACCOUNT_KINDS = List.of(
             LedgerAccountKind.CLEARING,
@@ -29,6 +30,9 @@ public class LedgerBootstrapService {
     private final TransactionRepository transactionRepository;
     private final LedgerPostingService postingService;
     private final MeterRegistry meterRegistry;
+
+    @Value("${ledger.bootstrap.system-currencies:USD,EUR,GBP,INR}")
+    private String configuredSystemCurrencies;
 
     public LedgerBootstrapService(
             LedgerBootstrapAccountSource accountSource,
@@ -45,17 +49,29 @@ public class LedgerBootstrapService {
         this.meterRegistry = meterRegistry;
     }
 
+    public List<String> requiredSystemCurrencies() {
+        String configured = configuredSystemCurrencies == null || configuredSystemCurrencies.isBlank()
+                ? String.join(",", DEFAULT_SYSTEM_CURRENCIES) : configuredSystemCurrencies;
+        List<String> currencies = Arrays.stream(configured.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(value -> value.toUpperCase(Locale.ROOT))
+                .distinct()
+                .toList();
+        if (currencies.isEmpty() || currencies.stream().anyMatch(value -> !value.matches("[A-Z]{3}"))) {
+            throw new IllegalStateException("Ledger bootstrap system currencies must be comma-separated ISO-4217 codes");
+        }
+        return currencies;
+    }
+
     @Transactional
     public LedgerBootstrapResult bootstrap(LedgerBootstrapCommand command) {
         requireCutoverWindow(command);
         List<LedgerBootstrapAccountSnapshot> accounts = accountSource.fetchAccountsForBootstrap();
         requireNoLegacyBlockers(accounts);
 
-        LinkedHashSet<String> currencies = new LinkedHashSet<>();
+        LinkedHashSet<String> currencies = new LinkedHashSet<>(requiredSystemCurrencies());
         accounts.forEach(account -> currencies.add(account.currency()));
-        if (currencies.isEmpty()) {
-            currencies.addAll(DEFAULT_SYSTEM_CURRENCIES);
-        }
 
         SystemSeedResult systemSeedResult = seedSystemAccounts(currencies);
         int importedAccounts = 0;

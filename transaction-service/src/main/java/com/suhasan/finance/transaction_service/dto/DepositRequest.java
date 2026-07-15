@@ -24,7 +24,7 @@ public class DepositRequest {
     @Size(max = 100, message = "Reference cannot exceed 100 characters")
     private String reference;
     
-    @Pattern(regexp = "USD|EUR|GBP", message = "Currency must be USD, EUR, or GBP")
+    @Pattern(regexp = "USD|EUR|GBP|INR", message = "Currency must be USD, EUR, GBP, or INR")
     @Builder.Default
     private String currency = "USD";
 }

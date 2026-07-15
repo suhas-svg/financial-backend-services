@@ -17,6 +17,9 @@ export function DashboardPage() {
   const notifications = useQuery({ queryKey: ["notification-summary"], queryFn: getNotificationSummary });
   const projections = projectionMap(ledgerAccounts.data);
   const accountList = accounts.data?.content ?? [];
+  const dashboardCurrency = accountList.length === 0
+    ? (limits.data?.currency ?? "USD")
+    : accountList.every((account) => account.currency === accountList[0].currency) ? accountList[0].currency : null;
   const totalBalance = accountList.reduce((sum, account) => sum + availableBalance(account, projectionFor(account, projections)), 0);
   const chartData = Object.entries(stats.data?.transactionAmountsByType ?? {}).map(([name, value]) => ({ name: name.replace(/_/g, " "), value }));
   const loading = accounts.isLoading || transactions.isLoading || stats.isLoading;
@@ -29,7 +32,7 @@ export function DashboardPage() {
         <div className="flex flex-wrap gap-2"><Link className="customer-action customer-action-light" to="/accounts"><PlusCircle className="h-4 w-4" />New account</Link><Link className="customer-action bg-emerald-300 text-emerald-950 hover:bg-emerald-200" to="/move-money"><ArrowUpRight className="h-4 w-4" />Move money</Link></div>
       </div>
       <div className="relative z-10 mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="customer-hero-stat"><span>Available balance</span><strong>{loading ? "—" : money(totalBalance)}</strong><small>Across {accountList.length} account{accountList.length === 1 ? "" : "s"}</small></div>
+        <div className="customer-hero-stat"><span>Available balance</span><strong>{loading ? "—" : dashboardCurrency ? money(totalBalance, dashboardCurrency) : "Multiple currencies"}</strong><small>Across {accountList.length} account{accountList.length === 1 ? "" : "s"}</small></div>
         <div className="customer-hero-stat"><span>Transactions</span><strong>{stats.data?.totalTransactions ?? "—"}</strong><small>{percent(stats.data?.successRate)} success rate</small></div>
         <div className="customer-hero-stat"><span>Single transfer limit</span><strong>{money(limits.data?.singleTransactionLimit, limits.data?.currency)}</strong><small>Current account policy</small></div>
         <div className="customer-hero-stat"><span>Inbox</span><strong>{notifications.data?.unread ?? 0}</strong><small>Unread notification{notifications.data?.unread === 1 ? "" : "s"}</small></div>
@@ -46,8 +49,8 @@ export function DashboardPage() {
           return <article key={account.id} className="customer-account-card">
             <div className="flex items-start justify-between gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-100 text-brand dark:bg-emerald-950"><WalletCards className="h-5 w-5" /></span><div className="flex flex-wrap justify-end gap-2"><StatusBadge value={account.accountType} /><StatusBadge value={account.status ?? "ACTIVE"} /></div></div>
             <p className="mt-5 text-xs font-semibold uppercase tracking-wider text-muted">Account #{account.id}</p>
-            <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight">{money(availableBalance(account, projection), projection?.currency)}</p>
-            <p className="mt-1 text-xs text-muted">{projection ? `Posted ${money(ledgerBalance(account, projection), projection.currency)}` : `Ledger ${money(ledgerBalance(account))}`}</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight">{money(availableBalance(account, projection), projection?.currency ?? account.currency)}</p>
+            <p className="mt-1 text-xs text-muted">{projection ? `Posted ${money(ledgerBalance(account, projection), projection.currency)}` : `Ledger ${money(ledgerBalance(account), account.currency)}`}</p>
             {projection ? <p className="text-xs text-muted">Pending {money(pendingBalance(projection), projection.currency)} unavailable</p> : null}
             {account.status === "FROZEN" ? <p className="mt-2 text-xs font-medium text-danger">{account.statusReason || "Debit hold active"}</p> : null}
             <p className="mt-4 border-t border-line pt-3 text-xs text-muted dark:border-slate-700">Opened {compactDate(account.createdAt)}</p>

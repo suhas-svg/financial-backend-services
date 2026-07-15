@@ -21,6 +21,7 @@ export type Account = {
   availableBalance?: number;
   createdAt: string;
   accountType: AccountType;
+  currency: "USD" | "EUR" | "GBP" | "INR";
   status?: AccountStatus;
   statusReason?: string;
   statusUpdatedAt?: string;
@@ -37,7 +38,7 @@ export type Beneficiary = {
   userId: string;
   displayName: string;
   destinationAccountId: string;
-  currency: "USD" | "EUR" | "GBP";
+  currency: "USD" | "EUR" | "GBP" | "INR";
   nickname?: string;
   notes?: string;
   status: BeneficiaryStatus;
@@ -349,7 +350,7 @@ export type OutcomeScenario = OutcomeScenarioSummary & {
   sourceSnapshot: {
     startingAvailableBalance: number;
     ledgerAccounts: Array<{ accountId: string; currency: string; availableBalance: number; projectionVersion: number; capturedAt: string }>;
-    scheduledCashflows: Array<{ eventId: string; scheduleId: string; date: string; amount: number; label: string; fromAccountId: string; toAccountId: string }>;
+    scheduledCashflows: Array<{ eventId: string; scheduleId: string; scheduledFor: string; date: string; amount: number; currency: string; status: string; cadence: string; evaluationTimeZone: string; label: string; fromAccountId: string; toAccountId: string }>;
     sourceFingerprint: string;
   };
   simulation: OutcomeSimulation;
@@ -366,6 +367,9 @@ export type OutcomeDivergence = {
   notificationEmitted: boolean;
   freshSimulation: OutcomeSimulation;
   checkedAt: string;
+  evaluationEventId: string;
+  warningEventId?: string;
+  warningAcknowledged: boolean;
 };
 
 export type AuditLogEntry = {

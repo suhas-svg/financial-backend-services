@@ -21,13 +21,13 @@ export function AccountsPage() {
   const projections = projectionMap(ledgerAccounts.data);
   const form = useForm<AccountValues>({
     resolver: zodResolver(accountSchema),
-    defaultValues: { accountType: "CHECKING", balance: 0, interestRate: 0 }
+    defaultValues: { accountType: "CHECKING", currency: "USD", balance: 0, interestRate: 0 }
   });
   const accountType = form.watch("accountType");
   const createMutation = useMutation({
     mutationFn: createAccount,
     onSuccess: () => {
-      form.reset({ accountType: "CHECKING", balance: 0, interestRate: 0 });
+      form.reset({ accountType: "CHECKING", currency: "USD", balance: 0, interestRate: 0 });
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
     }
   });
@@ -39,7 +39,7 @@ export function AccountsPage() {
     mutationFn: (values: AccountValues) => updateAccount(editing?.id ?? 0, values),
     onSuccess: () => {
       setEditing(null);
-      form.reset({ accountType: "CHECKING", balance: 0, interestRate: 0 });
+      form.reset({ accountType: "CHECKING", currency: "USD", balance: 0, interestRate: 0 });
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
     }
   });
@@ -49,6 +49,7 @@ export function AccountsPage() {
     setEditing(account);
     form.reset({
       accountType: account.accountType,
+      currency: account.currency,
       balance: account.balance,
       ownerId: account.ownerId,
       interestRate: account.interestRate ?? 0,
@@ -59,7 +60,7 @@ export function AccountsPage() {
 
   const resetForm = () => {
     setEditing(null);
-    form.reset({ accountType: "CHECKING", balance: 0, interestRate: 0 });
+    form.reset({ accountType: "CHECKING", currency: "USD", balance: 0, interestRate: 0 });
   };
 
   return (
@@ -73,6 +74,14 @@ export function AccountsPage() {
               <option value="CHECKING">Checking</option>
               <option value="SAVINGS">Savings</option>
               <option value="CREDIT">Credit</option>
+            </Select>
+          </Field>
+          <Field label="Currency" error={form.formState.errors.currency?.message}>
+            <Select {...form.register("currency")} disabled={Boolean(editing)}>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+              <option value="GBP">GBP</option>
+              <option value="INR">INR</option>
             </Select>
           </Field>
           <Field label="Opening balance" error={form.formState.errors.balance?.message}>
@@ -136,11 +145,11 @@ export function AccountsPage() {
             ) : null}
             <div className="flex justify-between gap-3">
               <dt className="text-muted">Available</dt>
-              <dd>{money(availableBalance(selected, projection), projection?.currency)}</dd>
+              <dd>{money(availableBalance(selected, projection), projection?.currency ?? selected.currency)}</dd>
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-muted">{projection ? "Posted" : "Ledger"}</dt>
-              <dd>{money(ledgerBalance(selected, projection), projection?.currency)}</dd>
+              <dd>{money(ledgerBalance(selected, projection), projection?.currency ?? selected.currency)}</dd>
             </div>
             {projection ? (
               <>
@@ -207,8 +216,8 @@ export function AccountsPage() {
                     <td>
                       <StatusBadge value={account.status ?? "ACTIVE"} />
                     </td>
-                    <td>{money(availableBalance(account, projection), projection?.currency)}</td>
-                    <td>{money(ledgerBalance(account, projection), projection?.currency)}</td>
+                    <td>{money(availableBalance(account, projection), projection?.currency ?? account.currency)}</td>
+                    <td>{money(ledgerBalance(account, projection), projection?.currency ?? account.currency)}</td>
                     <td>{projection ? money(pendingBalance(projection), projection.currency) : "-"}</td>
                     <td>{compactDate(account.createdAt)}</td>
                     <td className="text-right">

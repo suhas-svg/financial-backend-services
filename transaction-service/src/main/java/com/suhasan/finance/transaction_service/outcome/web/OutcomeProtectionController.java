@@ -58,11 +58,10 @@ public class OutcomeProtectionController {
     }
 
     @PostMapping("/warnings/{eventId}/acknowledge")
-    public ResponseEntity<Void> acknowledgeWarning(@PathVariable String eventId,
+    public WarningAcknowledgementResponse acknowledgeWarning(@PathVariable String eventId,
                                                     @RequestHeader("Idempotency-Key") String idempotencyKey,
                                                     Authentication authentication) {
-        service.acknowledgeWarning(eventId, currentUser(authentication), idempotencyKey);
-        return ResponseEntity.noContent().build();
+        return service.acknowledgeWarning(eventId, currentUser(authentication), idempotencyKey);
     }
 
     private String currentUser(Authentication authentication) {

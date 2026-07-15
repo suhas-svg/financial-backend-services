@@ -5,16 +5,17 @@ describe("form schemas", () => {
   it("validates backend money movement limits and currencies", () => {
     expect(moneyMovementSchema.safeParse({ accountId: "1", amount: 0, currency: "USD" }).success).toBe(false);
     expect(moneyMovementSchema.safeParse({ accountId: "1", amount: 1000000, currency: "USD" }).success).toBe(false);
-    expect(moneyMovementSchema.safeParse({ accountId: "1", amount: 10, currency: "INR" }).success).toBe(false);
+    expect(moneyMovementSchema.safeParse({ accountId: "1", amount: 10, currency: "INR" }).success).toBe(true);
     expect(moneyMovementSchema.safeParse({ accountId: "1", amount: 10, currency: "EUR" }).success).toBe(true);
   });
 
   it("requires credit card fields only for credit accounts", () => {
-    expect(accountSchema.safeParse({ accountType: "CREDIT", balance: 0, creditLimit: 5000 }).success).toBe(false);
+    expect(accountSchema.safeParse({ accountType: "CREDIT", currency: "INR", balance: 0, creditLimit: 5000 }).success).toBe(false);
     expect(
       accountSchema.safeParse({
         accountType: "CREDIT",
         balance: 0,
+        currency: "INR",
         creditLimit: 5000,
         dueDate: "2099-01-01"
       }).success
@@ -46,7 +47,7 @@ describe("form schemas", () => {
   it("validates beneficiary display and destination fields", () => {
     expect(beneficiarySchema.safeParse({ displayName: "", destinationAccountId: "200", currency: "USD" }).success).toBe(false);
     expect(beneficiarySchema.safeParse({ displayName: "Rent", destinationAccountId: "", currency: "USD" }).success).toBe(false);
-    expect(beneficiarySchema.safeParse({ displayName: "Rent", destinationAccountId: "200", currency: "INR" }).success).toBe(false);
+    expect(beneficiarySchema.safeParse({ displayName: "Rent", destinationAccountId: "200", currency: "INR" }).success).toBe(true);
     expect(beneficiarySchema.safeParse({ displayName: "Rent", destinationAccountId: "200", currency: "USD", nickname: "Home" }).success).toBe(true);
   });
 });

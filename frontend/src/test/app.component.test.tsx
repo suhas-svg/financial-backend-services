@@ -1330,6 +1330,42 @@ describe("money movement account holds", () => {
     expect(await screen.findByText("Deposit complete. $25.00 was added to account #101.")).toBeInTheDocument();
   });
 
+  it("shows a rejected withdrawal without implying that it was accepted for processing", async () => {
+    const user = userEvent.setup();
+    let resolveWithdrawal!: (response: Response) => void;
+    const pendingWithdrawal = new Promise<Response>((resolve) => {
+      resolveWithdrawal = resolve;
+    });
+    mockFetch((url, init) => {
+      if (url.includes("/api/transactions/withdraw") && init?.method === "POST") {
+        return pendingWithdrawal;
+      }
+      return undefined;
+    });
+
+    renderApp("/move-money", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+    await waitFor(() => expect(screen.getAllByText(/#101 - CHECKING/).length).toBeGreaterThan(0));
+
+    await user.selectOptions(screen.getByLabelText("Withdraw account"), "101");
+    await user.clear(screen.getAllByLabelText("Amount")[1]);
+    await user.type(screen.getAllByLabelText("Amount")[1], "1000");
+    await user.click(screen.getByRole("button", { name: "Withdraw" }));
+
+    expect(await screen.findByRole("button", { name: "Checking withdrawal..." })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Checking withdrawal request. You do not need to submit it again.");
+
+    resolveWithdrawal(new Response(JSON.stringify({ message: "Transaction exceeds limits" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" }
+    }));
+
+    expect(await screen.findByText("Transaction exceeds limits")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Withdraw" })).toBeEnabled();
+    expect(screen.getByLabelText("Withdraw account")).toHaveValue("101");
+    expect(screen.getAllByLabelText("Amount")[1]).toHaveValue(1000);
+    expect(screen.queryByText("Withdrawal is processing. You do not need to submit it again.")).not.toBeInTheDocument();
+  });
+
   it("shows confirmed success and resets each completed money form", async () => {
     const user = userEvent.setup();
     mockFetch((url, init) => {

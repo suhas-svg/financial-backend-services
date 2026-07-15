@@ -58,9 +58,10 @@ GET    /api/outcome-protection/scenarios/{scenarioId}
 POST   /api/outcome-protection/scenarios/{scenarioId}/versions
 POST   /api/outcome-protection/scenarios/{scenarioId}/refresh
 POST   /api/outcome-protection/guardrails/{guardrailId}/accept
+POST   /api/outcome-protection/warnings/{eventId}/acknowledge
 ```
 
-Scenario mutations require an `Idempotency-Key`. Customer ownership is resolved from the JWT. The engine uses decimal-safe daily cashflows, authoritative ledger availability, active scheduled transfers, and explicit customer assumptions. Search defaults to combinations of at most three shocks and 5,000 evaluated combinations. Guardrail acceptance is a consent record for a preview only; it never moves money.
+Scenario mutations require an `Idempotency-Key`. Customer ownership is resolved from the JWT. The engine uses decimal-safe daily cashflows, authoritative ledger availability, customer-owned active scheduled transfers, and explicit customer assumptions. Schedule occurrences carry status, cadence, effective IANA time zone, currency, and inclusive horizon dates into the causal timeline. Fresh-state comparisons persist evaluation evidence, dedupe unsafe warnings by scenario version and current source fingerprint, and use the existing idempotent account-service notification boundary. Guardrail acceptance and warning acknowledgement are evidence records for a preview only; neither moves money nor changes a schedule.
 
 Configuration:
 
@@ -69,6 +70,8 @@ outcome-protection.search.max-combination-size=${OUTCOME_PROTECTION_MAX_COMBINAT
 outcome-protection.search.max-evaluated-combinations=${OUTCOME_PROTECTION_MAX_EVALUATED_COMBINATIONS:5000}
 outcome-protection.monitor.fixed-delay-ms=${OUTCOME_PROTECTION_MONITOR_DELAY_MS:300000}
 ```
+
+Fresh-database ledger bootstrap is disabled by default and has an admin read-only preflight. Its explicit operator modes, maintenance requirements, audit evidence, and fail-closed startup settings are documented in [the ledger cutover runbook](../docs/operations/ledger-cutover-runbook.md).
 
 ### Health & Monitoring
 ```

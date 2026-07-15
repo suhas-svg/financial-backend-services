@@ -45,6 +45,7 @@ public class OutcomeProtectionService {
     private final LedgerBalanceProjectionRepository projectionRepository;
     private final ScheduledTransferRepository scheduledTransferRepository;
     private final OutcomeSimulationEngine simulationEngine;
+    private final OutcomeScheduledTransferForecaster scheduledTransferForecaster;
     private final ResilientAccountServiceClient accountServiceClient;
     private final ObjectMapper objectMapper;
 
@@ -157,15 +158,16 @@ public class OutcomeProtectionService {
     }
 
     @Transactional
-    public void acknowledgeWarning(String eventId, String userId, String idempotencyKey) {
+    public WarningAcknowledgementResponse acknowledgeWarning(String eventId, String userId, String idempotencyKey) {
         String key = requireIdempotencyKey(idempotencyKey);
         OutcomeDomainEvent warning = eventRepository.findByEventIdAndUserId(eventId, userId)
                 .filter(event -> "OUTCOME_PROTECTION_AT_RISK".equals(event.getEventType()))
                 .orElseThrow(() -> new AccessDeniedException("Warning not found"));
         OutcomeScenario scenario = ownedScenario(warning.getScenarioId(), userId);
-        recordEvent("WARNING_ACKNOWLEDGED", scenario, warning.getResultId(), null,
+        OutcomeDomainEvent acknowledgement = recordEvent("WARNING_ACKNOWLEDGED", scenario, warning.getResultId(), null,
                 "warning-ack:" + warning.getEventId(),
                 Map.of("warningEventId", warning.getEventId(), "idempotencyKey", key));
+        return new WarningAcknowledgementResponse(acknowledgement.getEventId(), warning.getEventId(), true, acknowledgement.getCreatedAt());
     }
 
     @Transactional
@@ -188,30 +190,50 @@ public class OutcomeProtectionService {
 
     private DivergenceResponse refreshScenario(OutcomeScenario scenario) {
         OutcomeScenarioVersion saved = requiredVersion(scenario, scenario.getCurrentVersion());
+        OutcomeSimulationResult savedResult = requiredResult(scenario.getScenarioId(), scenario.getCurrentVersion());
         ScenarioRequest request = requestFrom(scenario, saved);
         Snapshot fresh = captureSnapshot(request, scenario.getUserId());
         SimulationProof simulation = simulate(request, fresh);
         String previousFingerprint = scenario.getLastSourceFingerprint();
-        String previousState = scenario.getLastProtectionState();
         boolean diverged = !fresh.sourceFingerprint().equals(saved.getSourceFingerprint());
         boolean atRisk = !simulation.baseline().safe();
         boolean notificationEmitted = false;
+        OutcomeDomainEvent warning = null;
 
-        if (atRisk && !"AT_RISK".equals(previousState)) {
-            String warningDedupe = "outcome-risk:" + scenario.getScenarioId() + ":" + fresh.sourceFingerprint();
-            OutcomeDomainEvent warning = recordEvent("OUTCOME_PROTECTION_AT_RISK", scenario, null, null,
+        Map<String, Object> evaluationFields = new LinkedHashMap<>();
+        evaluationFields.put("savedSourceFingerprint", saved.getSourceFingerprint());
+        evaluationFields.put("previousObservedSourceFingerprint", previousFingerprint);
+        evaluationFields.put("currentSourceFingerprint", fresh.sourceFingerprint());
+        evaluationFields.put("savedBaselineSafe", savedResult.isBaselineSafe());
+        evaluationFields.put("freshBaselineSafe", simulation.baseline().safe());
+        evaluationFields.put("protectedMinimum", simulation.baseline().protectedMinimum());
+        evaluationFields.put("lowestBalance", simulation.baseline().lowestBalance());
+        evaluationFields.put("failureDate", simulation.baseline().failureDate());
+        evaluationFields.put("ledgerSnapshot", fresh.ledgerAccounts());
+        evaluationFields.put("scheduleSnapshot", fresh.scheduledCashflows());
+        OutcomeDomainEvent evaluation = recordEvent("DIVERGENCE_EVALUATED", scenario, savedResult.getResultId(), null,
+                "outcome-evaluation:" + scenario.getScenarioId() + ":" + scenario.getCurrentVersion() + ":" + fresh.sourceFingerprint(),
+                evaluationFields);
+
+        if (diverged && savedResult.isBaselineSafe() && atRisk) {
+            String warningDedupe = "outcome-risk:" + scenario.getScenarioId() + ":" + scenario.getCurrentVersion() + ":" + fresh.sourceFingerprint();
+            warning = recordEvent("OUTCOME_PROTECTION_AT_RISK", scenario, savedResult.getResultId(), null,
                     warningDedupe, Map.of("failureDate", String.valueOf(simulation.baseline().failureDate()),
                             "lowestBalance", simulation.baseline().lowestBalance(),
                             "protectedMinimum", simulation.baseline().protectedMinimum(),
-                            "sourceFingerprint", fresh.sourceFingerprint()));
+                            "sourceFingerprint", fresh.sourceFingerprint(),
+                            "evaluationEventId", evaluation.getEventId()));
             notificationEmitted = emitRiskNotification(scenario, simulation, warning.getEventId());
         }
+        boolean warningAcknowledged = warning != null && eventRepository
+                .findByUserIdAndDedupeKey(scenario.getUserId(), "warning-ack:" + warning.getEventId()).isPresent();
         scenario.setLastSourceFingerprint(fresh.sourceFingerprint());
         scenario.setLastProtectionState(atRisk ? "AT_RISK" : "SAFE");
         scenario.setLastCheckedAt(Instant.now());
         scenarioRepository.save(scenario);
         return new DivergenceResponse(scenario.getScenarioId(), previousFingerprint, fresh.sourceFingerprint(),
-                diverged, atRisk, notificationEmitted, simulation, scenario.getLastCheckedAt());
+                evaluation.getEventId(), warning == null ? null : warning.getEventId(),
+                diverged, atRisk, warningAcknowledged, notificationEmitted, simulation, scenario.getLastCheckedAt());
     }
 
     private ScenarioResponse persistVersionAndResult(OutcomeScenario scenario, int number, ScenarioRequest request,
@@ -288,44 +310,12 @@ public class OutcomeProtectionService {
             ledger.add(new LedgerAccountSnapshot(accountId, request.currency(), money(projection.getAvailableBalance()),
                     projection.getProjectionVersion(), projectionTime));
         }
-        List<ScheduledCashflowSnapshot> schedules = captureSchedules(request, userId, new LinkedHashSet<>(accountIds));
+        List<ScheduledCashflowSnapshot> schedules = scheduledTransferForecaster.forecast(request, userId,
+                new LinkedHashSet<>(accountIds), scheduledTransferRepository.findByUserIdAndStatusOrderByNextRunAtAsc(userId, ScheduledTransferStatus.ACTIVE));
         String sourceFingerprint = fingerprint(new SourceFingerprint(ledger, schedules));
         return new Snapshot(ledger, schedules, sourceFingerprint);
     }
 
-    private List<ScheduledCashflowSnapshot> captureSchedules(ScenarioRequest request, String userId, Set<String> selectedAccounts) {
-        ZoneId zone = ZoneId.of(request.timeZone());
-        LocalDate end = request.horizonStart().plusDays(request.horizonDays() - 1L);
-        List<ScheduledCashflowSnapshot> events = new ArrayList<>();
-        for (ScheduledTransfer schedule : scheduledTransferRepository
-                .findByUserIdAndStatusOrderByNextRunAtAsc(userId, ScheduledTransferStatus.ACTIVE)) {
-            if (!request.currency().equals(schedule.getCurrency())) continue;
-            boolean outgoing = selectedAccounts.contains(schedule.getFromAccountId());
-            boolean incoming = selectedAccounts.contains(schedule.getToAccountId());
-            BigDecimal signed = (outgoing ? schedule.getAmount().negate() : BigDecimal.ZERO)
-                    .add(incoming ? schedule.getAmount() : BigDecimal.ZERO);
-            if (signed.signum() == 0) continue;
-            Instant occurrence = schedule.getNextRunAt();
-            int guard = 0;
-            while (occurrence != null && guard++ < 100) {
-                LocalDate date = occurrence.atZone(zone).toLocalDate();
-                if (date.isAfter(end) || (schedule.getEndAt() != null && occurrence.isAfter(schedule.getEndAt()))) break;
-                if (!date.isBefore(request.horizonStart())) {
-                    events.add(new ScheduledCashflowSnapshot(
-                            "schedule:" + schedule.getScheduleId() + ":" + occurrence,
-                            schedule.getScheduleId(), date, money(signed),
-                            schedule.getDescription() == null || schedule.getDescription().isBlank()
-                                    ? "Scheduled transfer" : schedule.getDescription(),
-                            schedule.getFromAccountId(), schedule.getToAccountId()));
-                }
-                if (schedule.getScheduleType() == ScheduledTransferType.ONE_TIME) break;
-                occurrence = com.suhasan.finance.transaction_service.service.ScheduledTransferService
-                        .nextRunAfter(occurrence, schedule.getFrequency());
-            }
-        }
-        return events.stream().sorted(Comparator.comparing(ScheduledCashflowSnapshot::date)
-                .thenComparing(ScheduledCashflowSnapshot::eventId)).toList();
-    }
 
     private SimulationProof simulate(ScenarioRequest request, Snapshot snapshot) {
         List<OutcomeSimulationEngine.Cashflow> cashflows = new ArrayList<>();

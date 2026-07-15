@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, FlaskConical, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import type { OutcomeAssumptionType, OutcomeScenario, OutcomeScenarioRequest, OutcomeShockType } from "../types";
-import { acceptOutcomeGuardrail, createOutcomeScenario, getOutcomeScenario, listLedgerAccounts, listOutcomeScenarios, refreshOutcomeScenario } from "../lib/queries";
+import { acceptOutcomeGuardrail, acknowledgeOutcomeWarning, createOutcomeScenario, getOutcomeScenario, listLedgerAccounts, listOutcomeScenarios, refreshOutcomeScenario } from "../lib/queries";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { compactDate, money } from "../lib/format";
 import { Badge, Button, EmptyState, ErrorNotice, Field, Input, PageHeader, Panel, Select, StatusNotice } from "../components/ui";
@@ -83,6 +83,9 @@ export function OutcomeProtectionPage() {
     mutationFn: (guardrailId: string) => acceptOutcomeGuardrail(guardrailId, createIdempotencyKey("guardrail-accept")),
     onSuccess: (_guardrail) => queryClient.invalidateQueries({ queryKey: ["outcome-scenario", selectedScenarioId] })
   });
+  const acknowledge = useMutation({
+    mutationFn: (eventId: string) => acknowledgeOutcomeWarning(eventId, createIdempotencyKey("outcome-warning-ack"))
+  });
 
   const selectedCurrency = useMemo(() => {
     const selected = ledger.data?.find((account) => accountIds.includes(account.externalAccountId));
@@ -145,13 +148,31 @@ export function OutcomeProtectionPage() {
   };
 
   const scenario = detail.data;
-  const error = formError || errorMessage(create.error) || errorMessage(detail.error) || errorMessage(accept.error) || errorMessage(refresh.error);
+  const error = formError || errorMessage(create.error) || errorMessage(detail.error) || errorMessage(accept.error) || errorMessage(refresh.error) || errorMessage(acknowledge.error);
+  const freshForecast = refresh.data?.freshSimulation.baseline;
+  const freshScheduledEventCount = freshForecast?.timeline.reduce(
+    (count, day) => count + day.events.filter((event) => event.source === "SCHEDULED_TRANSFER").length,
+    0
+  ) ?? 0;
+  const refreshMessage = refresh.data && freshForecast
+    ? `Fresh forecast ${refresh.data.protectionAtRisk ? "is at risk" : "is safe"}: closes at ${money(freshForecast.closingBalance, scenario?.currency ?? currency)}, bottoms at ${money(freshForecast.lowestBalance, scenario?.currency ?? currency)}, and includes ${freshScheduledEventCount} active scheduled event${freshScheduledEventCount === 1 ? "" : "s"}.`
+    : undefined;
 
   return <div className="grid gap-6">
     <PageHeader eyebrow="Outcome Protection" title="Balance Shield lab" detail="Protect a minimum available balance, reverse-stress what could break it, and compile preview-only guardrails with exact causal proof." />
     <ErrorNotice message={error} />
     {create.isPending ? <StatusNotice pending message="Snapshotting authoritative balances and searching bounded shock combinations..." /> : null}
-    {refresh.data ? <StatusNotice message={refresh.data.protectionAtRisk ? "Fresh ledger and schedule state puts this outcome at risk." : "Fresh ledger and schedule state still protects this outcome."} /> : null}
+    {refreshMessage ? <StatusNotice message={refreshMessage} /> : null}
+    {refresh.data?.warningEventId ? <Panel title="Unsafe divergence warning">
+      <div className="grid gap-3 text-sm">
+        <p>Saved-safe proof is now at risk. Evaluation <span className="font-mono text-xs">{refresh.data.evaluationEventId}</span> and warning <span className="font-mono text-xs">{refresh.data.warningEventId}</span> are persisted audit evidence.</p>
+        <p className="text-muted">{refresh.data.notificationEmitted ? "The deduped account notification boundary accepted this warning." : "Notification delivery is pending retry; the warning evidence is preserved."}</p>
+        {refresh.data.warningAcknowledged || acknowledge.data?.warningEventId === refresh.data.warningEventId
+          ? <Badge tone="good">Acknowledged</Badge>
+          : <Button variant="secondary" disabled={acknowledge.isPending} onClick={() => acknowledge.mutate(refresh.data!.warningEventId!)}>Acknowledge warning</Button>}
+      </div>
+    </Panel> : null}
+
 
     <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
       <div className="grid content-start gap-6">
@@ -253,7 +274,7 @@ function ScenarioProof({ scenario, onRefresh, refreshing, confirmed, setConfirme
     </Panel>
 
     <Panel title="Authoritative source snapshot">
-      <div className="grid gap-3 sm:grid-cols-2"><div><p className="text-xs font-bold uppercase tracking-wide text-muted">Ledger balances</p>{scenario.sourceSnapshot.ledgerAccounts.map((account) => <p key={account.accountId} className="mt-2 text-sm">Account {account.accountId}: <strong>{money(account.availableBalance, account.currency)}</strong> <span className="text-xs text-muted">projection v{account.projectionVersion}</span></p>)}</div><div><p className="text-xs font-bold uppercase tracking-wide text-muted">Known scheduled cashflows</p>{scenario.sourceSnapshot.scheduledCashflows.length ? scenario.sourceSnapshot.scheduledCashflows.map((flow) => <p key={flow.eventId} className="mt-2 text-sm">{compactDate(flow.date)} · {flow.label} · <strong>{money(flow.amount, scenario.currency)}</strong></p>) : <p className="mt-2 text-sm text-muted">No active scheduled transfer affects the selected accounts inside this horizon.</p>}</div></div>
+      <div className="grid gap-3 sm:grid-cols-2"><div><p className="text-xs font-bold uppercase tracking-wide text-muted">Ledger balances</p>{scenario.sourceSnapshot.ledgerAccounts.map((account) => <p key={account.accountId} className="mt-2 text-sm">Account {account.accountId}: <strong>{money(account.availableBalance, account.currency)}</strong> <span className="text-xs text-muted">projection v{account.projectionVersion}</span></p>)}</div><div><p className="text-xs font-bold uppercase tracking-wide text-muted">Known scheduled cashflows</p>{scenario.sourceSnapshot.scheduledCashflows.length ? scenario.sourceSnapshot.scheduledCashflows.map((flow) => <p key={flow.eventId} className="mt-2 text-sm">{compactDate(flow.date)} · {flow.label} · <strong>{money(flow.amount, flow.currency)}</strong> <span className="text-xs text-muted">{flow.status} {flow.cadence} · {flow.evaluationTimeZone}</span></p>) : <p className="mt-2 text-sm text-muted">No active scheduled transfer affects the selected accounts inside this horizon.</p>}</div></div>
     </Panel>
 
     <Panel title="Compiled repair and guardrail drafts">

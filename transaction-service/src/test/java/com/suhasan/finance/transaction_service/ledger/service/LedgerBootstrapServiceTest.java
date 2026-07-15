@@ -99,12 +99,12 @@ class LedgerBootstrapServiceTest {
         LedgerBootstrapResult result = service.bootstrap(LedgerBootstrapCommand.enabled("operator", true, LocalDate.parse("2026-06-26")));
 
         assertThat(result.importedAccounts()).isEqualTo(2);
-        assertThat(result.seededSystemAccounts()).isEqualTo(6);
+        assertThat(result.seededSystemAccounts()).isEqualTo(12);
         assertThat(result.openingJournals()).isEqualTo(2);
-        assertThat(result.currencies()).containsExactlyInAnyOrder("USD", "EUR");
+        assertThat(result.currencies()).containsExactly("USD", "EUR", "GBP", "INR");
 
         ArgumentCaptor<LedgerAccount> accountCaptor = ArgumentCaptor.forClass(LedgerAccount.class);
-        verify(accountRepository, times(8)).save(accountCaptor.capture());
+        verify(accountRepository, times(14)).save(accountCaptor.capture());
         assertThat(accountCaptor.getAllValues())
                 .extracting(LedgerAccount::getAccountKind, LedgerAccount::getCurrency)
                 .contains(
@@ -145,12 +145,12 @@ class LedgerBootstrapServiceTest {
         LedgerBootstrapResult result = service.bootstrap(LedgerBootstrapCommand.enabled("operator", true, LocalDate.parse("2026-06-26")));
 
         assertThat(result.importedAccounts()).isZero();
-        assertThat(result.seededSystemAccounts()).isEqualTo(9);
+        assertThat(result.seededSystemAccounts()).isEqualTo(12);
         assertThat(result.openingJournals()).isZero();
-        assertThat(result.currencies()).containsExactly("USD", "EUR", "GBP");
+        assertThat(result.currencies()).containsExactly("USD", "EUR", "GBP", "INR");
 
         ArgumentCaptor<LedgerAccount> accountCaptor = ArgumentCaptor.forClass(LedgerAccount.class);
-        verify(accountRepository, times(9)).save(accountCaptor.capture());
+        verify(accountRepository, times(12)).save(accountCaptor.capture());
         assertThat(accountCaptor.getAllValues())
                 .extracting(LedgerAccount::getAccountKind, LedgerAccount::getCurrency)
                 .contains(
@@ -162,7 +162,10 @@ class LedgerBootstrapServiceTest {
                         tuple(LedgerAccountKind.FEE, "EUR"),
                         tuple(LedgerAccountKind.CLEARING, "GBP"),
                         tuple(LedgerAccountKind.SUSPENSE, "GBP"),
-                        tuple(LedgerAccountKind.FEE, "GBP"));
+                        tuple(LedgerAccountKind.FEE, "GBP"),
+                        tuple(LedgerAccountKind.CLEARING, "INR"),
+                        tuple(LedgerAccountKind.SUSPENSE, "INR"),
+                        tuple(LedgerAccountKind.FEE, "INR"));
         verifyNoInteractions(postingService);
     }
 
@@ -173,7 +176,8 @@ class LedgerBootstrapServiceTest {
                 account("1001", "customer-1", "USD", "100.00", "100.00", "ACTIVE")));
         when(transactionRepository.findByStatusOrderByCreatedAtDesc(TransactionStatus.PROCESSING)).thenReturn(List.of());
         when(transactionRepository.findByStatusOrderByCreatedAtDesc(TransactionStatus.PENDING)).thenReturn(List.of());
-        when(accountRepository.findByAccountKindAndCurrency(any(), eq("USD"))).thenReturn(Optional.of(systemAccount(LedgerAccountKind.CLEARING, "USD")));
+        when(accountRepository.findByAccountKindAndCurrency(any(), any())).thenAnswer(invocation ->
+                Optional.of(systemAccount(invocation.getArgument(0), invocation.getArgument(1))));
         when(accountRepository.findByExternalAccountId("1001")).thenReturn(Optional.of(existing));
         when(projectionRepository.findById(existing.getLedgerAccountId()))
                 .thenReturn(Optional.of(LedgerBalanceProjection.open(existing.getLedgerAccountId(), new BigDecimal("100.00"))));

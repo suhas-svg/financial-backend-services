@@ -141,10 +141,13 @@ public class AuditLoggingAspect {
     @AfterThrowing(pointcut = "transactionProcessingMethods()", throwing = "exception")
     public void logTransactionError(JoinPoint joinPoint, Throwable exception) {
         String methodName = joinPoint.getSignature().getName();
-        Object[] args = joinPoint.getArgs();
-        
-        log.error("Transaction processing failed: {} with args: {} error: {}", 
-                methodName, Arrays.toString(args), exception.getMessage(), exception);
+
+        // The monitoring aspect already records the failure details and metrics. Avoid
+        // synchronously rendering a full stack trace here: under container log pressure
+        // that delayed ordinary validation responses by several seconds. This concise
+        // audit entry still records the operation, exception type, and safe message.
+        log.error("Transaction processing failed: {} errorType: {} error: {}",
+                methodName, exception.getClass().getSimpleName(), exception.getMessage());
         
         // Log security events for authentication/authorization failures
         if (exception instanceof org.springframework.security.access.AccessDeniedException) {

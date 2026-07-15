@@ -13,4 +13,5 @@ public interface LedgerAccountRepository extends JpaRepository<LedgerAccount, UU
     Optional<LedgerAccount> findByAccountKindAndCurrency(LedgerAccountKind accountKind, String currency);
     List<LedgerAccount> findByOwnerIdAndAccountKindOrderByExternalAccountIdAsc(
             String ownerId, LedgerAccountKind accountKind);
+    long countByAccountKind(LedgerAccountKind accountKind);
 }

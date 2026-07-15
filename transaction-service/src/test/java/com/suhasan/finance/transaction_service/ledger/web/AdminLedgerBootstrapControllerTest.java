@@ -2,7 +2,8 @@ package com.suhasan.finance.transaction_service.ledger.web;
 
 import com.suhasan.finance.transaction_service.ledger.service.LedgerBootstrapCommand;
 import com.suhasan.finance.transaction_service.ledger.service.LedgerBootstrapResult;
-import com.suhasan.finance.transaction_service.ledger.service.LedgerBootstrapService;
+import com.suhasan.finance.transaction_service.ledger.service.LedgerBootstrapCoordinator;
+import com.suhasan.finance.transaction_service.ledger.service.LedgerBootstrapPreflightService;
 import com.suhasan.finance.transaction_service.security.JwtAuthenticationFilter;
 import com.suhasan.finance.transaction_service.security.SecurityConfig;
 import jakarta.servlet.FilterChain;
@@ -34,7 +35,8 @@ class AdminLedgerBootstrapControllerTest {
     @Autowired private MockMvc mockMvc;
 
     @MockitoBean private JwtAuthenticationFilter jwtAuthenticationFilter;
-    @MockitoBean private LedgerBootstrapService bootstrapService;
+    @MockitoBean private LedgerBootstrapCoordinator bootstrapCoordinator;
+    @MockitoBean private LedgerBootstrapPreflightService preflightService;
 
     @BeforeEach
     void allowJwtFilterToContinue() throws Exception {
@@ -65,7 +67,7 @@ class AdminLedgerBootstrapControllerTest {
     @Test
     @WithMockUser(username = "ops", roles = "ADMIN")
     void adminCanRunBootstrapCommandWithMaintenanceMode() throws Exception {
-        when(bootstrapService.bootstrap(new LedgerBootstrapCommand("ops", true, true, LocalDate.parse("2026-06-26"))))
+        when(bootstrapCoordinator.bootstrap(new LedgerBootstrapCommand("ops", true, true, LocalDate.parse("2026-06-26")), "ADMIN_API"))
                 .thenReturn(new LedgerBootstrapResult(2, 1, 6, 2, List.of("USD", "EUR")));
 
         mockMvc.perform(post("/api/admin/ledger/bootstrap")
@@ -78,13 +80,13 @@ class AdminLedgerBootstrapControllerTest {
                 .andExpect(jsonPath("$.openingJournals").value(2))
                 .andExpect(jsonPath("$.currencies[0]").value("USD"));
 
-        verify(bootstrapService).bootstrap(new LedgerBootstrapCommand("ops", true, true, LocalDate.parse("2026-06-26")));
+        verify(bootstrapCoordinator).bootstrap(new LedgerBootstrapCommand("ops", true, true, LocalDate.parse("2026-06-26")), "ADMIN_API");
     }
 
     @Test
     @WithMockUser(username = "ops", roles = "ADMIN")
     void bootstrapPreflightFailuresReturnConflict() throws Exception {
-        when(bootstrapService.bootstrap(any(LedgerBootstrapCommand.class)))
+        when(bootstrapCoordinator.bootstrap(any(LedgerBootstrapCommand.class), eq("ADMIN_API")))
                 .thenThrow(new IllegalStateException("Ledger bootstrap blocked by 1 unresolved legacy holds"));
 
         mockMvc.perform(post("/api/admin/ledger/bootstrap")

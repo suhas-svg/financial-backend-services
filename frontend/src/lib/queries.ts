@@ -28,6 +28,7 @@ export function createAccount(values: AccountValues) {
   const payload: Record<string, unknown> = {
     accountType: values.accountType,
     balance: values.balance,
+    currency: values.currency,
     ownerId: values.ownerId || session?.username
   };
   if (values.accountType === "SAVINGS") {
@@ -222,6 +223,13 @@ export function getOutcomeScenario(scenarioId: string) {
 export function refreshOutcomeScenario(scenarioId: string) {
   return apiRequest<OutcomeDivergence>("transaction", `/api/outcome-protection/scenarios/${scenarioId}/refresh`, { method: "POST" });
 }
+export function acknowledgeOutcomeWarning(eventId: string, idempotencyKey: string) {
+  return apiRequest<{ acknowledgementEventId: string; warningEventId: string; acknowledged: boolean; acknowledgedAt: string }>(
+    "transaction", `/api/outcome-protection/warnings/${eventId}/acknowledge`,
+    { method: "POST", idempotencyKey }
+  );
+}
+
 
 export function acceptOutcomeGuardrail(guardrailId: string, idempotencyKey: string) {
   return apiRequest<OutcomeGuardrail>("transaction", `/api/outcome-protection/guardrails/${guardrailId}/accept`, {
