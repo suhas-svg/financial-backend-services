@@ -6,7 +6,7 @@ import { Badge, Button, EmptyState, Field, Panel, Select } from "../components/u
 import { getNotificationSummary, listNotifications, markAllNotificationsRead, markNotificationRead } from "../lib/queries";
 import type { Notification, NotificationSeverity, NotificationStatus, NotificationType } from "../types";
 
-const notificationTypes: Array<NotificationType | ""> = ["", "TRANSACTION_COMPLETED", "TRANSACTION_FAILED", "ACCOUNT_FROZEN", "ACCOUNT_UNFROZEN", "DISPUTE_CREATED", "DISPUTE_STATUS_UPDATED", "SCHEDULED_TRANSFER_CREATED", "SCHEDULED_TRANSFER_PAUSED", "SCHEDULED_TRANSFER_RESUMED", "SCHEDULED_TRANSFER_CANCELED", "SCHEDULED_TRANSFER_EXECUTED", "SCHEDULED_TRANSFER_FAILED", "SECURITY_ACTION_REQUIRED", "SECURITY_ALERT", "TRANSFER_AUTHORIZED"];
+const notificationTypes: Array<NotificationType | ""> = ["", "TRANSACTION_COMPLETED", "TRANSACTION_FAILED", "ACCOUNT_FROZEN", "ACCOUNT_UNFROZEN", "DISPUTE_CREATED", "DISPUTE_STATUS_UPDATED", "SCHEDULED_TRANSFER_CREATED", "SCHEDULED_TRANSFER_PAUSED", "SCHEDULED_TRANSFER_RESUMED", "SCHEDULED_TRANSFER_CANCELED", "SCHEDULED_TRANSFER_EXECUTED", "SCHEDULED_TRANSFER_FAILED", "OUTCOME_PROTECTION_AT_RISK", "SECURITY_ACTION_REQUIRED", "SECURITY_ALERT", "TRANSFER_AUTHORIZED"];
 const severities: Array<NotificationSeverity | ""> = ["", "INFO", "SUCCESS", "WARNING", "CRITICAL"];
 const statuses: Array<NotificationStatus | ""> = ["", "UNREAD", "READ"];
 
@@ -110,6 +110,9 @@ function SourceLink({ notification }: { notification: Notification }) {
   }
   if (notification.sourceType === "ACCOUNT") {
     return <Link className="font-medium text-brand hover:underline" to="/accounts">ACCOUNT {notification.sourceId}</Link>;
+  }
+  if (notification.sourceType === "OUTCOME_PROTECTION") {
+    return <Link className="font-medium text-brand hover:underline" to="/outcome-protection">BALANCE SHIELD {notification.sourceId}</Link>;
   }
   return <span>{notification.sourceType} {notification.sourceId}</span>;
 }

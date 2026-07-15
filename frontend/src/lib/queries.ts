@@ -1,4 +1,4 @@
-import type { Account, AccountStatus, AuditLogEntry, AuditSummary, Beneficiary, BeneficiaryStatus, ChallengeVerification, CustomerJournal, CustomerStatement, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, LedgerAccountProjection, Limits, MfaConfirmation, MfaEnrollment, MfaStatus, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, Page, ReconciliationException, ReconciliationExceptionStatus, ReconciliationRun, ReconciliationSeverity, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, ScheduledTransfer, ScheduledTransferRun, ScheduledTransferStatus, Transaction, TransactionDispute, TransactionStats } from "../types";
+import type { Account, AccountStatus, AuditLogEntry, AuditSummary, Beneficiary, BeneficiaryStatus, ChallengeVerification, CustomerJournal, CustomerStatement, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, LedgerAccountProjection, Limits, MfaConfirmation, MfaEnrollment, MfaStatus, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, OutcomeDivergence, OutcomeGuardrail, OutcomeScenario, OutcomeScenarioRequest, OutcomeScenarioSummary, Page, ReconciliationException, ReconciliationExceptionStatus, ReconciliationRun, ReconciliationSeverity, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, ScheduledTransfer, ScheduledTransferRun, ScheduledTransferStatus, Transaction, TransactionDispute, TransactionStats } from "../types";
 import { apiRequest, toQuery } from "./api";
 import type { AccountValues, BeneficiaryValues, DisputeNoteValues, DisputeStatusValues, DisputeValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, ScheduledTransferValues, TransferValues } from "./schemas";
 import { getSession } from "./session";
@@ -201,6 +201,34 @@ export function cancelScheduledTransfer(scheduleId: string) {
 
 export function listScheduledTransferRuns(scheduleId: string) {
   return apiRequest<Page<ScheduledTransferRun>>("transaction", `/api/scheduled-transfers/${scheduleId}/runs`);
+}
+
+export function createOutcomeScenario(values: OutcomeScenarioRequest, idempotencyKey: string) {
+  return apiRequest<OutcomeScenario>("transaction", "/api/outcome-protection/scenarios", {
+    method: "POST",
+    body: values,
+    idempotencyKey
+  });
+}
+
+export function listOutcomeScenarios() {
+  return apiRequest<OutcomeScenarioSummary[]>("transaction", "/api/outcome-protection/scenarios");
+}
+
+export function getOutcomeScenario(scenarioId: string) {
+  return apiRequest<OutcomeScenario>("transaction", `/api/outcome-protection/scenarios/${scenarioId}`);
+}
+
+export function refreshOutcomeScenario(scenarioId: string) {
+  return apiRequest<OutcomeDivergence>("transaction", `/api/outcome-protection/scenarios/${scenarioId}/refresh`, { method: "POST" });
+}
+
+export function acceptOutcomeGuardrail(guardrailId: string, idempotencyKey: string) {
+  return apiRequest<OutcomeGuardrail>("transaction", `/api/outcome-protection/guardrails/${guardrailId}/accept`, {
+    method: "POST",
+    body: { confirmed: true },
+    idempotencyKey
+  });
 }
 
 function scheduledTransferPayload(values: ScheduledTransferValues) {

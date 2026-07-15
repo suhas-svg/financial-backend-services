@@ -109,6 +109,9 @@ function mockFetch(handler?: (url: string, init?: RequestInit) => Promise<Respon
     if (url.includes("/api/ledger/accounts")) {
       return jsonResponse([]);
     }
+    if (url.includes("/api/outcome-protection/scenarios")) {
+      return jsonResponse([]);
+    }
     if (url.includes("/api/ledger/statements")) {
       return jsonResponse([]);
     }
@@ -177,6 +180,21 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   sessionStorage.clear();
+});
+
+it("opens the customer Balance Shield reverse-stress workflow", async () => {
+  mockFetch((url) => {
+    if (url.includes("/api/ledger/accounts")) return jsonResponse([sampleLedgerAccount]);
+    if (url.includes("/api/outcome-protection/scenarios")) return jsonResponse([]);
+    return undefined;
+  });
+
+  renderApp("/outcome-protection", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+  expect(await screen.findByRole("heading", { name: "Balance Shield lab" })).toBeInTheDocument();
+  expect(await screen.findByText("Account 101")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Run reverse-stress lab/i })).toBeInTheDocument();
+  expect(screen.getByText(/cannot move funds, change schedules, or contact external payment rails/i)).toBeInTheDocument();
 });
 
 describe("auth screens", () => {

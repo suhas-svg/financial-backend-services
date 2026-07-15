@@ -1,6 +1,7 @@
 package com.suhasan.finance.transaction_service.repository;
 
 import com.suhasan.finance.transaction_service.entity.ScheduledTransfer;
+import com.suhasan.finance.transaction_service.entity.ScheduledTransferStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -26,4 +27,6 @@ public interface ScheduledTransferRepository extends JpaRepository<ScheduledTran
     Page<ScheduledTransfer> findByUserId(String userId, Pageable pageable);
 
     Optional<ScheduledTransfer> findByScheduleIdAndUserId(String scheduleId, String userId);
+
+    List<ScheduledTransfer> findByUserIdAndStatusOrderByNextRunAtAsc(String userId, ScheduledTransferStatus status);
 }

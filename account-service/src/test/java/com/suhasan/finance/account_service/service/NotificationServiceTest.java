@@ -111,6 +111,26 @@ class NotificationServiceTest {
     }
 
     @Test
+    void createNotification_acceptsOutcomeProtectionWarning() {
+        when(notificationRepository.findByDedupeKey("outcome-protection:warning-1")).thenReturn(Optional.empty());
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Notification response = notificationService.createInternal(NotificationCreateRequest.builder()
+                .userId("customer")
+                .type(NotificationType.OUTCOME_PROTECTION_AT_RISK)
+                .severity(NotificationSeverity.WARNING)
+                .title("Balance Shield needs attention")
+                .message("Your protected outcome is at risk.")
+                .sourceType(NotificationSourceType.OUTCOME_PROTECTION)
+                .sourceId("scenario-1")
+                .dedupeKey("outcome-protection:warning-1")
+                .build());
+
+        assertThat(response.getType()).isEqualTo(NotificationType.OUTCOME_PROTECTION_AT_RISK);
+        assertThat(response.getSourceType()).isEqualTo(NotificationSourceType.OUTCOME_PROTECTION);
+    }
+
+    @Test
     @DisplayName("Rejects missing required create fields")
     void rejectsMissingRequiredCreateFields() {
         assertThatThrownBy(() -> notificationService.createInternal(NotificationCreateRequest.builder()

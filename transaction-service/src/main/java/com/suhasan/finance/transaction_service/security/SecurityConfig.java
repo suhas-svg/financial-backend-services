@@ -51,6 +51,7 @@ public class SecurityConfig {
 
                         // ── Transaction endpoints — require authenticated user ────────────────
                         .requestMatchers("/api/scheduled-transfers/**").authenticated()
+                        .requestMatchers("/api/outcome-protection/**").authenticated()
                         .requestMatchers("/api/transactions/**").authenticated()
                         .requestMatchers("/api/ledger/**").authenticated()
 

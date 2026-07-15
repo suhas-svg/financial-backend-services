@@ -25,6 +25,7 @@ Run the backend services first, then open the Vite URL printed by `npm run dev`.
   - Account list, create, type filter, and delete
   - Deposit, withdrawal, and transfer with generated `Idempotency-Key` headers
   - Transaction history, search filters, detail view, limits, and user stats
+  - Balance Shield `/outcome-protection` workflow for protected outcomes, bounded reverse stress, causal timelines, current-state refresh, and confirmation-gated preview guardrails
 - Admin app:
   - Use the dedicated Operations sign-in mode at `/login?portal=admin`, with admin-role verification before entering `/admin`
   - Admin-only navigation based on JWT `roles`

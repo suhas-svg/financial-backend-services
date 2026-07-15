@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeftRight, Banknote, Bell, CalendarClock, ChevronLeft, ChevronRight, CircleHelp, Command, FileText, Gauge, Landmark, LockKeyhole, LogOut, Menu, Moon, Plus, Search, Sun, Users, WalletCards, X } from "lucide-react";
+import { ArrowLeftRight, Banknote, Bell, CalendarClock, ChevronLeft, ChevronRight, CircleHelp, Command, FileText, Gauge, Landmark, LockKeyhole, LogOut, Menu, Moon, Plus, Search, ShieldCheck, Sun, Users, WalletCards, X } from "lucide-react";
 import clsx from "clsx";
 import { Button } from "./ui";
 import { useAuth } from "../state/useAuth";
@@ -13,6 +13,7 @@ const navItems = [
   { to: "/beneficiaries", label: "Recipients", keywords: "beneficiaries payees", icon: Users },
   { to: "/move-money", label: "Move Money", keywords: "transfer deposit withdraw", icon: ArrowLeftRight },
   { to: "/scheduled-transfers", label: "Scheduled", keywords: "recurring future", icon: CalendarClock },
+  { to: "/outcome-protection", label: "Balance Shield", keywords: "outcome protection forecast stress guardrail", icon: ShieldCheck },
   { to: "/transactions", label: "Transactions", keywords: "activity history", icon: Banknote },
   { to: "/disputes", label: "Disputes", keywords: "claims help", icon: CircleHelp },
   { to: "/statements", label: "Statements", keywords: "documents export", icon: FileText },

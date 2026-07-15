@@ -4,5 +4,6 @@ public enum NotificationSourceType {
     ACCOUNT,
     TRANSACTION,
     DISPUTE,
-    SCHEDULED_TRANSFER
+    SCHEDULED_TRANSFER,
+    OUTCOME_PROTECTION
 }
