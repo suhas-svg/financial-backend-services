@@ -133,6 +133,43 @@ class LedgerMigrationIntegrationTest {
                 .hasMessageContaining("immutable");
     }
 
+    @Test
+    void outcomeProtectionMigrationCreatesImmutableVersionedProofTables() {
+        Integer tableCount = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name IN ('outcome_scenarios', 'outcome_scenario_versions',
+                                     'outcome_simulation_results', 'outcome_guardrail_drafts',
+                                     'outcome_domain_events')
+                """, Integer.class);
+        assertThat(tableCount).isEqualTo(5);
+
+        String scenarioId = UUID.randomUUID().toString();
+        jdbc.update("""
+                INSERT INTO outcome_scenarios (
+                    scenario_id, user_id, name, status, current_version, currency, time_zone,
+                    create_idempotency_key, create_request_fingerprint, created_at, updated_at, version)
+                VALUES (?, 'migration-owner', 'Rent buffer', 'ACTIVE', 1, 'USD', 'UTC',
+                        ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                """, scenarioId, "create-" + scenarioId, "fingerprint-" + scenarioId);
+        String versionId = UUID.randomUUID().toString();
+        jdbc.update("""
+                INSERT INTO outcome_scenario_versions (
+                    version_id, scenario_id, scenario_version, horizon_start, horizon_days,
+                    protected_minimum, account_ids_json, assumptions_json, shocks_json,
+                    ledger_snapshot_json, schedule_snapshot_json, source_fingerprint,
+                    mutation_idempotency_key, request_fingerprint, created_at)
+                VALUES (?, ?, 1, CURRENT_DATE, 30, 10000.00, '[]', '[]', '[]', '[]', '[]',
+                        ?, ?, ?, CURRENT_TIMESTAMP)
+                """, versionId, scenarioId, "source-" + scenarioId, "mutation-" + scenarioId,
+                "request-" + scenarioId);
+
+        assertThatThrownBy(() -> jdbc.update(
+                "UPDATE outcome_scenario_versions SET horizon_days = 31 WHERE version_id = ?", versionId))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("immutable");
+    }
+
     private static UUID insertLedgerAccount(String kind, String currency, String externalAccountId) {
         if (externalAccountId == null && !"CUSTOMER".equals(kind)) {
             var existing = jdbc.query(

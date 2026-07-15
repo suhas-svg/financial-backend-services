@@ -23,6 +23,7 @@ const BeneficiariesPage = lazy(() => import("./pages/BeneficiariesPage").then((m
 const DisputesPage = lazy(() => import("./pages/DisputesPage").then((module) => ({ default: module.DisputesPage })));
 const MoveMoneyPage = lazy(() => import("./pages/MoveMoneyPage").then((module) => ({ default: module.MoveMoneyPage })));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage").then((module) => ({ default: module.NotificationsPage })));
+const OutcomeProtectionPage = lazy(() => import("./pages/OutcomeProtectionPage").then((module) => ({ default: module.OutcomeProtectionPage })));
 const ScheduledTransfersPage = lazy(() => import("./pages/ScheduledTransfersPage").then((module) => ({ default: module.ScheduledTransfersPage })));
 const SecurityPage = lazy(() => import("./pages/SecurityPage").then((module) => ({ default: module.SecurityPage })));
 const StatementsPage = lazy(() => import("./pages/StatementsPage").then((module) => ({ default: module.StatementsPage })));
@@ -40,6 +41,7 @@ export function App() {
           <Route path="beneficiaries" element={<BeneficiariesPage />} />
           <Route path="move-money" element={<MoveMoneyPage />} />
           <Route path="scheduled-transfers" element={<ScheduledTransfersPage />} />
+          <Route path="outcome-protection" element={<OutcomeProtectionPage />} />
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="disputes" element={<DisputesPage />} />
           <Route path="statements" element={<StatementsPage />} />

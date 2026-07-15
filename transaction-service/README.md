@@ -16,6 +16,7 @@ The Transaction Service handles all financial transactions within the system, pr
 - **Fraud Prevention**: Basic fraud detection and transaction validation
 - **Caching**: Redis-based caching for improved performance
 - **Security**: JWT-based authentication and authorization
+- **Outcome Protection**: Immutable scenarios, deterministic reverse stress, causal timelines, read-only guardrail drafts, and divergence warnings
 
 ## Technology Stack
 
@@ -47,6 +48,26 @@ GET    /api/transactions/status/{status} # Get transactions by status
 ```
 POST   /api/transactions/{id}/reverse    # Reverse transaction
 GET    /api/transactions/account/{id}/stats # Transaction statistics
+```
+
+### Outcome Protection
+```
+POST   /api/outcome-protection/scenarios
+GET    /api/outcome-protection/scenarios
+GET    /api/outcome-protection/scenarios/{scenarioId}
+POST   /api/outcome-protection/scenarios/{scenarioId}/versions
+POST   /api/outcome-protection/scenarios/{scenarioId}/refresh
+POST   /api/outcome-protection/guardrails/{guardrailId}/accept
+```
+
+Scenario mutations require an `Idempotency-Key`. Customer ownership is resolved from the JWT. The engine uses decimal-safe daily cashflows, authoritative ledger availability, active scheduled transfers, and explicit customer assumptions. Search defaults to combinations of at most three shocks and 5,000 evaluated combinations. Guardrail acceptance is a consent record for a preview only; it never moves money.
+
+Configuration:
+
+```properties
+outcome-protection.search.max-combination-size=${OUTCOME_PROTECTION_MAX_COMBINATION_SIZE:3}
+outcome-protection.search.max-evaluated-combinations=${OUTCOME_PROTECTION_MAX_EVALUATED_COMBINATIONS:5000}
+outcome-protection.monitor.fixed-delay-ms=${OUTCOME_PROTECTION_MONITOR_DELAY_MS:300000}
 ```
 
 ### Health & Monitoring

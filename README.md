@@ -36,6 +36,8 @@ financial-backend-services/
 - Complete risk-based step-up verification before high-risk transfers are posted.
 - Create one-time or recurring scheduled transfers between accounts.
 - Pause, resume, cancel, and inspect scheduled transfer run history.
+- Protect a minimum available balance with the Outcome Protection / Balance Shield reverse-stress lab.
+- Review exact baseline and stressed timelines, minimal failure sets, and consent-gated preview-only guardrail drafts.
 - Use available-balance validation for withdrawals and outgoing transfer sources.
 - Keep frozen accounts selectable for credits, while debit-source controls are disabled.
 - Generate an `Idempotency-Key` per money-movement submit.
@@ -89,6 +91,8 @@ financial-backend-services/
 - Transaction service:
   - Deposit, withdrawal, transfer, and scheduled transfer endpoints.
   - Scheduled transfer persistence, authenticated APIs, and worker execution for one-time and recurring transfers.
+  - Immutable, versioned Outcome Protection scenarios and deterministic reverse-stress simulation over authoritative ledger balances, active schedules, and explicit assumptions.
+  - Bounded minimal-failure search, causal proof, read-only guardrail compilation, analytics-ready domain events, and divergence monitoring.
   - Frozen-account debit enforcement before withdrawals and outgoing transfer debits.
   - Pending debit authorization flow for withdrawals and outgoing transfers.
   - Debit hold placement and capture before completing debit transactions.
@@ -125,6 +129,24 @@ Internal creation API:
 Notification records are customer-owned in `account-service`. Customer endpoints always use the authenticated user, while internal/admin callers may create notifications for any `userId`. The internal endpoint requires `ROLE_ADMIN` or `ROLE_INTERNAL_SERVICE`.
 
 Event sources currently create notifications for account freeze/unfreeze, transfer completion/failure, scheduled transfer creation/pause/resume/cancel/execution/failure, dispute creation, and dispute status changes to `APPROVED`, `DENIED`, or `CLOSED`. Source workflows treat notification delivery as best-effort: failures are logged and do not roll back money movement, scheduled transfer processing, account status changes, or dispute updates. Dedupe keys keep repeated source events from creating duplicate inbox rows.
+
+## Outcome Protection / Balance Shield
+
+The customer route `/outcome-protection` is a deterministic Personal Reverse-Stress Lab. A customer selects same-currency ledger accounts, a protected minimum, a 1-90 day horizon, dated assumptions, and bounded shocks. Transaction-service snapshots authoritative available balances and active scheduled transfers, then returns the baseline timeline, smallest bounded failure set, exact failure date and triggers, maximum shortfall, and the smallest verified advisory repair set.
+
+Customer API:
+
+- `POST /api/outcome-protection/scenarios` (requires `Idempotency-Key`)
+- `GET /api/outcome-protection/scenarios`
+- `GET /api/outcome-protection/scenarios/{scenarioId}`
+- `POST /api/outcome-protection/scenarios/{scenarioId}/versions` (requires `Idempotency-Key`)
+- `POST /api/outcome-protection/scenarios/{scenarioId}/refresh`
+- `POST /api/outcome-protection/guardrails/{guardrailId}/accept` (requires explicit confirmation and `Idempotency-Key`)
+- `POST /api/outcome-protection/warnings/{eventId}/acknowledge`
+
+Scenario inputs, ledger/schedule snapshots, and simulation results are versioned and immutable. Search is capped by `OUTCOME_PROTECTION_MAX_COMBINATION_SIZE` (default `3`) and `OUTCOME_PROTECTION_MAX_EVALUATED_COMBINATIONS` (default `5000`); capped results say so explicitly. The monitor checks saved scenarios every five minutes by default and emits a deduped, best-effort in-app warning when fresh ledger or schedule state puts the baseline outcome at risk.
+
+Guardrails are preview-only in this MVP. Accepting a draft records consent, scope, threshold, expiry, idempotency, and an audit/domain event. It does not hold, move, schedule, or transmit money. External rails, automatic scheduled-transfer changes, investment advice, FX aggregation, and executable guardrails remain out of scope. See [the implementation design](docs/superpowers/specs/2026-07-15-outcome-protection-money-debugger-design.md).
 
 ## Risk-based Step-up Authorization
 
@@ -239,6 +261,7 @@ Authenticated customer pages use these routes:
 - `/accounts` - customer accounts
 - `/move-money` - deposits, withdrawals, and transfers
 - `/scheduled-transfers` - scheduled and recurring transfers
+- `/outcome-protection` - Balance Shield scenarios, reverse-stress proof, and preview-only guardrails
 - `/transactions` - transaction history, detail, disputes, and reversals
 - `/disputes` - submitted dispute history
 - `/notifications` - notification inbox

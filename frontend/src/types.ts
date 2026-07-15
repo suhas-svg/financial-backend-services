@@ -78,10 +78,10 @@ export type CustomerJournal = {
   postings: CustomerJournalPosting[];
 };
 
-export type NotificationType = "TRANSACTION_COMPLETED" | "TRANSACTION_FAILED" | "ACCOUNT_FROZEN" | "ACCOUNT_UNFROZEN" | "DISPUTE_CREATED" | "DISPUTE_STATUS_UPDATED" | "SCHEDULED_TRANSFER_CREATED" | "SCHEDULED_TRANSFER_PAUSED" | "SCHEDULED_TRANSFER_RESUMED" | "SCHEDULED_TRANSFER_CANCELED" | "SCHEDULED_TRANSFER_EXECUTED" | "SCHEDULED_TRANSFER_FAILED" | "SECURITY_ACTION_REQUIRED" | "SECURITY_ALERT" | "TRANSFER_AUTHORIZED";
+export type NotificationType = "TRANSACTION_COMPLETED" | "TRANSACTION_FAILED" | "ACCOUNT_FROZEN" | "ACCOUNT_UNFROZEN" | "DISPUTE_CREATED" | "DISPUTE_STATUS_UPDATED" | "SCHEDULED_TRANSFER_CREATED" | "SCHEDULED_TRANSFER_PAUSED" | "SCHEDULED_TRANSFER_RESUMED" | "SCHEDULED_TRANSFER_CANCELED" | "SCHEDULED_TRANSFER_EXECUTED" | "SCHEDULED_TRANSFER_FAILED" | "OUTCOME_PROTECTION_AT_RISK" | "SECURITY_ACTION_REQUIRED" | "SECURITY_ALERT" | "TRANSFER_AUTHORIZED";
 export type NotificationSeverity = "INFO" | "SUCCESS" | "WARNING" | "CRITICAL";
 export type NotificationStatus = "UNREAD" | "READ";
-export type NotificationSourceType = "ACCOUNT" | "TRANSACTION" | "DISPUTE" | "SCHEDULED_TRANSFER";
+export type NotificationSourceType = "ACCOUNT" | "TRANSACTION" | "DISPUTE" | "SCHEDULED_TRANSFER" | "OUTCOME_PROTECTION";
 
 export type Notification = {
   notificationId: number;
@@ -228,6 +228,144 @@ export type ScheduledTransferRun = {
   transactionId?: string;
   idempotencyKey: string;
   failureReason?: string;
+};
+
+export type OutcomeAssumptionType = "INCOME" | "EXPENSE" | "OTHER";
+export type OutcomeShockType = "INCOME_DELAY" | "INCOME_REDUCTION" | "EXPENSE_SPIKE" | "PAYMENT_TIMING_SHIFT";
+
+export type OutcomeAssumption = {
+  id: string;
+  date: string;
+  amount: number;
+  type: OutcomeAssumptionType;
+  label: string;
+  flexible: boolean;
+  critical: boolean;
+};
+
+export type OutcomeShock = {
+  id: string;
+  type: OutcomeShockType;
+  targetAssumptionId: string;
+  days?: number;
+  amount?: number;
+  percentage?: number;
+  label: string;
+};
+
+export type OutcomeScenarioRequest = {
+  name: string;
+  accountIds: string[];
+  currency: string;
+  timeZone: string;
+  horizonStart: string;
+  horizonDays: number;
+  protectedMinimum: number;
+  assumptions: OutcomeAssumption[];
+  shocks: OutcomeShock[];
+};
+
+export type OutcomeTimelineEvent = {
+  eventId: string;
+  date: string;
+  amount: number;
+  source: "ASSUMPTION" | "SCHEDULED_TRANSFER" | string;
+  label: string;
+  flexible: boolean;
+  critical: boolean;
+};
+
+export type OutcomeTimelineDay = {
+  date: string;
+  openingBalance: number;
+  events: OutcomeTimelineEvent[];
+  closingBalance: number;
+};
+
+export type OutcomeForecast = {
+  safe: boolean;
+  startingBalance: number;
+  protectedMinimum: number;
+  failureDate?: string;
+  lowestBalance: number;
+  closingBalance: number;
+  triggeringEvents: OutcomeTimelineEvent[];
+  timeline: OutcomeTimelineDay[];
+};
+
+export type OutcomeSimulation = {
+  baseline: OutcomeForecast;
+  reverseStress: {
+    failureFound: boolean;
+    baselineFailure: boolean;
+    minimalShockCount?: number;
+    appliedShocks: Array<{ shockId: string; type: OutcomeShockType; label: string; targetAssumptionId: string; severityScore: number }>;
+    failureDate?: string;
+    lowestBalance?: number;
+    triggeringEvents: OutcomeTimelineEvent[];
+    timeline: OutcomeTimelineDay[];
+    minimalityExplanation: string;
+  };
+  repair: {
+    maximumShortfall: number;
+    selectedRepairs: Array<{ actionId: string; type: string; amount: number; affectedEventIds: string[]; explanation: string }>;
+    verifiedInModel: boolean;
+    minimalityExplanation: string;
+  };
+  evaluatedCombinations: number;
+  searchCapped: boolean;
+};
+
+export type OutcomeGuardrail = {
+  guardrailId: string;
+  type: string;
+  thresholdAmount: number;
+  currency: string;
+  accountIds: string[];
+  expiresAt: string;
+  status: "DRAFT" | "ACCEPTED" | "EXPIRED";
+  previewText: string;
+  acceptedAt?: string;
+};
+
+export type OutcomeScenarioSummary = {
+  scenarioId: string;
+  name: string;
+  version: number;
+  status: string;
+  currency: string;
+  horizonStart: string;
+  horizonDays: number;
+  protectedMinimum: number;
+  baselineSafe: boolean;
+  updatedAt: string;
+};
+
+export type OutcomeScenario = OutcomeScenarioSummary & {
+  timeZone: string;
+  accountIds: string[];
+  assumptions: OutcomeAssumption[];
+  shocks: OutcomeShock[];
+  sourceSnapshot: {
+    startingAvailableBalance: number;
+    ledgerAccounts: Array<{ accountId: string; currency: string; availableBalance: number; projectionVersion: number; capturedAt: string }>;
+    scheduledCashflows: Array<{ eventId: string; scheduleId: string; date: string; amount: number; label: string; fromAccountId: string; toAccountId: string }>;
+    sourceFingerprint: string;
+  };
+  simulation: OutcomeSimulation;
+  guardrails: OutcomeGuardrail[];
+  createdAt: string;
+};
+
+export type OutcomeDivergence = {
+  scenarioId: string;
+  previousSourceFingerprint: string;
+  currentSourceFingerprint: string;
+  diverged: boolean;
+  protectionAtRisk: boolean;
+  notificationEmitted: boolean;
+  freshSimulation: OutcomeSimulation;
+  checkedAt: string;
 };
 
 export type AuditLogEntry = {
