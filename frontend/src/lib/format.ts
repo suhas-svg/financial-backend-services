@@ -1,6 +1,7 @@
 export function money(value: number | string | undefined | null, currency = "USD") {
   const numeric = Number(value ?? 0);
-  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(Number.isFinite(numeric) ? numeric : 0);
+  const locale = currency === "INR" ? "en-IN" : "en-US";
+  return new Intl.NumberFormat(locale, { style: "currency", currency }).format(Number.isFinite(numeric) ? numeric : 0);
 }
 
 export function compactDate(value?: string) {

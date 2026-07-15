@@ -27,7 +27,7 @@ public class ScheduledTransferCreateRequest {
     @DecimalMax("999999.99")
     private BigDecimal amount;
 
-    @Pattern(regexp = "USD|EUR|GBP")
+    @Pattern(regexp = "USD|EUR|GBP|INR")
     private String currency = "USD";
 
     @Size(max = 500)

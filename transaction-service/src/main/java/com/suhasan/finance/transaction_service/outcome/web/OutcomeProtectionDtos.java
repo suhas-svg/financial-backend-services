@@ -50,7 +50,8 @@ public final class OutcomeProtectionDtos {
             long projectionVersion, Instant capturedAt) {}
 
     public record ScheduledCashflowSnapshot(
-            String eventId, String scheduleId, LocalDate date, BigDecimal amount,
+            String eventId, String scheduleId, Instant scheduledFor, LocalDate date, BigDecimal amount,
+            String currency, String status, String cadence, String evaluationTimeZone,
             String label, String fromAccountId, String toAccountId) {}
 
     public record SourceSnapshot(
@@ -110,6 +111,11 @@ public final class OutcomeProtectionDtos {
 
     public record DivergenceResponse(
             String scenarioId, String previousSourceFingerprint, String currentSourceFingerprint,
-            boolean diverged, boolean protectionAtRisk, boolean notificationEmitted,
+            String evaluationEventId, String warningEventId,
+            boolean diverged, boolean protectionAtRisk, boolean warningAcknowledged, boolean notificationEmitted,
             SimulationProof freshSimulation, Instant checkedAt) {}
+
+    public record WarningAcknowledgementResponse(
+            String acknowledgementEventId, String warningEventId,
+            boolean acknowledged, Instant acknowledgedAt) {}
 }

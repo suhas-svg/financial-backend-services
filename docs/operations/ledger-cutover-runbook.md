@@ -24,6 +24,17 @@ Capture these artifacts before and after cutover:
 - Transaction-service ledger account count, projection count, and open reconciliation exception count.
 - Prometheus snapshots for `ledger_pending_journals_count`, `ledger_projection_outbox_backlog`, `ledger_suspense_balance`, and `ledger_projection_invariant_failures_total`.
 
+## Bootstrap preflight
+
+Before every bootstrap attempt, call the admin-only read-only preflight while ledger authority is still disabled:
+
+```http
+GET /api/admin/ledger/bootstrap/preflight?maintenanceMode=true
+Authorization: Bearer <admin-token>
+```
+
+The response reports whether maintenance was explicitly confirmed, row counts, required and missing system accounts, supported currencies, and blockers. The safe default system currencies are `USD,EUR,GBP,INR`; override them only with the reviewed `LEDGER_BOOTSTRAP_SYSTEM_CURRENCIES` deployment setting. Do not continue unless `ready=true`. A preflight never writes ledger data and does not reserve the result, so keep money movement paused until bootstrap and reconciliation finish.
+
 ## Bootstrap command
 
 Run bootstrap only after preconditions are met:
@@ -41,12 +52,37 @@ Content-Type: application/json
 
 Expected result:
 
+- The response contains a durable `runId`; retain it with the deployment evidence.
 - Customer ledger accounts imported or reused idempotently.
+- Clearing, suspense, and fee system accounts exist for every configured system currency, including INR by default.
 - Clearing, suspense, and fee system accounts exist for every imported currency.
 - Opening journals are balanced and posted.
 - Projection parity matches account-service mirrors.
 
-If the response is `409`, stop cutover and resolve the blocker before retrying.
+Every attempt writes a `ledger_bootstrap_runs` audit row with actor, mode, business date, outcome, counts/currencies, and a sanitized failure reason. If the response is `409`, stop cutover and resolve the blocker before retrying. Retrying is idempotent, but operators must still re-run preflight and retain the new run evidence.
+
+## Explicit fresh-database startup mode
+
+A brand-new financial database may be bootstrapped during transaction-service startup only in an isolated maintenance deployment. The mode is disabled by default and fails application startup unless all gates agree.
+
+Set exactly:
+
+```properties
+ledger.authoritative=false
+ledger.bootstrap.startup.enabled=true
+ledger.bootstrap.startup.maintenance-mode=true
+ledger.bootstrap.system-currencies=USD,EUR,GBP,INR
+```
+
+Operator sequence:
+
+1. Provision an empty transaction-service database and keep customer traffic and scheduled-transfer workers disabled at the edge/deployment layer.
+2. Start transaction-service once with the four settings above. Flyway creates the schema and audit table; the startup coordinator verifies the database is fresh before seeding system accounts.
+3. Capture the successful startup log and `ledger_bootstrap_runs` evidence. If startup fails, do not weaken a gate; inspect the persisted failure evidence and provision or clean the intended disposable database through the approved database workflow.
+4. Stop the bootstrap deployment and restart with `ledger.bootstrap.startup.enabled=false` and `ledger.bootstrap.startup.maintenance-mode=false`.
+5. Run reconciliation and the remaining cutover gates before enabling `ledger.authoritative=true`.
+
+This mode never imports or fabricates customer balances on a non-fresh database, never activates scheduled transfers, and never creates customer money movement. Reusing it on a populated database or combining it with authoritative ledger mode fails closed.
 
 ## Zero-critical-exception gate
 

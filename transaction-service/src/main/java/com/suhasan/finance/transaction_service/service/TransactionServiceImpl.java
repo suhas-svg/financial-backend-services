@@ -334,6 +334,8 @@ public class TransactionServiceImpl implements TransactionService {
             throw new IllegalArgumentException("Account not found");
         }
         ensureAccountOwnedByUser(account, userId);
+        String accountCurrency = firstNonBlank(account.getCurrency(), "USD")
+                .trim().toUpperCase(Locale.ROOT);
 
         if (!validateTransactionLimits(accountId, account.getAccountType(), TransactionType.DEPOSIT, amount)) {
             throw new IllegalArgumentException("Transaction exceeds limits");
@@ -343,7 +345,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .fromAccountId("EXTERNAL")
                 .toAccountId(accountId)
                 .amount(amount)
-                .currency("USD")
+                .currency(accountCurrency)
                 .type(TransactionType.DEPOSIT)
                 .status(TransactionStatus.PROCESSING)
                 .processingState(TransactionProcessingState.INITIATED)
@@ -460,6 +462,8 @@ public class TransactionServiceImpl implements TransactionService {
             throw new IllegalArgumentException("Account not found");
         }
         ensureAccountOwnedByUser(account, userId);
+        String accountCurrency = firstNonBlank(account.getCurrency(), "USD")
+                .trim().toUpperCase(Locale.ROOT);
         ensureAccountAllowsDebit(account, accountId, userId);
 
         if (!validateTransactionLimits(accountId, account.getAccountType(), TransactionType.WITHDRAWAL, amount)) {
@@ -484,7 +488,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .fromAccountId(accountId)
                 .toAccountId("EXTERNAL")
                 .amount(amount)
-                .currency("USD")
+                .currency(accountCurrency)
                 .type(TransactionType.WITHDRAWAL)
                 .status(TransactionStatus.PROCESSING)
                 .processingState(TransactionProcessingState.INITIATED)

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const amount = z.coerce.number().min(0.01, "Amount must be greater than 0").max(999999.99, "Amount exceeds maximum limit");
-const currency = z.enum(["USD", "EUR", "GBP"]);
+const currency = z.enum(["USD", "EUR", "GBP", "INR"]);
 
 export const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -16,6 +16,7 @@ export const registerSchema = z.object({
 export const accountSchema = z
   .object({
     accountType: z.enum(["CHECKING", "SAVINGS", "CREDIT"]),
+    currency,
     balance: z.coerce.number().min(0, "Balance must be zero or positive"),
     ownerId: z.string().optional(),
     interestRate: z.coerce.number().min(0).optional(),

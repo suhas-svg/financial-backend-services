@@ -87,12 +87,13 @@ class TransactionLedgerIntegrationTest {
                 .availableBalance(new BigDecimal("10.00"))
                 .accountType("CHECKING")
                 .status("ACTIVE")
+                .currency("INR")
                 .build();
         when(accountServiceClient.getAccount("101")).thenReturn(account);
         when(transactionLimitService.validateTransactionLimits(anyString(), anyString(), any(), any()))
                 .thenReturn(true);
         when(accountLedgerResolver.resolveCustomerAccount("101", account)).thenReturn(customerLedgerAccountId);
-        when(accountLedgerResolver.resolveSystemAccount(LedgerAccountKind.CLEARING, "USD"))
+        when(accountLedgerResolver.resolveSystemAccount(LedgerAccountKind.CLEARING, "INR"))
                 .thenReturn(clearingLedgerAccountId);
         when(ledgerPostingService.createPending(any(JournalCommand.class)))
                 .thenReturn(new JournalResult(journalId, JournalState.PENDING, false));
@@ -111,7 +112,7 @@ class TransactionLedgerIntegrationTest {
         verify(ledgerPostingService).createPending(commandCaptor.capture());
         JournalCommand command = commandCaptor.getValue();
         assertThat(command.journalType()).isEqualTo(JournalType.DEPOSIT);
-        assertThat(command.currency()).isEqualTo("USD");
+        assertThat(command.currency()).isEqualTo("INR");
         assertThat(command.idempotencyScope()).isEqualTo("user-1:DEPOSIT");
         assertThat(command.idempotencyKey()).isEqualTo("idem-deposit-1");
         assertThat(command.postings()).extracting("ledgerAccountId", "direction", "amount")
@@ -192,12 +193,13 @@ class TransactionLedgerIntegrationTest {
                 .availableBalance(new BigDecimal("100.00"))
                 .accountType("CHECKING")
                 .status("ACTIVE")
+                .currency("INR")
                 .build();
         when(accountServiceClient.getAccount("101")).thenReturn(account);
         when(transactionLimitService.validateTransactionLimits(anyString(), anyString(), any(), any()))
                 .thenReturn(true);
         when(accountLedgerResolver.resolveCustomerAccount("101", account)).thenReturn(customerLedgerAccountId);
-        when(accountLedgerResolver.resolveSystemAccount(LedgerAccountKind.CLEARING, "USD"))
+        when(accountLedgerResolver.resolveSystemAccount(LedgerAccountKind.CLEARING, "INR"))
                 .thenReturn(clearingLedgerAccountId);
         when(ledgerPostingService.createPending(any(JournalCommand.class)))
                 .thenReturn(new JournalResult(journalId, JournalState.PENDING, false));
@@ -218,6 +220,7 @@ class TransactionLedgerIntegrationTest {
         JournalCommand command = commandCaptor.getValue();
         assertThat(command.journalType()).isEqualTo(JournalType.WITHDRAWAL);
         assertThat(command.idempotencyScope()).isEqualTo("user-1:WITHDRAWAL");
+        assertThat(command.currency()).isEqualTo("INR");
         assertThat(command.idempotencyKey()).isEqualTo("idem-withdrawal-1");
         assertThat(command.postings()).extracting("ledgerAccountId", "direction", "amount")
                 .containsExactly(

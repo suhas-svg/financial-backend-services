@@ -115,13 +115,13 @@ export function MoveMoneyPage() {
           <ErrorNotice message={withdrawMutation.error instanceof Error ? withdrawMutation.error.message : undefined} />
           <StatusNotice
             pending={withdrawMutation.isPending}
-            message={withdrawMutation.isPending ? "Withdrawal is processing. You do not need to submit it again." : withdrawStatus}
+            message={withdrawMutation.isPending ? "Checking withdrawal request. You do not need to submit it again." : withdrawStatus}
           />
           <Field label="Withdraw account" error={withdrawForm.formState.errors.accountId?.message}>
             <AccountSelect field={withdrawForm.register("accountId")} debitSource amount={withdrawAmount} />
           </Field>
           <MoneyFields form={withdrawForm} />
-          <Button type="submit" disabled={withdrawMutation.isPending}>{withdrawMutation.isPending ? "Processing withdrawal..." : "Withdraw"}</Button>
+          <Button type="submit" disabled={withdrawMutation.isPending}>{withdrawMutation.isPending ? "Checking withdrawal..." : "Withdraw"}</Button>
         </form>
       </Panel>
       <Panel title="Transfer">
@@ -163,6 +163,7 @@ export function MoveMoneyPage() {
               <option value="USD">USD</option>
               <option value="EUR">EUR</option>
               <option value="GBP">GBP</option>
+              <option value="INR">INR</option>
             </Select>
           </Field>
           <Field label="Description" error={transferForm.formState.errors.description?.message}>
@@ -217,7 +218,7 @@ function formatReason(reason: string) {
 }
 
 function formatMoney(amount: number, currency: string) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount);
+  return new Intl.NumberFormat(currency === "INR" ? "en-IN" : "en-US", { style: "currency", currency }).format(amount);
 }
 
 function MoneyFields({ form }: { form: ReturnType<typeof useForm<MoneyMovementValues>> }) {
@@ -231,6 +232,7 @@ function MoneyFields({ form }: { form: ReturnType<typeof useForm<MoneyMovementVa
           <option value="USD">USD</option>
           <option value="EUR">EUR</option>
           <option value="GBP">GBP</option>
+          <option value="INR">INR</option>
         </Select>
       </Field>
       <Field label="Description" error={form.formState.errors.description?.message}>

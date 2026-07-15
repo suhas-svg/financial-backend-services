@@ -144,9 +144,11 @@ Customer API:
 - `POST /api/outcome-protection/guardrails/{guardrailId}/accept` (requires explicit confirmation and `Idempotency-Key`)
 - `POST /api/outcome-protection/warnings/{eventId}/acknowledge`
 
-Scenario inputs, ledger/schedule snapshots, and simulation results are versioned and immutable. Search is capped by `OUTCOME_PROTECTION_MAX_COMBINATION_SIZE` (default `3`) and `OUTCOME_PROTECTION_MAX_EVALUATED_COMBINATIONS` (default `5000`); capped results say so explicitly. The monitor checks saved scenarios every five minutes by default and emits a deduped, best-effort in-app warning when fresh ledger or schedule state puts the baseline outcome at risk.
+Scenario inputs, ledger/schedule snapshots, and simulation results are versioned and immutable. USD, EUR, GBP, and INR are supported; INR remains decimal-safe end to end and is rendered with Indian digit grouping in the frontend. Active customer-owned schedules are expanded with status, cadence, effective time zone, currency, and inclusive horizon boundaries in the causal timeline. Search is capped by `OUTCOME_PROTECTION_MAX_COMBINATION_SIZE` (default `3`) and `OUTCOME_PROTECTION_MAX_EVALUATED_COMBINATIONS` (default `5000`); capped results say so explicitly.
 
-Guardrails are preview-only in this MVP. Accepting a draft records consent, scope, threshold, expiry, idempotency, and an audit/domain event. It does not hold, move, schedule, or transmit money. External rails, automatic scheduled-transfer changes, investment advice, FX aggregation, and executable guardrails remain out of scope. See [the implementation design](docs/superpowers/specs/2026-07-15-outcome-protection-money-debugger-design.md).
+Refresh and the five-minute monitor compare the saved proof with fresh authoritative ledger and scheduled-transfer state. Each comparison persists a `DIVERGENCE_EVALUATED` evidence event. A saved-safe result that is now unsafe persists one deduped `OUTCOME_PROTECTION_AT_RISK` warning, retries the existing account-service notification boundary idempotently, and can be acknowledged without changing balances or schedules.
+
+Guardrails are preview-only. Accepting a draft records consent, scope, threshold, expiry, idempotency, and an audit/domain event. It does not hold, move, schedule, or transmit money. External rails, automatic scheduled-transfer changes, investment advice, FX aggregation, and executable guardrails remain out of scope. See [the MVP design](docs/superpowers/specs/2026-07-15-outcome-protection-money-debugger-design.md) and [the production-boundary increment](docs/superpowers/specs/2026-07-15-outcome-protection-balance-shield-production-increment.md).
 
 ## Risk-based Step-up Authorization
 

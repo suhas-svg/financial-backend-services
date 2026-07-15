@@ -199,8 +199,8 @@ export function AdminAccountsPage() {
                   <td>
                     <StatusBadge value={account.status ?? "ACTIVE"} />
                   </td>
-                  <td>{money(availableBalance(account))}</td>
-                  <td>{money(ledgerBalance(account))}</td>
+                  <td>{money(availableBalance(account), account.currency)}</td>
+                  <td>{money(ledgerBalance(account), account.currency)}</td>
                   <td>{compactDate(account.createdAt)}</td>
                   <td className="text-right">
                     <div className="flex justify-end gap-2">

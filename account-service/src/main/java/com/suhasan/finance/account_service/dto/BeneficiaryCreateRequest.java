@@ -23,7 +23,7 @@ public class BeneficiaryCreateRequest {
     private String destinationAccountId;
 
     @NotBlank
-    @Pattern(regexp = "USD|EUR|GBP")
+    @Pattern(regexp = "USD|EUR|GBP|INR")
     private String currency;
 
     @Size(max = 120)
