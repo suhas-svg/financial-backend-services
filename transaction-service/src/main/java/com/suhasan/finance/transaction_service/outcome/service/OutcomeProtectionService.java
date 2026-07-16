@@ -3,11 +3,12 @@ package com.suhasan.finance.transaction_service.outcome.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.suhasan.finance.transaction_service.client.ResilientAccountServiceClient;
 import com.suhasan.finance.transaction_service.entity.*;
 import com.suhasan.finance.transaction_service.ledger.domain.*;
 import com.suhasan.finance.transaction_service.ledger.repository.*;
 import com.suhasan.finance.transaction_service.outcome.domain.*;
+import com.suhasan.finance.transaction_service.outcome.fx.FxRateQuote;
+import com.suhasan.finance.transaction_service.outcome.fx.OutcomeFxConverter;
 import com.suhasan.finance.transaction_service.outcome.repository.*;
 import com.suhasan.finance.transaction_service.outcome.web.OutcomeProtectionDtos.*;
 import com.suhasan.finance.transaction_service.repository.ScheduledTransferRepository;
@@ -46,7 +47,8 @@ public class OutcomeProtectionService {
     private final ScheduledTransferRepository scheduledTransferRepository;
     private final OutcomeSimulationEngine simulationEngine;
     private final OutcomeScheduledTransferForecaster scheduledTransferForecaster;
-    private final ResilientAccountServiceClient accountServiceClient;
+    private final OutcomeFxConverter fxConverter;
+    private final OutcomeNotificationDeliveryService notificationDeliveryService;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -199,6 +201,7 @@ public class OutcomeProtectionService {
         boolean atRisk = !simulation.baseline().safe();
         boolean notificationEmitted = false;
         OutcomeDomainEvent warning = null;
+        NotificationDeliveryEvidence notificationDelivery = null;
 
         Map<String, Object> evaluationFields = new LinkedHashMap<>();
         evaluationFields.put("savedSourceFingerprint", saved.getSourceFingerprint());
@@ -223,7 +226,9 @@ public class OutcomeProtectionService {
                             "protectedMinimum", simulation.baseline().protectedMinimum(),
                             "sourceFingerprint", fresh.sourceFingerprint(),
                             "evaluationEventId", evaluation.getEventId()));
-            notificationEmitted = emitRiskNotification(scenario, simulation, warning.getEventId());
+            OutcomeNotificationDelivery delivery = notificationDeliveryService.enqueue(warning, scenario, simulation);
+            notificationDelivery = notificationDeliveryService.evidence(delivery);
+            notificationEmitted = "DELIVERED".equals(delivery.getState());
         }
         boolean warningAcknowledged = warning != null && eventRepository
                 .findByUserIdAndDedupeKey(scenario.getUserId(), "warning-ack:" + warning.getEventId()).isPresent();
@@ -233,7 +238,8 @@ public class OutcomeProtectionService {
         scenarioRepository.save(scenario);
         return new DivergenceResponse(scenario.getScenarioId(), previousFingerprint, fresh.sourceFingerprint(),
                 evaluation.getEventId(), warning == null ? null : warning.getEventId(),
-                diverged, atRisk, warningAcknowledged, notificationEmitted, simulation, scenario.getLastCheckedAt());
+                diverged, atRisk, warningAcknowledged, notificationEmitted, notificationDelivery,
+                simulation, scenario.getLastCheckedAt());
     }
 
     private ScenarioResponse persistVersionAndResult(OutcomeScenario scenario, int number, ScenarioRequest request,
@@ -302,20 +308,33 @@ public class OutcomeProtectionService {
             LedgerAccount account = ledgerAccountRepository.findByExternalAccountId(accountId)
                     .filter(candidate -> candidate.getAccountKind() == LedgerAccountKind.CUSTOMER)
                     .orElseThrow(() -> new IllegalArgumentException("Authoritative ledger account %s was not found".formatted(accountId)));
-            if (!userId.equals(account.getOwnerId())) throw new AccessDeniedException("Selected ledger account is not owned by the authenticated customer");
-            if (!request.currency().equals(account.getCurrency().trim())) throw new IllegalArgumentException("All selected ledger accounts must use the scenario currency");
+            if (!userId.equals(account.getOwnerId())) {
+                throw new AccessDeniedException("Selected ledger account is not owned by the authenticated customer");
+            }
             LedgerBalanceProjection projection = projectionRepository.findById(account.getLedgerAccountId())
                     .orElseThrow(() -> new IllegalArgumentException("Authoritative balance projection was not found"));
-            Instant projectionTime = projection.getUpdatedAt() == null ? capturedAt : projection.getUpdatedAt().toInstant(ZoneOffset.UTC);
-            ledger.add(new LedgerAccountSnapshot(accountId, request.currency(), money(projection.getAvailableBalance()),
-                    projection.getProjectionVersion(), projectionTime));
+            Instant projectionTime = projection.getUpdatedAt() == null ? capturedAt
+                    : projection.getUpdatedAt().toInstant(ZoneOffset.UTC);
+            var conversion = fxConverter.convert(projection.getAvailableBalance(), account.getCurrency().trim(),
+                    request.currency(), capturedAt);
+            ledger.add(new LedgerAccountSnapshot(accountId, account.getCurrency().trim(),
+                    money(projection.getAvailableBalance()), projection.getProjectionVersion(), projectionTime,
+                    conversion.convertedAmount(), request.currency(), conversion.quote()));
         }
-        List<ScheduledCashflowSnapshot> schedules = scheduledTransferForecaster.forecast(request, userId,
-                new LinkedHashSet<>(accountIds), scheduledTransferRepository.findByUserIdAndStatusOrderByNextRunAtAsc(userId, ScheduledTransferStatus.ACTIVE));
+
+        List<ScheduledCashflowSnapshot> rawSchedules = scheduledTransferForecaster.forecast(request, userId,
+                new LinkedHashSet<>(accountIds),
+                scheduledTransferRepository.findByUserIdAndStatusOrderByNextRunAtAsc(userId, ScheduledTransferStatus.ACTIVE));
+        List<ScheduledCashflowSnapshot> schedules = rawSchedules.stream().map(schedule -> {
+            var conversion = fxConverter.convert(schedule.amount(), schedule.currency(), request.currency(), capturedAt);
+            return new ScheduledCashflowSnapshot(schedule.eventId(), schedule.scheduleId(), schedule.scheduledFor(),
+                    schedule.date(), conversion.convertedAmount(), request.currency(), schedule.status(),
+                    schedule.cadence(), schedule.evaluationTimeZone(), schedule.label(), schedule.fromAccountId(),
+                    schedule.toAccountId(), conversion.sourceAmount(), conversion.sourceCurrency(), conversion.quote());
+        }).toList();
         String sourceFingerprint = fingerprint(new SourceFingerprint(ledger, schedules));
         return new Snapshot(ledger, schedules, sourceFingerprint);
     }
-
 
     private SimulationProof simulate(ScenarioRequest request, Snapshot snapshot) {
         List<OutcomeSimulationEngine.Cashflow> cashflows = new ArrayList<>();
@@ -327,7 +346,7 @@ public class OutcomeProtectionService {
             cashflows.add(new OutcomeSimulationEngine.Cashflow(schedule.eventId(), schedule.date(), schedule.amount(),
                     "SCHEDULED_TRANSFER", schedule.label(), false, true));
         }
-        BigDecimal starting = snapshot.ledgerAccounts().stream().map(LedgerAccountSnapshot::availableBalance)
+        BigDecimal starting = snapshot.ledgerAccounts().stream().map(account -> account.baseAvailableBalance() == null ? account.availableBalance() : account.baseAvailableBalance())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return simulationEngine.simulate(money(starting), money(request.protectedMinimum()),
                 request.horizonStart(), request.horizonDays(), cashflows, sortedShocks(request.shocks()));
@@ -341,8 +360,14 @@ public class OutcomeProtectionService {
         List<String> accountIds = read(version.getAccountIdsJson(), STRING_LIST);
         List<LedgerAccountSnapshot> ledger = read(version.getLedgerSnapshotJson(), LEDGER_LIST);
         List<ScheduledCashflowSnapshot> schedules = read(version.getScheduleSnapshotJson(), SCHEDULE_LIST);
-        BigDecimal starting = ledger.stream().map(LedgerAccountSnapshot::availableBalance).reduce(BigDecimal.ZERO, BigDecimal::add);
-        SourceSnapshot source = new SourceSnapshot(money(starting), ledger, schedules, version.getSourceFingerprint());
+        BigDecimal starting = ledger.stream()
+                .map(account -> account.baseAvailableBalance() == null ? account.availableBalance() : account.baseAvailableBalance())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        List<FxRateQuote> fxQuotes = new ArrayList<>();
+        ledger.stream().map(LedgerAccountSnapshot::fxQuote).filter(Objects::nonNull).forEach(fxQuotes::add);
+        schedules.stream().map(ScheduledCashflowSnapshot::fxQuote).filter(Objects::nonNull).forEach(fxQuotes::add);
+        SourceSnapshot source = new SourceSnapshot(money(starting), scenario.getCurrency(), ledger, schedules,
+                fxQuotes.stream().distinct().toList(), false, version.getSourceFingerprint());
         List<GuardrailResponse> guardrails = guardrailRepository.findByResultIdOrderByCreatedAtAsc(result.getResultId())
                 .stream().map(this::guardrailResponse).toList();
         return new ScenarioResponse(scenario.getScenarioId(), scenario.getName(), number, scenario.getStatus(),
@@ -373,24 +398,6 @@ public class OutcomeProtectionService {
                 .eventId(UUID.randomUUID().toString()).eventType(type).userId(scenario.getUserId())
                 .scenarioId(scenario.getScenarioId()).scenarioVersion(scenario.getCurrentVersion())
                 .resultId(resultId).guardrailId(guardrailId).dedupeKey(dedupeKey).fieldsJson(json(fields)).build());
-    }
-
-    private boolean emitRiskNotification(OutcomeScenario scenario, SimulationProof simulation, String warningEventId) {
-        try {
-            accountServiceClient.createNotification(ResilientAccountServiceClient.NotificationRequest.builder()
-                    .userId(scenario.getUserId()).type("OUTCOME_PROTECTION_AT_RISK").severity("WARNING")
-                    .title("Balance Shield needs attention")
-                    .message("Your saved outcome may fall below %s %s on %s. Review the causal timeline and guardrail drafts."
-                            .formatted(scenario.getCurrency(), simulation.baseline().protectedMinimum().toPlainString(),
-                                    simulation.baseline().failureDate()))
-                    .sourceType("OUTCOME_PROTECTION").sourceId(scenario.getScenarioId())
-                    .dedupeKey("outcome-protection:" + warningEventId).build());
-            return true;
-        } catch (RuntimeException ex) {
-            log.warn("Best-effort Outcome Protection notification failed for scenario {}: {}",
-                    scenario.getScenarioId(), ex.getMessage());
-            return false;
-        }
     }
 
     private void validateRequest(ScenarioRequest request) {

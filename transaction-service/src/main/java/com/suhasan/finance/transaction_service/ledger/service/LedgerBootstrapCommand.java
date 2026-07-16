@@ -4,17 +4,21 @@ import java.time.LocalDate;
 
 public record LedgerBootstrapCommand(
         String requestedBy,
+        String requestedRole,
+        String requestId,
         boolean enabled,
         boolean maintenanceMode,
         LocalDate businessDate) {
 
+    public LedgerBootstrapCommand(String requestedBy, boolean enabled, boolean maintenanceMode, LocalDate businessDate) {
+        this(requestedBy, "LEGACY_OPERATOR", "legacy-bootstrap", enabled, maintenanceMode, businessDate);
+    }
+
     public LedgerBootstrapCommand {
-        if (requestedBy == null || requestedBy.isBlank()) {
-            throw new IllegalArgumentException("Bootstrap requester is required");
-        }
-        if (businessDate == null) {
-            businessDate = LocalDate.now();
-        }
+        if (requestedBy == null || requestedBy.isBlank()) throw new IllegalArgumentException("Bootstrap requester is required");
+        if (requestedRole == null || requestedRole.isBlank()) throw new IllegalArgumentException("Bootstrap requester role is required");
+        if (requestId == null || requestId.isBlank()) throw new IllegalArgumentException("Bootstrap request ID is required");
+        if (businessDate == null) businessDate = LocalDate.now();
     }
 
     public static LedgerBootstrapCommand disabled(String requestedBy) {

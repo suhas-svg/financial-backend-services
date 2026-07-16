@@ -30,6 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.HashSet;
@@ -55,6 +57,13 @@ public class ScheduledTransferService {
     public ScheduledTransferResponse create(ScheduledTransferCreateRequest request, String userId) {
         validateCreateRequest(request, userId);
 
+        String timeZone = request.getTimeZone() == null || request.getTimeZone().isBlank()
+                ? "UTC" : ZoneId.of(request.getTimeZone()).getId();
+        LocalDateTime sourceLocal = request.getFirstRunLocal() != null
+                ? request.getFirstRunLocal()
+                : LocalDateTime.ofInstant(request.getFirstRunAt(), ZoneId.of(timeZone));
+        Instant firstRun = ScheduledTransferCadence.resolve(sourceLocal, timeZone,
+                request.getDstOverlapPolicy(), request.getDstGapPolicy());
         ScheduledTransfer schedule = ScheduledTransfer.builder()
                 .scheduleId(UUID.randomUUID().toString())
                 .userId(userId)
@@ -66,8 +75,14 @@ public class ScheduledTransferService {
                 .reference(request.getReference())
                 .scheduleType(request.getScheduleType())
                 .frequency(request.getFrequency())
-                .nextRunAt(request.getFirstRunAt())
+                .nextRunAt(firstRun)
                 .endAt(request.getEndAt())
+                .sourceTimeZone(timeZone)
+                .sourceLocalDateTime(sourceLocal)
+                .dstOverlapPolicy(request.getDstOverlapPolicy())
+                .dstGapPolicy(request.getDstGapPolicy())
+                .recurrenceAnchorDay(sourceLocal.getDayOfMonth())
+                .recurrenceAnchorEndOfMonth(sourceLocal.getDayOfMonth() == sourceLocal.toLocalDate().lengthOfMonth())
                 .status(ScheduledTransferStatus.ACTIVE)
                 .build();
 
@@ -329,7 +344,17 @@ public class ScheduledTransferService {
         if (Objects.equals(request.getFromAccountId(), request.getToAccountId())) {
             throw new IllegalArgumentException("Source and destination accounts must be different");
         }
-        if (request.getFirstRunAt() == null || !request.getFirstRunAt().isAfter(Instant.now())) {
+        if (request.getFirstRunAt() == null && request.getFirstRunLocal() == null) {
+            throw new IllegalArgumentException("First run instant or source-local time is required");
+        }
+        String timeZone = request.getTimeZone() == null || request.getTimeZone().isBlank()
+                ? "UTC" : ZoneId.of(request.getTimeZone()).getId();
+        LocalDateTime sourceLocal = request.getFirstRunLocal() != null
+                ? request.getFirstRunLocal()
+                : LocalDateTime.ofInstant(request.getFirstRunAt(), ZoneId.of(timeZone));
+        Instant resolvedFirstRun = ScheduledTransferCadence.resolve(sourceLocal, timeZone,
+                request.getDstOverlapPolicy(), request.getDstGapPolicy());
+        if (!resolvedFirstRun.isAfter(Instant.now())) {
             throw new IllegalArgumentException("First run time must be in the future");
         }
         if (request.getScheduleType() == null) {
@@ -341,7 +366,7 @@ public class ScheduledTransferService {
         if (request.getScheduleType() == ScheduledTransferType.RECURRING && request.getFrequency() == null) {
             throw new IllegalArgumentException("Recurring scheduled transfers require a frequency");
         }
-        if (request.getEndAt() != null && !request.getEndAt().isAfter(request.getFirstRunAt())) {
+        if (request.getEndAt() != null && !request.getEndAt().isAfter(resolvedFirstRun)) {
             throw new IllegalArgumentException("End time must be after first run time");
         }
 
@@ -385,7 +410,7 @@ public class ScheduledTransferService {
             schedule.setStatus(ScheduledTransferStatus.COMPLETED);
             return;
         }
-        Instant next = nextRunAfter(scheduledFor, schedule.getFrequency());
+        Instant next = ScheduledTransferCadence.nextRunAfter(schedule, scheduledFor);
         if (schedule.getEndAt() != null && next.isAfter(schedule.getEndAt())) {
             schedule.setStatus(ScheduledTransferStatus.COMPLETED);
             schedule.setNextRunAt(next);
@@ -401,6 +426,8 @@ public class ScheduledTransferService {
     }
 
     private ScheduledTransferResponse toResponse(ScheduledTransfer schedule) {
+        String sourceTimeZone = schedule.getSourceTimeZone() == null || schedule.getSourceTimeZone().isBlank()
+                ? "UTC" : schedule.getSourceTimeZone();
         Page<ScheduledTransferRun> latestRunPage = runRepository
                 .findByScheduleScheduleIdOrderByScheduledForDesc(schedule.getScheduleId(), PageRequest.of(0, 1));
         ScheduledTransferRun lastRun = latestRunPage == null
@@ -419,6 +446,11 @@ public class ScheduledTransferService {
                 .frequency(schedule.getFrequency())
                 .nextRunAt(schedule.getNextRunAt())
                 .endAt(schedule.getEndAt())
+                .timeZone(sourceTimeZone)
+                .sourceLocalDateTime(schedule.getSourceLocalDateTime())
+                .nextRunLocalDateTime(LocalDateTime.ofInstant(schedule.getNextRunAt(), ZoneId.of(sourceTimeZone)))
+                .dstOverlapPolicy(schedule.getDstOverlapPolicy())
+                .dstGapPolicy(schedule.getDstGapPolicy())
                 .status(schedule.getStatus())
                 .lastRunAt(schedule.getLastRunAt())
                 .createdAt(schedule.getCreatedAt())

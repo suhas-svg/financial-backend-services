@@ -288,7 +288,10 @@ describe("apiRequest", () => {
       reference: "JULY",
       scheduleType: "RECURRING",
       frequency: "MONTHLY",
-      firstRunAt: "2026-07-15T10:00"
+      firstRunAt: "2026-07-15T10:00",
+      timeZone: "America/New_York",
+      dstOverlapPolicy: "LATER",
+      dstGapPolicy: "REJECT"
     });
     await listScheduledTransfers({ status: "ACTIVE" });
     await getScheduledTransfer("schedule-1");
@@ -299,7 +302,8 @@ describe("apiRequest", () => {
 
     expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers", expect.objectContaining({ method: "POST" }));
     const createBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
-    expect(createBody).toEqual(expect.objectContaining({ firstRunAt: new Date("2026-07-15T10:00").toISOString() }));
+    expect(createBody).toEqual(expect.objectContaining({ firstRunLocal: "2026-07-15T10:00", timeZone: "America/New_York", dstOverlapPolicy: "LATER", dstGapPolicy: "REJECT" }));
+    expect(createBody).not.toHaveProperty("firstRunAt");
     expect(createBody).not.toHaveProperty("endAt");
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/transaction-api/api/scheduled-transfers?"), expect.anything());
     expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers/schedule-1", expect.any(Object));

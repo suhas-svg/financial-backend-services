@@ -34,7 +34,10 @@ describe("form schemas", () => {
       amount: 50,
       currency: "USD",
       scheduleType: "RECURRING",
-      firstRunAt: "2026-07-15T10:00"
+      firstRunAt: "2026-07-15T10:00",
+      timeZone: "America/New_York",
+      dstOverlapPolicy: "EARLIER",
+      dstGapPolicy: "SHIFT_FORWARD"
     };
 
     expect(scheduledTransferSchema.safeParse(base).success).toBe(false);

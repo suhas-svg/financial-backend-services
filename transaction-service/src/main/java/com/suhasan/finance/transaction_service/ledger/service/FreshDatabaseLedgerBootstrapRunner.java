@@ -36,7 +36,7 @@ public class FreshDatabaseLedgerBootstrapRunner implements ApplicationRunner {
         if (!preflight.freshDatabase()) {
             throw new IllegalStateException("Startup ledger bootstrap is restricted to a fresh financial database");
         }
-        coordinator.bootstrap(new LedgerBootstrapCommand("startup-bootstrap", true, true,
-                LocalDate.now(ZoneOffset.UTC)), "STARTUP_FRESH_DATABASE");
+        coordinator.bootstrap(new LedgerBootstrapCommand("startup-bootstrap", "SYSTEM_STARTUP",
+                "startup:" + LocalDate.now(ZoneOffset.UTC), true, true, LocalDate.now(ZoneOffset.UTC)), "STARTUP_FRESH_DATABASE");
     }
 }

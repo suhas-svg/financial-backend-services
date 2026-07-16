@@ -10,6 +10,7 @@ import com.suhasan.finance.account_service.entity.NotificationType;
 import com.suhasan.finance.account_service.repository.NotificationRepository;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -29,22 +30,57 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
 
-    @Transactional
     public Notification createInternal(NotificationCreateRequest request) {
         validateCreate(request);
-        return notificationRepository.findByDedupeKey(request.getDedupeKey().trim())
-                .orElseGet(() -> notificationRepository.save(Notification.builder()
-                        .userId(request.getUserId().trim())
-                        .type(request.getType())
-                        .severity(request.getSeverity())
-                        .status(NotificationStatus.UNREAD)
-                        .title(request.getTitle().trim())
-                        .message(request.getMessage().trim())
-                        .sourceType(request.getSourceType())
-                        .sourceId(request.getSourceId().trim())
-                        .dedupeKey(request.getDedupeKey().trim())
-                        .createdAt(LocalDateTime.now())
-                        .build()));
+        String dedupeKey = request.getDedupeKey().trim();
+        var existing = notificationRepository.findByDedupeKey(dedupeKey);
+        if (existing.isPresent()) return recordReceipt(existing.get(), request);
+
+        LocalDateTime receivedAt = LocalDateTime.now();
+        Notification candidate = Notification.builder()
+                .userId(request.getUserId().trim())
+                .type(request.getType())
+                .severity(request.getSeverity())
+                .status(NotificationStatus.UNREAD)
+                .title(request.getTitle().trim())
+                .message(request.getMessage().trim())
+                .sourceType(request.getSourceType())
+                .sourceId(request.getSourceId().trim())
+                .dedupeKey(dedupeKey)
+                .deliveryId(trimToNull(request.getDeliveryId()))
+                .createdAt(receivedAt)
+                .firstReceivedAt(receivedAt)
+                .lastReceivedAt(receivedAt)
+                .deliveryCount(1)
+                .build();
+        try {
+            return notificationRepository.saveAndFlush(candidate);
+        } catch (DataIntegrityViolationException concurrentReplay) {
+            Notification winner = notificationRepository.findByDedupeKey(dedupeKey)
+                    .orElseThrow(() -> concurrentReplay);
+            return recordReceipt(winner, request);
+        }
+    }
+
+    private Notification recordReceipt(Notification existing, NotificationCreateRequest request) {
+        if (!existing.getUserId().equals(request.getUserId().trim())
+                || existing.getType() != request.getType()
+                || existing.getSourceType() != request.getSourceType()
+                || !existing.getSourceId().equals(request.getSourceId().trim())) {
+            throw new IllegalStateException("Notification dedupe key was reused with conflicting ownership or source");
+        }
+        String deliveryId = trimToNull(request.getDeliveryId());
+        if (deliveryId != null && existing.getDeliveryId() != null && !deliveryId.equals(existing.getDeliveryId())) {
+            throw new IllegalStateException("Notification dedupe key was reused with a conflicting delivery identifier");
+        }
+        if (existing.getDeliveryId() == null) existing.setDeliveryId(deliveryId);
+        existing.setLastReceivedAt(LocalDateTime.now());
+        existing.setDeliveryCount(Math.max(1, existing.getDeliveryCount()) + 1);
+        return notificationRepository.save(existing);
+    }
+
+    private String trimToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     @Transactional(readOnly = true)

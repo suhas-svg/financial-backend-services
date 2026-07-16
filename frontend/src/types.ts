@@ -212,6 +212,11 @@ export type ScheduledTransfer = {
   frequency?: ScheduledTransferFrequency;
   nextRunAt: string;
   endAt?: string;
+  timeZone: string;
+  sourceLocalDateTime: string;
+  nextRunLocalDateTime: string;
+  dstOverlapPolicy: "EARLIER" | "LATER";
+  dstGapPolicy: "SHIFT_FORWARD" | "REJECT";
   status: ScheduledTransferStatus;
   lastRunAt?: string;
   lastRunStatus?: ScheduledTransferRunStatus;
@@ -342,6 +347,16 @@ export type OutcomeScenarioSummary = {
   updatedAt: string;
 };
 
+export type OutcomeFxQuote = {
+  quoteCurrency: string;
+  baseCurrency: string;
+  rate: number;
+  asOf: string;
+  provider: string;
+  provenance: string;
+  stale: boolean;
+  stalenessPolicy: "REJECT" | "WARN";
+};
 export type OutcomeScenario = OutcomeScenarioSummary & {
   timeZone: string;
   accountIds: string[];
@@ -349,8 +364,11 @@ export type OutcomeScenario = OutcomeScenarioSummary & {
   shocks: OutcomeShock[];
   sourceSnapshot: {
     startingAvailableBalance: number;
-    ledgerAccounts: Array<{ accountId: string; currency: string; availableBalance: number; projectionVersion: number; capturedAt: string }>;
-    scheduledCashflows: Array<{ eventId: string; scheduleId: string; scheduledFor: string; date: string; amount: number; currency: string; status: string; cadence: string; evaluationTimeZone: string; label: string; fromAccountId: string; toAccountId: string }>;
+    baseCurrency: string;
+    ledgerAccounts: Array<{ accountId: string; currency: string; availableBalance: number; projectionVersion: number; capturedAt: string; baseAvailableBalance: number; baseCurrency: string; fxQuote?: OutcomeFxQuote }>;
+    scheduledCashflows: Array<{ eventId: string; scheduleId: string; scheduledFor: string; date: string; amount: number; currency: string; status: string; cadence: string; evaluationTimeZone: string; label: string; fromAccountId: string; toAccountId: string; sourceAmount: number; sourceCurrency: string; fxQuote?: OutcomeFxQuote }>;
+    fxQuotes: OutcomeFxQuote[];
+    executableFx: false;
     sourceFingerprint: string;
   };
   simulation: OutcomeSimulation;
@@ -370,6 +388,7 @@ export type OutcomeDivergence = {
   evaluationEventId: string;
   warningEventId?: string;
   warningAcknowledged: boolean;
+  notificationDelivery?: { deliveryId: string; state: "PENDING" | "RETRY_SCHEDULED" | "DELIVERED" | "TERMINAL_FAILED"; attemptCount: number; nextAttemptAt: string; deliveredAt?: string; terminalAt?: string; slaEscalatedAt?: string; lastError?: string; dedupeKey: string };
 };
 
 export type AuditLogEntry = {

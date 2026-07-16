@@ -23,6 +23,10 @@ public class LedgerBootstrapRun {
     private String requestedBy;
     @Column(nullable = false, length = 32)
     private String mode;
+    @Column(name = "requested_role", nullable = false, length = 64)
+    private String requestedRole;
+    @Column(name = "request_id", nullable = false, length = 128)
+    private String requestId;
     @Column(name = "business_date", nullable = false)
     private LocalDate businessDate;
     @Column(name = "maintenance_mode", nullable = false)

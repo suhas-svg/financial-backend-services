@@ -23,6 +23,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -60,18 +61,38 @@ class AdminLedgerBootstrapControllerTest {
     void bootstrapCommandRejectsCustomerUsers() throws Exception {
         mockMvc.perform(post("/api/admin/ledger/bootstrap")
                         .contentType("application/json")
+                        .header("X-Operator-Request-Id", "deploy-123")
+                        .content("{\"enabled\":true,\"maintenanceMode\":true,\"businessDate\":\"2026-06-26\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(username = "service", roles = "INTERNAL_SERVICE")
+    void bootstrapCommandRejectsInternalServiceIdentity() throws Exception {
+        mockMvc.perform(post("/api/admin/ledger/bootstrap")
+                        .contentType("application/json")
+                        .header("X-Operator-Request-Id", "deploy-123")
                         .content("{\"enabled\":true,\"maintenanceMode\":true,\"businessDate\":\"2026-06-26\"}"))
                 .andExpect(status().isForbidden());
     }
 
     @Test
     @WithMockUser(username = "ops", roles = "ADMIN")
+    void preflightRequiresCorrelatedRequestEvidence() throws Exception {
+        mockMvc.perform(get("/api/admin/ledger/bootstrap/preflight")
+                        .param("maintenanceMode", "true"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(username = "ops", roles = "ADMIN")
     void adminCanRunBootstrapCommandWithMaintenanceMode() throws Exception {
-        when(bootstrapCoordinator.bootstrap(new LedgerBootstrapCommand("ops", true, true, LocalDate.parse("2026-06-26")), "ADMIN_API"))
+        when(bootstrapCoordinator.bootstrap(new LedgerBootstrapCommand("ops", "ROLE_ADMIN", "deploy-123", true, true, LocalDate.parse("2026-06-26")), "ADMIN_API"))
                 .thenReturn(new LedgerBootstrapResult(2, 1, 6, 2, List.of("USD", "EUR")));
 
         mockMvc.perform(post("/api/admin/ledger/bootstrap")
                         .contentType("application/json")
+                        .header("X-Operator-Request-Id", "deploy-123")
                         .content("{\"enabled\":true,\"maintenanceMode\":true,\"businessDate\":\"2026-06-26\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.importedAccounts").value(2))
@@ -80,7 +101,7 @@ class AdminLedgerBootstrapControllerTest {
                 .andExpect(jsonPath("$.openingJournals").value(2))
                 .andExpect(jsonPath("$.currencies[0]").value("USD"));
 
-        verify(bootstrapCoordinator).bootstrap(new LedgerBootstrapCommand("ops", true, true, LocalDate.parse("2026-06-26")), "ADMIN_API");
+        verify(bootstrapCoordinator).bootstrap(new LedgerBootstrapCommand("ops", "ROLE_ADMIN", "deploy-123", true, true, LocalDate.parse("2026-06-26")), "ADMIN_API");
     }
 
     @Test
@@ -91,6 +112,7 @@ class AdminLedgerBootstrapControllerTest {
 
         mockMvc.perform(post("/api/admin/ledger/bootstrap")
                         .contentType("application/json")
+                        .header("X-Operator-Request-Id", "deploy-123")
                         .content("{\"enabled\":true,\"maintenanceMode\":true,\"businessDate\":\"2026-06-26\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Ledger bootstrap blocked by 1 unresolved legacy holds"));

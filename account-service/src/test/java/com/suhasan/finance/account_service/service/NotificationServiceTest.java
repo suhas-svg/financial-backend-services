@@ -8,6 +8,7 @@ import com.suhasan.finance.account_service.entity.NotificationStatus;
 import com.suhasan.finance.account_service.entity.NotificationType;
 import com.suhasan.finance.account_service.repository.NotificationRepository;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,7 +43,7 @@ class NotificationServiceTest {
     @DisplayName("Creates unread notification with trimmed title and message")
     void createsUnreadNotificationWithTrimmedTitleAndMessage() {
         when(notificationRepository.findByDedupeKey("transaction:tx-1:COMPLETED")).thenReturn(Optional.empty());
-        when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(notificationRepository.saveAndFlush(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Notification created = notificationService.createInternal(NotificationCreateRequest.builder()
                 .userId("customer")
@@ -59,7 +60,7 @@ class NotificationServiceTest {
         assertThat(created.getTitle()).isEqualTo("Transfer completed");
         assertThat(created.getMessage()).isEqualTo("Your transfer was completed.");
         assertThat(created.getCreatedAt()).isNotNull();
-        verify(notificationRepository).save(created);
+        verify(notificationRepository).saveAndFlush(created);
     }
 
     @Test
@@ -68,10 +69,15 @@ class NotificationServiceTest {
         Notification existing = Notification.builder()
                 .notificationId(10L)
                 .userId("customer")
+                .type(NotificationType.DISPUTE_CREATED)
+                .sourceType(NotificationSourceType.DISPUTE)
+                .sourceId("dp-1")
                 .dedupeKey("dispute:dp-1:created")
+                .deliveryCount(1)
                 .createdAt(LocalDateTime.now())
                 .build();
         when(notificationRepository.findByDedupeKey("dispute:dp-1:created")).thenReturn(Optional.of(existing));
+        when(notificationRepository.save(existing)).thenReturn(existing);
 
         Notification result = notificationService.createInternal(NotificationCreateRequest.builder()
                 .userId("customer")
@@ -85,13 +91,14 @@ class NotificationServiceTest {
                 .build());
 
         assertThat(result).isSameAs(existing);
-        verify(notificationRepository, never()).save(any(Notification.class));
+        assertThat(result.getDeliveryCount()).isEqualTo(2);
+        verify(notificationRepository).save(existing);
     }
 
     @Test
     void createNotification_acceptsScheduledTransferLifecycleType() {
         when(notificationRepository.findByDedupeKey("scheduled-transfer:schedule-1:created")).thenReturn(Optional.empty());
-        when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(notificationRepository.saveAndFlush(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         NotificationCreateRequest request = NotificationCreateRequest.builder()
                 .userId("customer")
@@ -113,7 +120,7 @@ class NotificationServiceTest {
     @Test
     void createNotification_acceptsOutcomeProtectionWarning() {
         when(notificationRepository.findByDedupeKey("outcome-protection:warning-1")).thenReturn(Optional.empty());
-        when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(notificationRepository.saveAndFlush(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Notification response = notificationService.createInternal(NotificationCreateRequest.builder()
                 .userId("customer")
@@ -130,6 +137,31 @@ class NotificationServiceTest {
         assertThat(response.getSourceType()).isEqualTo(NotificationSourceType.OUTCOME_PROTECTION);
     }
 
+    @Test
+    void concurrentReplayReturnsSingleWinningNotificationAndRecordsReceipt() {
+        Notification winner = Notification.builder()
+                .notificationId(42L).userId("customer")
+                .type(NotificationType.OUTCOME_PROTECTION_AT_RISK)
+                .sourceType(NotificationSourceType.OUTCOME_PROTECTION).sourceId("scenario-1")
+                .dedupeKey("outcome-protection:warning-1").deliveryId("delivery-1")
+                .deliveryCount(1).createdAt(LocalDateTime.now()).build();
+        when(notificationRepository.findByDedupeKey("outcome-protection:warning-1"))
+                .thenReturn(Optional.empty(), Optional.of(winner));
+        when(notificationRepository.saveAndFlush(any(Notification.class)))
+                .thenThrow(new DataIntegrityViolationException("unique dedupe race"));
+        when(notificationRepository.save(winner)).thenReturn(winner);
+
+        Notification result = notificationService.createInternal(NotificationCreateRequest.builder()
+                .userId("customer").type(NotificationType.OUTCOME_PROTECTION_AT_RISK)
+                .severity(NotificationSeverity.WARNING).title("Balance Shield needs attention")
+                .message("Review the warning.").sourceType(NotificationSourceType.OUTCOME_PROTECTION)
+                .sourceId("scenario-1").dedupeKey("outcome-protection:warning-1")
+                .deliveryId("delivery-1").build());
+
+        assertThat(result.getNotificationId()).isEqualTo(42L);
+        assertThat(result.getDeliveryCount()).isEqualTo(2);
+        verify(notificationRepository).save(winner);
+    }
     @Test
     @DisplayName("Rejects missing required create fields")
     void rejectsMissingRequiredCreateFields() {

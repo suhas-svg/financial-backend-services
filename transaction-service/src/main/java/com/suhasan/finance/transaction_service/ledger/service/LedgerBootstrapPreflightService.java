@@ -23,8 +23,20 @@ public class LedgerBootstrapPreflightService {
 
     @Transactional(readOnly = true)
     public LedgerBootstrapPreflight inspect(boolean maintenanceModeConfirmed) {
+        return inspect(maintenanceModeConfirmed, "system-startup", "SYSTEM_STARTUP", "startup-preflight", true);
+    }
+
+    @Transactional(readOnly = true)
+    public LedgerBootstrapPreflight inspect(boolean maintenanceModeConfirmed, String operatorId, String operatorRole,
+                                            String requestId, boolean operatorAuthorized) {
         List<LedgerBootstrapAccountSnapshot> legacyAccounts = accountSource.fetchAccountsForBootstrap();
         List<String> blockers = new ArrayList<>();
+        if (!operatorAuthorized) {
+            blockers.add("Explicit ROLE_ADMIN operator authorization is required");
+        }
+        if (requestId == null || requestId.isBlank()) {
+            blockers.add("Operator request ID is required");
+        }
         if (!maintenanceModeConfirmed) {
             blockers.add("Maintenance mode must be explicitly confirmed");
         }
@@ -56,6 +68,7 @@ public class LedgerBootstrapPreflightService {
                 && journalCount == 0 && transactionCount == 0;
         return new LedgerBootstrapPreflight(maintenanceModeConfirmed, blockers.isEmpty(), freshDatabase,
                 requiredCurrencies, List.copyOf(missingSystemAccounts), legacyAccounts.size(),
-                ledgerAccounts, customerLedgerAccounts, journalCount, transactionCount, List.copyOf(blockers));
+                ledgerAccounts, customerLedgerAccounts, journalCount, transactionCount, List.copyOf(blockers),
+                operatorId, operatorRole, operatorAuthorized, requestId);
     }
 }

@@ -170,6 +170,34 @@ class LedgerMigrationIntegrationTest {
                 .hasMessageContaining("immutable");
     }
 
+    @Test
+    void productionReadinessMigrationCreatesOutboxTimezoneAndOperatorEvidence() {
+        Integer deliveryTable = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name = 'outcome_notification_deliveries'
+                """, Integer.class);
+        assertThat(deliveryTable).isEqualTo(1);
+
+        Integer scheduleColumns = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'scheduled_transfers'
+                  AND column_name IN ('source_time_zone', 'source_local_date_time',
+                                      'dst_overlap_policy', 'dst_gap_policy',
+                                      'recurrence_anchor_day', 'recurrence_anchor_end_of_month')
+                """, Integer.class);
+        assertThat(scheduleColumns).isEqualTo(6);
+
+        Integer bootstrapColumns = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'ledger_bootstrap_runs'
+                  AND column_name IN ('requested_role', 'request_id')
+                """, Integer.class);
+        assertThat(bootstrapColumns).isEqualTo(2);
+    }
+
     private static UUID insertLedgerAccount(String kind, String currency, String externalAccountId) {
         if (externalAccountId == null && !"CUSTOMER".equals(kind)) {
             var existing = jdbc.query(

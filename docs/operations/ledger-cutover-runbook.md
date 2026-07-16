@@ -11,7 +11,7 @@ Only run cutover during an approved maintenance window.
 - Confirm account-service and transaction-service health checks are `UP`.
 - Confirm there are no unresolved account-service debit holds. Legacy mirrors must have `ledgerBalance == availableBalance` for every account imported into the ledger.
 - Confirm transaction-service has no `PENDING` or `PROCESSING` transactions.
-- Confirm operators have admin or internal-service authority for transaction-service admin APIs.
+- Confirm the named human/deployment operator has a short-lived transaction-service token with exactly ROLE_ADMIN. Internal-service authority is not accepted for bootstrap.
 
 ## Evidence capture
 
@@ -31,9 +31,10 @@ Before every bootstrap attempt, call the admin-only read-only preflight while le
 ```http
 GET /api/admin/ledger/bootstrap/preflight?maintenanceMode=true
 Authorization: Bearer <admin-token>
+X-Operator-Request-Id: <deployment-request-id>
 ```
 
-The response reports whether maintenance was explicitly confirmed, row counts, required and missing system accounts, supported currencies, and blockers. The safe default system currencies are `USD,EUR,GBP,INR`; override them only with the reviewed `LEDGER_BOOTSTRAP_SYSTEM_CURRENCIES` deployment setting. Do not continue unless `ready=true`. A preflight never writes ledger data and does not reserve the result, so keep money movement paused until bootstrap and reconciliation finish.
+The response reports whether maintenance was explicitly confirmed, operator identity/role/authorization, request correlation, row counts, required and missing system accounts, supported currencies, and blockers. The safe default system currencies are `USD,EUR,GBP,INR`; override them only with the reviewed `LEDGER_BOOTSTRAP_SYSTEM_CURRENCIES` deployment setting. Do not continue unless `ready=true`, `operatorAuthorized=true`, `operatorRole=ROLE_ADMIN`, and the returned request ID exactly matches the deployment request. A preflight never writes ledger data and does not reserve the result, so keep money movement paused until bootstrap and reconciliation finish.
 
 ## Bootstrap command
 
@@ -41,6 +42,8 @@ Run bootstrap only after preconditions are met:
 
 ```http
 POST /api/admin/ledger/bootstrap
+Authorization: Bearer <admin-token>
+X-Operator-Request-Id: <same-deployment-request-id>
 Content-Type: application/json
 
 {
@@ -59,7 +62,21 @@ Expected result:
 - Opening journals are balanced and posted.
 - Projection parity matches account-service mirrors.
 
-Every attempt writes a `ledger_bootstrap_runs` audit row with actor, mode, business date, outcome, counts/currencies, and a sanitized failure reason. If the response is `409`, stop cutover and resolve the blocker before retrying. Retrying is idempotent, but operators must still re-run preflight and retain the new run evidence.
+Every attempt writes a `ledger_bootstrap_runs` audit row with actor, role, request ID, mode, business date, outcome, counts/currencies, and a sanitized failure reason. If the response is `409`, stop cutover and resolve the blocker before retrying. Retrying is idempotent, but operators must still re-run preflight and retain the new run evidence.
+
+### Exact deployment command
+
+Use the repository orchestration script. Never pass the token on the command line or store it in shell history.
+
+    $env:LEDGER_BOOTSTRAP_OPERATOR_TOKEN = '<short-lived-role-admin-jwt>'
+    $requestId = 'change-123-ledger-bootstrap-01'
+    .\scripts\ledger-bootstrap-deployment.ps1 -Action Preflight -BaseUrl 'https://transaction-service.example' -MaintenanceConfirmed -RequestId $requestId
+    $env:LEDGER_BOOTSTRAP_CONFIRM_RUN = 'RUN'
+    .\scripts\ledger-bootstrap-deployment.ps1 -Action Run -BaseUrl 'https://transaction-service.example' -BusinessDate '2026-06-26' -MaintenanceConfirmed -RequestId $requestId
+    Remove-Item Env:LEDGER_BOOTSTRAP_CONFIRM_RUN -ErrorAction SilentlyContinue
+    Remove-Item Env:LEDGER_BOOTSTRAP_OPERATOR_TOKEN -ErrorAction SilentlyContinue
+
+Archive both JSON outputs with the change ticket, Git SHA, image digest, reconciliation evidence, and the matching `ledger_bootstrap_runs` row. If any identity, request-correlation, maintenance, freshness, pending-transaction, hold, currency, or reconciliation check fails, stop; do not bypass or weaken a gate.
 
 ## Explicit fresh-database startup mode
 

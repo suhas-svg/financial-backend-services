@@ -28,34 +28,35 @@ public class SecurityConfig {
                         .accessDeniedHandler((request, response, accessDeniedException) -> response
                                 .sendError(HttpServletResponse.SC_FORBIDDEN, "Forbidden")))
                 .authorizeHttpRequests(authz -> authz
-                        // ── Public read-only health probes ────────────────────────────────────
+                        // â”€â”€ Public read-only health probes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         .requestMatchers("/api/transactions/health").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
-                        // ── Privileged actuator endpoints (Prometheus scrape, metrics) ───────
+                        // â”€â”€ Privileged actuator endpoints (Prometheus scrape, metrics) â”€â”€â”€â”€â”€â”€â”€
                         .requestMatchers("/actuator/prometheus", "/actuator/metrics", "/actuator/metrics/**")
                         .hasAnyRole("ADMIN", "INTERNAL_SERVICE")
 
-                        // ── Monitoring API — internal/admin only (H1 fix) ────────────────────
-                        // Previously .authenticated() — any user could read circuit-breaker state
+                        // â”€â”€ Monitoring API â€” internal/admin only (H1 fix) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                        // Previously .authenticated() â€” any user could read circuit-breaker state
                         // and alert thresholds. Now restricted to privileged roles only.
                         .requestMatchers("/api/monitoring/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
                         .requestMatchers("/api/audit/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
                         .requestMatchers("/api/risk/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
                         .requestMatchers("/api/investigations/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
+                        .requestMatchers("/api/admin/ledger/bootstrap", "/api/admin/ledger/bootstrap/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/ledger/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
                         .requestMatchers("/api/admin/reconciliation/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
                         .requestMatchers("/api/disputes/admin/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
                         .requestMatchers("/api/disputes/**").authenticated()
 
-                        // ── Transaction endpoints — require authenticated user ────────────────
+                        // â”€â”€ Transaction endpoints â€” require authenticated user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         .requestMatchers("/api/scheduled-transfers/**").authenticated()
                         .requestMatchers("/api/outcome-protection/**").authenticated()
                         .requestMatchers("/api/transactions/**").authenticated()
                         .requestMatchers("/api/ledger/**").authenticated()
 
-                        // ── Catch-all ────────────────────────────────────────────────────────
+                        // â”€â”€ Catch-all â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

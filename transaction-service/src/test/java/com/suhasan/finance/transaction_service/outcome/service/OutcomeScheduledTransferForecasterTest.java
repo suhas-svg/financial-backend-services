@@ -19,7 +19,7 @@ class OutcomeScheduledTransferForecasterTest {
     private final OutcomeScheduledTransferForecaster forecaster = new OutcomeScheduledTransferForecaster();
 
     @Test
-    void expandsOnlyActiveOwnedSameCurrencySchedulesInsideTheLocalHorizon() {
+    void expandsActiveOwnedSchedulesAcrossCurrenciesInsideTheLocalHorizon() {
         ScenarioRequest request = request(LocalDate.of(2026, 7, 16), 15);
         ScheduledTransfer active = schedule("active", "customer-1", "10", "99", "2500.05", "INR",
                 ScheduledTransferStatus.ACTIVE, ScheduledTransferType.RECURRING,
@@ -42,8 +42,8 @@ class OutcomeScheduledTransferForecasterTest {
 
         var events = forecaster.forecast(request, "customer-1", Set.of("10", "11"), schedules);
 
-        assertThat(events).hasSize(3);
-        assertThat(events).allSatisfy(event -> {
+        assertThat(events).hasSize(4);
+        assertThat(events).filteredOn(event -> event.scheduleId().equals("active")).allSatisfy(event -> {
             assertThat(event.scheduleId()).isEqualTo("active");
             assertThat(event.amount()).isEqualByComparingTo("-2500.05");
             assertThat(event.currency()).isEqualTo("INR");
@@ -52,7 +52,13 @@ class OutcomeScheduledTransferForecasterTest {
             assertThat(event.evaluationTimeZone()).isEqualTo("Asia/Kolkata");
         });
         assertThat(events).extracting(event -> event.date().toString())
-                .containsExactly("2026-07-16", "2026-07-23", "2026-07-30");
+                .containsExactly("2026-07-16", "2026-07-16", "2026-07-23", "2026-07-30");
+        assertThat(events).filteredOn(event -> event.scheduleId().equals("other-currency"))
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.amount()).isEqualByComparingTo("-99.00");
+                    assertThat(event.currency()).isEqualTo("USD");
+                });
         assertThat(events.getFirst().scheduledFor()).isEqualTo(Instant.parse("2026-07-15T18:30:00Z"));
     }
 

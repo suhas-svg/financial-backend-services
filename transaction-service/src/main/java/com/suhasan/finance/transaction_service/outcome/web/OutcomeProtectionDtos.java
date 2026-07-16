@@ -1,5 +1,7 @@
 package com.suhasan.finance.transaction_service.outcome.web;
 
+import com.suhasan.finance.transaction_service.outcome.fx.FxRateQuote;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 
@@ -47,17 +49,34 @@ public final class OutcomeProtectionDtos {
 
     public record LedgerAccountSnapshot(
             String accountId, String currency, BigDecimal availableBalance,
-            long projectionVersion, Instant capturedAt) {}
+            long projectionVersion, Instant capturedAt,
+            BigDecimal baseAvailableBalance, String baseCurrency, FxRateQuote fxQuote) {
+        public LedgerAccountSnapshot(String accountId, String currency, BigDecimal availableBalance,
+                                     long projectionVersion, Instant capturedAt) {
+            this(accountId, currency, availableBalance, projectionVersion, capturedAt,
+                    availableBalance, currency, null);
+        }
+    }
 
     public record ScheduledCashflowSnapshot(
             String eventId, String scheduleId, Instant scheduledFor, LocalDate date, BigDecimal amount,
             String currency, String status, String cadence, String evaluationTimeZone,
-            String label, String fromAccountId, String toAccountId) {}
+            String label, String fromAccountId, String toAccountId,
+            BigDecimal sourceAmount, String sourceCurrency, FxRateQuote fxQuote) {
+        public ScheduledCashflowSnapshot(String eventId, String scheduleId, Instant scheduledFor, LocalDate date,
+                                         BigDecimal amount, String currency, String status, String cadence,
+                                         String evaluationTimeZone, String label, String fromAccountId, String toAccountId) {
+            this(eventId, scheduleId, scheduledFor, date, amount, currency, status, cadence,
+                    evaluationTimeZone, label, fromAccountId, toAccountId, amount, currency, null);
+        }
+    }
 
     public record SourceSnapshot(
-            BigDecimal startingAvailableBalance,
+            BigDecimal startingAvailableBalance, String baseCurrency,
             List<LedgerAccountSnapshot> ledgerAccounts,
             List<ScheduledCashflowSnapshot> scheduledCashflows,
+            List<FxRateQuote> fxQuotes,
+            boolean executableFx,
             String sourceFingerprint) {}
 
     public record TimelineEvent(
@@ -109,10 +128,16 @@ public final class OutcomeProtectionDtos {
             SourceSnapshot sourceSnapshot, SimulationProof simulation,
             List<GuardrailResponse> guardrails, Instant createdAt) {}
 
+    public record NotificationDeliveryEvidence(
+            String deliveryId, String state, int attemptCount, Instant nextAttemptAt,
+            Instant deliveredAt, Instant terminalAt, Instant slaEscalatedAt,
+            String lastError, String dedupeKey) {}
+
     public record DivergenceResponse(
             String scenarioId, String previousSourceFingerprint, String currentSourceFingerprint,
             String evaluationEventId, String warningEventId,
             boolean diverged, boolean protectionAtRisk, boolean warningAcknowledged, boolean notificationEmitted,
+            NotificationDeliveryEvidence notificationDelivery,
             SimulationProof freshSimulation, Instant checkedAt) {}
 
     public record WarningAcknowledgementResponse(
