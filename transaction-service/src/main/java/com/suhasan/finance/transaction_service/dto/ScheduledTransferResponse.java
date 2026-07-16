@@ -1,5 +1,7 @@
 package com.suhasan.finance.transaction_service.dto;
 
+import com.suhasan.finance.transaction_service.entity.DstGapPolicy;
+import com.suhasan.finance.transaction_service.entity.DstOverlapPolicy;
 import com.suhasan.finance.transaction_service.entity.ScheduledTransferFrequency;
 import com.suhasan.finance.transaction_service.entity.ScheduledTransferRunStatus;
 import com.suhasan.finance.transaction_service.entity.ScheduledTransferStatus;
@@ -11,13 +13,10 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDateTime;
 
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
+@Data @Builder @NoArgsConstructor @AllArgsConstructor
 public class ScheduledTransferResponse {
-
     private String scheduleId;
     private String userId;
     private String fromAccountId;
@@ -30,6 +29,11 @@ public class ScheduledTransferResponse {
     private ScheduledTransferFrequency frequency;
     private Instant nextRunAt;
     private Instant endAt;
+    private String timeZone;
+    private LocalDateTime sourceLocalDateTime;
+    private LocalDateTime nextRunLocalDateTime;
+    private DstOverlapPolicy dstOverlapPolicy;
+    private DstGapPolicy dstGapPolicy;
     private ScheduledTransferStatus status;
     private Instant lastRunAt;
     private Instant createdAt;

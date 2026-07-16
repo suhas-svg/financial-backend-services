@@ -20,7 +20,8 @@ public class LedgerBootstrapAuditService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void started(String runId, LedgerBootstrapCommand command, String mode) {
         repository.save(LedgerBootstrapRun.builder()
-                .runId(runId).requestedBy(command.requestedBy()).mode(mode)
+                .runId(runId).requestedBy(command.requestedBy()).requestedRole(command.requestedRole())
+                .requestId(command.requestId()).mode(mode)
                 .businessDate(command.businessDate()).maintenanceMode(command.maintenanceMode())
                 .outcome("STARTED").startedAt(Instant.now()).build());
     }

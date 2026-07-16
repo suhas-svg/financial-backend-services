@@ -242,7 +242,11 @@ export function acceptOutcomeGuardrail(guardrailId: string, idempotencyKey: stri
 function scheduledTransferPayload(values: ScheduledTransferValues) {
   return {
     ...values,
-    firstRunAt: toInstant(values.firstRunAt),
+    firstRunAt: undefined,
+    firstRunLocal: values.firstRunAt,
+    timeZone: values.timeZone,
+    dstOverlapPolicy: values.dstOverlapPolicy,
+    dstGapPolicy: values.dstGapPolicy,
     endAt: values.endAt ? toInstant(values.endAt) : undefined,
     frequency: values.scheduleType === "RECURRING" ? values.frequency : undefined,
     description: values.description || undefined,

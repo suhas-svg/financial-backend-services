@@ -132,7 +132,7 @@ Event sources currently create notifications for account freeze/unfreeze, transf
 
 ## Outcome Protection / Balance Shield
 
-The customer route `/outcome-protection` is a deterministic Personal Reverse-Stress Lab. A customer selects same-currency ledger accounts, a protected minimum, a 1-90 day horizon, dated assumptions, and bounded shocks. Transaction-service snapshots authoritative available balances and active scheduled transfers, then returns the baseline timeline, smallest bounded failure set, exact failure date and triggers, maximum shortfall, and the smallest verified advisory repair set.
+The customer route `/outcome-protection` is a deterministic Personal Reverse-Stress Lab. A customer selects owned ledger accounts, a forecast base currency, a protected minimum, a 1-90 day horizon, dated assumptions, and bounded shocks. Transaction-service snapshots authoritative available balances and active scheduled transfers, then returns the baseline timeline, smallest bounded failure set, exact failure date and triggers, maximum shortfall, and the smallest verified advisory repair set.
 
 Customer API:
 
@@ -146,9 +146,9 @@ Customer API:
 
 Scenario inputs, ledger/schedule snapshots, and simulation results are versioned and immutable. USD, EUR, GBP, and INR are supported; INR remains decimal-safe end to end and is rendered with Indian digit grouping in the frontend. Active customer-owned schedules are expanded with status, cadence, effective time zone, currency, and inclusive horizon boundaries in the causal timeline. Search is capped by `OUTCOME_PROTECTION_MAX_COMBINATION_SIZE` (default `3`) and `OUTCOME_PROTECTION_MAX_EVALUATED_COMBINATIONS` (default `5000`); capped results say so explicitly.
 
-Refresh and the five-minute monitor compare the saved proof with fresh authoritative ledger and scheduled-transfer state. Each comparison persists a `DIVERGENCE_EVALUATED` evidence event. A saved-safe result that is now unsafe persists one deduped `OUTCOME_PROTECTION_AT_RISK` warning, retries the existing account-service notification boundary idempotently, and can be acknowledged without changing balances or schedules.
+Refresh and the five-minute monitor compare the saved proof with fresh authoritative ledger and scheduled-transfer state. Each comparison persists a `DIVERGENCE_EVALUATED` evidence event. A saved-safe result that is now unsafe transactionally enqueues one deterministic `OUTCOME_PROTECTION_AT_RISK` delivery. Bounded retry/backoff, terminal failure, SLA escalation, and account-service receipt evidence are visible without changing balances or schedules; acknowledgement remains owned, audited, and idempotent.
 
-Guardrails are preview-only. Accepting a draft records consent, scope, threshold, expiry, idempotency, and an audit/domain event. It does not hold, move, schedule, or transmit money. External rails, automatic scheduled-transfer changes, investment advice, FX aggregation, and executable guardrails remain out of scope. See [the MVP design](docs/superpowers/specs/2026-07-15-outcome-protection-money-debugger-design.md) and [the production-boundary increment](docs/superpowers/specs/2026-07-15-outcome-protection-balance-shield-production-increment.md).
+Guardrails are preview-only. Accepting a draft records consent, scope, threshold, expiry, idempotency, and an audit/domain event. It does not hold, move, schedule, or transmit money. Cross-currency forecasts use read-only decimal quotes with provider/as-of/provenance and fail-closed staleness handling; they never execute FX. External rails, automatic scheduled-transfer changes, investment advice, and executable guardrails remain out of scope. See [the MVP design](docs/superpowers/specs/2026-07-15-outcome-protection-money-debugger-design.md) and [the production-boundary increment](docs/superpowers/specs/2026-07-15-outcome-protection-balance-shield-production-increment.md).
 
 ## Risk-based Step-up Authorization
 
@@ -324,42 +324,6 @@ For production frontend deployment, use one of these patterns:
 - Or configure explicit CORS rules on both Spring services for the deployed frontend origin.
 
 The reverse-proxy option is preferred because it keeps browser-facing URLs consistent with local development.
-
-## Cross-Agent Handoff
-
-The repository includes a provider-neutral handoff protocol for continuing a task between Codex and Google Antigravity. Read [`.agent/PROTOCOL.md`](.agent/PROTOCOL.md) before using it.
-
-Create a checkpoint after tests have been run and before switching agents:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/agent-checkpoint.ps1 `
-  -SourceAgent codex -TargetAgent antigravity `
-  -TaskId double-entry-ledger `
-  -Objective "Implement the approved ledger MVP" `
-  -Completed "Journal schema" `
-  -Remaining "Reversal postings" `
-  -NextAction "Implement ReversalPostingService"
-```
-
-Review the generated `.agent/active-handoff.json`, then intentionally commit and push the application and handoff changes. The script reports suggested Git commands but never commits, pushes, merges, resets, or runs tests.
-
-Resume from the same reviewed branch and commit:
-
-```powershell
-# Codex to Antigravity
-powershell -ExecutionPolicy Bypass -File scripts/agent-resume.ps1 -Agent antigravity
-
-# Antigravity to Codex
-powershell -ExecutionPolicy Bypass -File scripts/agent-resume.ps1 -Agent codex
-```
-
-Resume verifies repository, branch, commit ancestry, schema version, lease ownership, and dirty-worktree state before acquiring a two-hour cooperative lease. The scripts cannot detect provider quota exhaustion or launch another provider automatically, so checkpoint after each plan task and every 20-30 minutes during long work.
-
-Run the dependency-free protocol tests with:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/test-agent-handoff.ps1
-```
 
 ## API Surface Used By Frontend
 

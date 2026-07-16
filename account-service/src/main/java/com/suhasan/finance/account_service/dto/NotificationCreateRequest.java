@@ -21,4 +21,5 @@ public class NotificationCreateRequest {
     private NotificationSourceType sourceType;
     private String sourceId;
     private String dedupeKey;
+    private String deliveryId;
 }

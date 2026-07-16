@@ -143,6 +143,18 @@ env:
     value: "health,info,prometheus"
   - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS
     value: "never"
+  - name: LEDGER_AUTHORITATIVE
+    value: "true"
+  - name: LEDGER_BOOTSTRAP_STARTUP_ENABLED
+    value: "false"
+  - name: LEDGER_BOOTSTRAP_STARTUP_MAINTENANCE_MODE
+    value: "false"
+  - name: LEDGER_BOOTSTRAP_SYSTEM_CURRENCIES
+    value: "USD,EUR,GBP,INR"
+  - name: OUTCOME_PROTECTION_FX_PROVIDER
+    value: "UNCONFIGURED"
+  - name: OUTCOME_PROTECTION_FX_STALENESS_POLICY
+    value: "REJECT"
 
 # Environment variables from secrets/configmaps
 envFrom:
@@ -226,7 +238,7 @@ database:
   secretKeys:
     password: password
 
-# PostgreSQL subchart (disabled — managed externally)
+# PostgreSQL subchart (disabled â€” managed externally)
 postgresql:
   enabled: false
 

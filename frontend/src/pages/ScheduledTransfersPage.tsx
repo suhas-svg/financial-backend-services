@@ -10,6 +10,7 @@ import { scheduledTransferSchema, type ScheduledTransferValues } from "../lib/sc
 import type { Account, Beneficiary, ScheduledTransfer, ScheduledTransferStatus } from "../types";
 
 const statuses: Array<ScheduledTransferStatus | ""> = ["ACTIVE", "PAUSED", ""];
+const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
 export function ScheduledTransfersPage() {
   const queryClient = useQueryClient();
@@ -28,6 +29,9 @@ export function ScheduledTransfersPage() {
       scheduleType: "RECURRING",
       frequency: "MONTHLY",
       firstRunAt: "",
+      timeZone: browserTimeZone,
+      dstOverlapPolicy: "EARLIER",
+      dstGapPolicy: "SHIFT_FORWARD",
       endAt: ""
     }
   });
@@ -181,6 +185,18 @@ export function ScheduledTransfersPage() {
                 <Input type="datetime-local" {...form.register("endAt")} />
               </Field>
             </div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field label="IANA time zone" error={form.formState.errors.timeZone?.message}>
+                <Input {...form.register("timeZone")} />
+              </Field>
+              <Field label="Repeated local time">
+                <Select {...form.register("dstOverlapPolicy")}><option value="EARLIER">Earlier occurrence</option><option value="LATER">Later occurrence</option></Select>
+              </Field>
+              <Field label="Missing local time">
+                <Select {...form.register("dstGapPolicy")}><option value="SHIFT_FORWARD">Shift forward</option><option value="REJECT">Reject</option></Select>
+              </Field>
+            </div>
+            <p className="text-xs text-muted">Cadence stays anchored to the source-local time across daylight-saving changes. Ambiguous and missing local times follow the explicit policies above.</p>
             <Field label="Description" error={form.formState.errors.description?.message}>
               <Input {...form.register("description")} />
             </Field>
@@ -344,6 +360,8 @@ function ScheduleDetail({ schedule, status, runs }: { schedule: ScheduledTransfe
         <p><span className="font-medium">From:</span> Account {schedule.fromAccountId}</p>
         <p><span className="font-medium">To:</span> Account {schedule.toAccountId}</p>
         <p><span className="font-medium">Cadence:</span> {schedule.scheduleType === "RECURRING" ? schedule.frequency : "ONE_TIME"}</p>
+        <p><span className="font-medium">Source local time:</span> {schedule.sourceLocalDateTime} ({schedule.timeZone})</p>
+        <p className="text-xs text-muted">DST overlap: {schedule.dstOverlapPolicy}; DST gap: {schedule.dstGapPolicy}. Next local occurrence: {schedule.nextRunLocalDateTime}.</p>
         {schedule.description ? <p><span className="font-medium">Description:</span> {schedule.description}</p> : null}
         {schedule.reference ? <p><span className="font-medium">Reference:</span> {schedule.reference}</p> : null}
       </div>

@@ -12,6 +12,9 @@ import com.suhasan.finance.transaction_service.ledger.domain.LedgerBalanceProjec
 import com.suhasan.finance.transaction_service.ledger.repository.LedgerAccountRepository;
 import com.suhasan.finance.transaction_service.ledger.repository.LedgerBalanceProjectionRepository;
 import com.suhasan.finance.transaction_service.outcome.domain.OutcomeDomainEvent;
+import com.suhasan.finance.transaction_service.outcome.domain.OutcomeNotificationDelivery;
+import com.suhasan.finance.transaction_service.outcome.fx.FxRateQuote;
+import com.suhasan.finance.transaction_service.outcome.fx.OutcomeFxConverter;
 import com.suhasan.finance.transaction_service.outcome.domain.OutcomeScenario;
 import com.suhasan.finance.transaction_service.outcome.domain.OutcomeScenarioVersion;
 import com.suhasan.finance.transaction_service.outcome.domain.OutcomeSimulationResult;
@@ -53,7 +56,7 @@ class OutcomeProtectionDivergenceTest {
     @Mock LedgerAccountRepository ledgerAccountRepository;
     @Mock LedgerBalanceProjectionRepository projectionRepository;
     @Mock ScheduledTransferRepository scheduledTransferRepository;
-    @Mock ResilientAccountServiceClient accountServiceClient;
+    @Mock OutcomeNotificationDeliveryService notificationDeliveryService;
 
     private OutcomeProtectionService service;
     private final Map<String, OutcomeDomainEvent> events = new HashMap<>();
@@ -64,7 +67,10 @@ class OutcomeProtectionDivergenceTest {
         service = new OutcomeProtectionService(scenarioRepository, versionRepository, resultRepository,
                 guardrailRepository, eventRepository, ledgerAccountRepository, projectionRepository,
                 scheduledTransferRepository, new OutcomeSimulationEngine(3, 100),
-                new OutcomeScheduledTransferForecaster(), accountServiceClient, objectMapper);
+                new OutcomeScheduledTransferForecaster(),
+                new OutcomeFxConverter((quote, base, time) -> new FxRateQuote(quote, base, BigDecimal.ONE,
+                        Instant.EPOCH, "TEST", "Deterministic test rate", false, "REJECT")),
+                notificationDeliveryService, objectMapper);
 
         OutcomeScenario scenario = OutcomeScenario.builder()
                 .scenarioId("scenario-1").userId("customer-1").name("INR shield").status("ACTIVE")
@@ -109,8 +115,21 @@ class OutcomeProtectionDivergenceTest {
             events.put(event.getDedupeKey(), event);
             return event;
         });
-        doThrow(new IllegalStateException("account-service unavailable"))
-                .doNothing().when(accountServiceClient).createNotification(any());
+        OutcomeNotificationDelivery pending = OutcomeNotificationDelivery.builder()
+                .deliveryId("delivery-1").warningEventId("warning-1").state("PENDING").attemptCount(0)
+                .nextAttemptAt(Instant.now()).dedupeKey("outcome-protection:warning-1").build();
+        OutcomeNotificationDelivery delivered = OutcomeNotificationDelivery.builder()
+                .deliveryId("delivery-1").warningEventId("warning-1").state("DELIVERED").attemptCount(2)
+                .nextAttemptAt(Instant.now()).deliveredAt(Instant.now())
+                .dedupeKey("outcome-protection:warning-1").build();
+        when(notificationDeliveryService.enqueue(any(), any(), any())).thenReturn(pending, delivered);
+        when(notificationDeliveryService.evidence(any())).thenAnswer(invocation -> {
+            OutcomeNotificationDelivery delivery = invocation.getArgument(0);
+            return new com.suhasan.finance.transaction_service.outcome.web.OutcomeProtectionDtos.NotificationDeliveryEvidence(
+                    delivery.getDeliveryId(), delivery.getState(), delivery.getAttemptCount(), delivery.getNextAttemptAt(),
+                    delivery.getDeliveredAt(), delivery.getTerminalAt(), delivery.getSlaEscalatedAt(),
+                    delivery.getLastError(), delivery.getDedupeKey());
+        });
     }
 
     @Test

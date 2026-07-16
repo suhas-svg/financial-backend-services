@@ -611,6 +611,7 @@ public class ResilientAccountServiceClient {
         private String sourceType;
         private String sourceId;
         private String dedupeKey;
+        private String deliveryId;
     }
 
     public record SpendingLimitReservationRequest(String operationType, BigDecimal amount,

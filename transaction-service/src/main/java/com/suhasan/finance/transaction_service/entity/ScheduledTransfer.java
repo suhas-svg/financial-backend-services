@@ -22,6 +22,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
@@ -83,6 +84,26 @@ public class ScheduledTransfer {
     @Column(name = "end_at")
     private Instant endAt;
 
+    @Column(name = "source_time_zone", nullable = false, length = 64)
+    private String sourceTimeZone;
+
+    @Column(name = "source_local_date_time", nullable = false)
+    private LocalDateTime sourceLocalDateTime;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dst_overlap_policy", nullable = false, length = 16)
+    private DstOverlapPolicy dstOverlapPolicy;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dst_gap_policy", nullable = false, length = 24)
+    private DstGapPolicy dstGapPolicy;
+
+    @Column(name = "recurrence_anchor_day", nullable = false)
+    private Integer recurrenceAnchorDay;
+
+    @Column(name = "recurrence_anchor_end_of_month", nullable = false)
+    private boolean recurrenceAnchorEndOfMonth;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private ScheduledTransferStatus status;
@@ -117,6 +138,15 @@ public class ScheduledTransfer {
         }
         if (version == null) {
             version = 0L;
+        }
+        if (sourceTimeZone == null) sourceTimeZone = "UTC";
+        if (sourceLocalDateTime == null && nextRunAt != null) {
+            sourceLocalDateTime = LocalDateTime.ofInstant(nextRunAt, java.time.ZoneId.of(sourceTimeZone));
+        }
+        if (dstOverlapPolicy == null) dstOverlapPolicy = DstOverlapPolicy.EARLIER;
+        if (dstGapPolicy == null) dstGapPolicy = DstGapPolicy.SHIFT_FORWARD;
+        if (recurrenceAnchorDay == null && sourceLocalDateTime != null) {
+            recurrenceAnchorDay = sourceLocalDateTime.getDayOfMonth();
         }
     }
 

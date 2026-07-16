@@ -70,6 +70,9 @@ export const scheduledTransferSchema = z.object({
   scheduleType: z.enum(["ONE_TIME", "RECURRING"]),
   frequency: z.enum(["WEEKLY", "BIWEEKLY", "MONTHLY"]).optional(),
   firstRunAt: z.string().min(1, "First run date is required"),
+  timeZone: z.string().min(1, "IANA time zone is required").max(64),
+  dstOverlapPolicy: z.enum(["EARLIER", "LATER"]),
+  dstGapPolicy: z.enum(["SHIFT_FORWARD", "REJECT"]),
   endAt: z.string().optional()
 }).superRefine((value, ctx) => {
   if (value.fromAccountId === value.toAccountId) {

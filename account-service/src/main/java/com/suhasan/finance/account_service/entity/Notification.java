@@ -63,6 +63,18 @@ public class Notification {
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "delivery_id", length = 36)
+    private String deliveryId;
+
+    @Column(name = "first_received_at", nullable = false)
+    private LocalDateTime firstReceivedAt;
+
+    @Column(name = "last_received_at", nullable = false)
+    private LocalDateTime lastReceivedAt;
+
+    @Column(name = "delivery_count", nullable = false)
+    private int deliveryCount;
+
     private LocalDateTime readAt;
 
     @PrePersist
@@ -73,5 +85,8 @@ public class Notification {
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
         }
+        if (firstReceivedAt == null) firstReceivedAt = createdAt;
+        if (lastReceivedAt == null) lastReceivedAt = firstReceivedAt;
+        if (deliveryCount < 1) deliveryCount = 1;
     }
 }

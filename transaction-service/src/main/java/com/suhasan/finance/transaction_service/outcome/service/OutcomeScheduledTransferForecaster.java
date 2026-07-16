@@ -5,7 +5,7 @@ import com.suhasan.finance.transaction_service.entity.ScheduledTransferStatus;
 import com.suhasan.finance.transaction_service.entity.ScheduledTransferType;
 import com.suhasan.finance.transaction_service.outcome.web.OutcomeProtectionDtos.ScenarioRequest;
 import com.suhasan.finance.transaction_service.outcome.web.OutcomeProtectionDtos.ScheduledCashflowSnapshot;
-import com.suhasan.finance.transaction_service.service.ScheduledTransferService;
+import com.suhasan.finance.transaction_service.service.ScheduledTransferCadence;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -30,8 +30,7 @@ public class OutcomeScheduledTransferForecaster {
 
         for (ScheduledTransfer schedule : schedules) {
             if (!userId.equals(schedule.getUserId())
-                    || schedule.getStatus() != ScheduledTransferStatus.ACTIVE
-                    || !request.currency().equals(schedule.getCurrency())) {
+                    || schedule.getStatus() != ScheduledTransferStatus.ACTIVE) {
                 continue;
             }
             boolean outgoing = selectedAccounts.contains(schedule.getFromAccountId());
@@ -67,7 +66,7 @@ public class OutcomeScheduledTransferForecaster {
                 if (schedule.getScheduleType() == ScheduledTransferType.ONE_TIME) {
                     break;
                 }
-                occurrence = ScheduledTransferService.nextRunAfter(occurrence, schedule.getFrequency());
+                occurrence = ScheduledTransferCadence.nextRunAfter(schedule, occurrence);
             }
         }
 
