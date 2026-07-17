@@ -1,5 +1,7 @@
 package com.suhasan.finance.transaction_service.controller;
 
+import com.suhasan.finance.transaction_service.outcome.service.OutcomeGuardrailControlService;
+import com.suhasan.finance.transaction_service.outcome.service.OutcomeGuardrailService;
 import com.suhasan.finance.transaction_service.outcome.service.OutcomeProtectionService;
 import com.suhasan.finance.transaction_service.outcome.web.OutcomeProtectionController;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class OutcomeProtectionControllerTest {
     @Autowired MockMvc mockMvc;
     @MockitoBean OutcomeProtectionService service;
+    @MockitoBean OutcomeGuardrailService guardrailService;
+    @MockitoBean OutcomeGuardrailControlService guardrailControlService;
 
     @Test
     @WithMockUser(username = "customer", roles = "USER")

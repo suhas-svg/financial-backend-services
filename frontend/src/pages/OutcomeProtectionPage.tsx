@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, FlaskConical, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
-import type { OutcomeAssumptionType, OutcomeScenario, OutcomeScenarioRequest, OutcomeShockType } from "../types";
+import type { LedgerAccountProjection, OutcomeAssumptionType, OutcomeScenario, OutcomeScenarioRequest, OutcomeShockType } from "../types";
 import { acceptOutcomeGuardrail, acknowledgeOutcomeWarning, createOutcomeScenario, getOutcomeScenario, listLedgerAccounts, listOutcomeScenarios, refreshOutcomeScenario } from "../lib/queries";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { compactDate, money } from "../lib/format";
 import { Badge, Button, EmptyState, ErrorNotice, Field, Input, PageHeader, Panel, Select, StatusNotice } from "../components/ui";
+import { OutcomeGuardrailCard } from "../components/OutcomeGuardrailCard";
 
 type CashflowDraft = {
   id: string;
@@ -156,7 +157,7 @@ export function OutcomeProtectionPage() {
     : undefined;
 
   return <div className="grid gap-6">
-    <PageHeader eyebrow="Outcome Protection" title="Balance Shield lab" detail="Protect a minimum available balance, reverse-stress what could break it, and compile preview-only guardrails with exact causal proof." />
+    <PageHeader eyebrow="Outcome Protection" title="Balance Shield lab" detail="Forecast risks, review drafts, and activate only bounded customer-confirmed top-ups through MFA and existing transfer controls." />
     <ErrorNotice message={error} />
     {create.isPending ? <StatusNotice pending message="Snapshotting authoritative balances and searching bounded shock combinations..." /> : null}
     {refreshMessage ? <StatusNotice message={refreshMessage} /> : null}
@@ -228,7 +229,7 @@ export function OutcomeProtectionPage() {
           <div className="grid gap-2">
             {scenarios.data?.map((item) => <button key={item.scenarioId} className={`rounded-xl border p-3 text-left ${selectedScenarioId === item.scenarioId ? "border-brand bg-emerald-50 dark:bg-emerald-950" : "border-line"}`} onClick={() => setSelectedScenarioId(item.scenarioId)}>
               <span className="flex items-center justify-between gap-2"><strong className="text-sm">{item.name}</strong><Badge tone={item.baselineSafe ? "good" : "bad"}>{item.baselineSafe ? "Protected" : "At risk"}</Badge></span>
-              <span className="mt-1 block text-xs text-muted">Version {item.version} Â· {item.horizonDays} days Â· floor {money(item.protectedMinimum, item.currency)}</span>
+              <span className="mt-1 block text-xs text-muted">Version {item.version} | {item.horizonDays} days | floor {money(item.protectedMinimum, item.currency)}</span>
             </button>)}
             {!scenarios.isLoading && !scenarios.data?.length ? <EmptyState title="No saved outcomes" detail="Run the lab to save an immutable scenario and proof." /> : null}
           </div>
@@ -236,14 +237,16 @@ export function OutcomeProtectionPage() {
       </div>
 
       <div className="grid content-start gap-6">
-        {scenario ? <ScenarioProof scenario={scenario} onRefresh={() => refresh.mutate(scenario.scenarioId)} refreshing={refresh.isPending} confirmed={confirmedGuardrails} setConfirmed={setConfirmedGuardrails} onAccept={(id) => accept.mutate(id)} accepting={accept.isPending} /> : <Panel><EmptyState title="No outcome selected" detail="Run a scenario or select a saved outcome to inspect its causal proof and guardrail drafts." /></Panel>}
+        {scenario ? <ScenarioProof scenario={scenario} accounts={ledger.data ?? []} onChanged={() => queryClient.invalidateQueries({ queryKey: ["outcome-scenario", scenario.scenarioId] })} onRefresh={() => refresh.mutate(scenario.scenarioId)} refreshing={refresh.isPending} confirmed={confirmedGuardrails} setConfirmed={setConfirmedGuardrails} onAccept={(id) => accept.mutate(id)} accepting={accept.isPending} /> : <Panel><EmptyState title="No outcome selected" detail="Run a scenario or select a saved outcome to inspect its causal proof and guardrail drafts." /></Panel>}
       </div>
     </div>
   </div>;
 }
 
-function ScenarioProof({ scenario, onRefresh, refreshing, confirmed, setConfirmed, onAccept, accepting }: {
+function ScenarioProof({ scenario, accounts, onChanged, onRefresh, refreshing, confirmed, setConfirmed, onAccept, accepting }: {
   scenario: OutcomeScenario;
+  accounts: LedgerAccountProjection[];
+  onChanged: () => void;
   onRefresh: () => void;
   refreshing: boolean;
   confirmed: Record<string, boolean>;
@@ -260,7 +263,7 @@ function ScenarioProof({ scenario, onRefresh, refreshing, confirmed, setConfirme
         <div className={`rounded-2xl border p-5 ${scenario.simulation.baseline.safe ? "border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950" : "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950"}`}>
           <div className="flex items-start gap-3">{scenario.simulation.baseline.safe ? <CheckCircle2 className="mt-0.5 h-6 w-6 text-emerald-700" /> : <AlertTriangle className="mt-0.5 h-6 w-6 text-red-700" />}<div><p className="font-bold">{scenario.simulation.baseline.safe ? "Baseline outcome protected" : "Baseline outcome already at risk"}</p><p className="mt-1 text-sm">Starts at {money(scenario.sourceSnapshot.startingAvailableBalance, scenario.currency)}; lowest baseline balance is {money(scenario.simulation.baseline.lowestBalance, scenario.currency)} against a {money(scenario.protectedMinimum, scenario.currency)} floor.</p></div></div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3"><ProofStat label="Failure date" value={failure.failureDate ? compactDate(failure.failureDate) : "No bounded failure"} /><ProofStat label="Lowest stressed balance" value={failure.lowestBalance === undefined ? "â€”" : money(failure.lowestBalance, scenario.currency)} /><ProofStat label="Search proof" value={`${scenario.simulation.evaluatedCombinations} combinations${scenario.simulation.searchCapped ? " (capped)" : ""}`} /></div>
+        <div className="grid gap-3 sm:grid-cols-3"><ProofStat label="Failure date" value={failure.failureDate ? compactDate(failure.failureDate) : "No bounded failure"} /><ProofStat label="Lowest stressed balance" value={failure.lowestBalance === undefined ? "-" : money(failure.lowestBalance, scenario.currency)} /><ProofStat label="Search proof" value={`${scenario.simulation.evaluatedCombinations} combinations${scenario.simulation.searchCapped ? " (capped)" : ""}`} /></div>
         <p className="text-sm leading-6 text-muted">{failure.minimalityExplanation}</p>
         {failure.appliedShocks.length ? <div><p className="text-xs font-bold uppercase tracking-wide text-muted">Smallest plausible failure set</p><div className="mt-2 grid gap-2">{failure.appliedShocks.map((shock) => <div key={shock.shockId} className="rounded-xl border border-line p-3 text-sm"><strong>{shock.label}</strong><span className="ml-2 text-xs text-muted">severity {money(shock.severityScore, scenario.currency)}</span></div>)}</div></div> : null}
       </div>
@@ -271,18 +274,27 @@ function ScenarioProof({ scenario, onRefresh, refreshing, confirmed, setConfirme
     </Panel>
 
     <Panel title="Authoritative source snapshot">
-      <div className="grid gap-3 sm:grid-cols-2"><div><p className="text-xs font-bold uppercase tracking-wide text-muted">Ledger balances</p>{scenario.sourceSnapshot.ledgerAccounts.map((account) => <p key={account.accountId} className="mt-2 text-sm">Account {account.accountId}: <strong>{money(account.availableBalance, account.currency)}</strong>{account.currency !== scenario.sourceSnapshot.baseCurrency ? <> → <strong>{money(account.baseAvailableBalance, scenario.sourceSnapshot.baseCurrency)}</strong></> : null} <span className="text-xs text-muted">projection v{account.projectionVersion}</span></p>)}</div><div><p className="text-xs font-bold uppercase tracking-wide text-muted">Known scheduled cashflows</p>{scenario.sourceSnapshot.scheduledCashflows.length ? scenario.sourceSnapshot.scheduledCashflows.map((flow) => <p key={flow.eventId} className="mt-2 text-sm">{compactDate(flow.date)} Â· {flow.label} Â· <strong>{money(flow.sourceAmount, flow.sourceCurrency)}</strong>{flow.sourceCurrency !== flow.currency ? <> → <strong>{money(flow.amount, flow.currency)}</strong></> : null} <span className="text-xs text-muted">{flow.status} {flow.cadence} Â· {flow.evaluationTimeZone}</span></p>) : <p className="mt-2 text-sm text-muted">No active scheduled transfer affects the selected accounts inside this horizon.</p>}</div></div>
+      <div className="grid gap-3 sm:grid-cols-2"><div><p className="text-xs font-bold uppercase tracking-wide text-muted">Ledger balances</p>{scenario.sourceSnapshot.ledgerAccounts.map((account) => <p key={account.accountId} className="mt-2 text-sm">Account {account.accountId}: <strong>{money(account.availableBalance, account.currency)}</strong>{account.currency !== scenario.sourceSnapshot.baseCurrency ? <> → <strong>{money(account.baseAvailableBalance, scenario.sourceSnapshot.baseCurrency)}</strong></> : null} <span className="text-xs text-muted">projection v{account.projectionVersion}</span></p>)}</div><div><p className="text-xs font-bold uppercase tracking-wide text-muted">Known scheduled cashflows</p>{scenario.sourceSnapshot.scheduledCashflows.length ? scenario.sourceSnapshot.scheduledCashflows.map((flow) => <p key={flow.eventId} className="mt-2 text-sm">{compactDate(flow.date)} | {flow.label} | <strong>{money(flow.sourceAmount, flow.sourceCurrency)}</strong>{flow.sourceCurrency !== flow.currency ? <> → <strong>{money(flow.amount, flow.currency)}</strong></> : null} <span className="text-xs text-muted">{flow.status} {flow.cadence} | {flow.evaluationTimeZone}</span></p>) : <p className="mt-2 text-sm text-muted">No active scheduled transfer affects the selected accounts inside this horizon.</p>}</div></div>
       <div className="mt-4 rounded-xl border border-line p-4">
         <p className="text-xs font-bold uppercase tracking-wide text-muted">FX normalization (forecast only)</p>
         <p className="mt-2 text-sm">Executable FX is disabled. These reference quotes cannot reserve, trade, or move currency.</p>
-        {scenario.sourceSnapshot.fxQuotes.length ? scenario.sourceSnapshot.fxQuotes.map((quote) => <p key={quote.quoteCurrency + "/" + quote.baseCurrency} className="mt-2 text-sm"><strong>{quote.quoteCurrency}/{quote.baseCurrency} = {quote.rate}</strong> � {quote.provider} � as of {new Date(quote.asOf).toLocaleString()} � {quote.provenance} � <Badge tone={quote.stale ? "warn" : "good"}>{quote.stale ? "STALE " + quote.stalenessPolicy : "FRESH"}</Badge></p>) : <p className="mt-2 text-sm text-muted">No cross-currency quote was required.</p>}
+        {scenario.sourceSnapshot.fxQuotes.length ? scenario.sourceSnapshot.fxQuotes.map((quote) => <p key={quote.quoteCurrency + "/" + quote.baseCurrency} className="mt-2 text-sm"><strong>{quote.quoteCurrency}/{quote.baseCurrency} = {quote.rate}</strong> | {quote.provider} | as of {new Date(quote.asOf).toLocaleString()} | {quote.provenance} | <Badge tone={quote.stale ? "warn" : "good"}>{quote.stale ? "STALE " + quote.stalenessPolicy : "FRESH"}</Badge></p>) : <p className="mt-2 text-sm text-muted">No cross-currency quote was required.</p>}
       </div>
     </Panel>
 
     <Panel title="Compiled repair and guardrail drafts">
       <div className="grid gap-4">
-        <div className="rounded-xl border border-line p-4"><p className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-5 w-5 text-brand" />Smallest verified repair set</p><p className="mt-2 text-sm text-muted">{scenario.simulation.repair.minimalityExplanation}</p>{scenario.simulation.repair.selectedRepairs.map((repair) => <p key={repair.actionId} className="mt-2 text-sm"><strong>{repair.type.split("_").join(" ")} Â· {money(repair.amount, scenario.currency)}</strong> â€” {repair.explanation}</p>)}</div>
-        {scenario.guardrails.map((guardrail) => <div key={guardrail.guardrailId} className="rounded-xl border border-line p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-semibold">{guardrail.type.split("_").join(" ")}</p><p className="mt-1 text-xs text-muted">Scope: accounts {guardrail.accountIds.join(", ")} Â· Expires {compactDate(guardrail.expiresAt)} Â· Threshold {money(guardrail.thresholdAmount, guardrail.currency)}</p></div><Badge tone={guardrail.status === "ACCEPTED" ? "good" : guardrail.status === "EXPIRED" ? "bad" : "info"}>{guardrail.status}</Badge></div><p className="mt-3 text-sm leading-6">{guardrail.previewText}</p>{guardrail.status === "DRAFT" ? <div className="mt-4 grid gap-3"><label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={Boolean(confirmed[guardrail.guardrailId])} onChange={(event) => setConfirmed((current) => ({ ...current, [guardrail.guardrailId]: event.target.checked }))} /><span>I confirm this is a consent record for a read-only preview. It will not hold, transfer, or schedule money.</span></label><Button variant="secondary" disabled={!confirmed[guardrail.guardrailId] || accepting} onClick={() => onAccept(guardrail.guardrailId)}>Accept preview draft</Button></div> : null}</div>)}
+        <div className="rounded-xl border border-line p-4"><p className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-5 w-5 text-brand" />Smallest verified repair set</p><p className="mt-2 text-sm text-muted">{scenario.simulation.repair.minimalityExplanation}</p>{scenario.simulation.repair.selectedRepairs.map((repair) => <p key={repair.actionId} className="mt-2 text-sm"><strong>{repair.type.split("_").join(" ")} | {money(repair.amount, scenario.currency)}</strong> - {repair.explanation}</p>)}</div>
+        {scenario.guardrails.map((guardrail) => <OutcomeGuardrailCard
+          key={guardrail.guardrailId}
+          guardrail={guardrail}
+          accounts={accounts}
+          previewConfirmed={Boolean(confirmed[guardrail.guardrailId])}
+          onPreviewConfirmed={(value) => setConfirmed((current) => ({ ...current, [guardrail.guardrailId]: value }))}
+          onAcceptPreview={() => onAccept(guardrail.guardrailId)}
+          acceptingPreview={accepting}
+          onChanged={onChanged}
+        />)}
       </div>
     </Panel>
   </>;

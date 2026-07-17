@@ -1,4 +1,4 @@
-import type { Account, AccountStatus, AuditLogEntry, AuditSummary, Beneficiary, BeneficiaryStatus, ChallengeVerification, CustomerJournal, CustomerStatement, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, LedgerAccountProjection, Limits, MfaConfirmation, MfaEnrollment, MfaStatus, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, OutcomeDivergence, OutcomeGuardrail, OutcomeScenario, OutcomeScenarioRequest, OutcomeScenarioSummary, Page, ReconciliationException, ReconciliationExceptionStatus, ReconciliationRun, ReconciliationSeverity, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, ScheduledTransfer, ScheduledTransferRun, ScheduledTransferStatus, Transaction, TransactionDispute, TransactionStats } from "../types";
+import type { Account, AccountStatus, AuditLogEntry, AuditSummary, Beneficiary, BeneficiaryStatus, ChallengeVerification, CustomerJournal, CustomerStatement, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, LedgerAccountProjection, Limits, MfaConfirmation, MfaEnrollment, MfaStatus, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, OutcomeDivergence, OutcomeGuardrail, OutcomeGuardrailControl, OutcomeGuardrailControlEvent, OutcomeGuardrailExecution, OutcomeGuardrailOperatorPolicy, OutcomeGuardrailPolicy, OutcomeGuardrailTerms, OutcomeScenario, OutcomeScenarioRequest, OutcomeScenarioSummary, Page, ReconciliationException, ReconciliationExceptionStatus, ReconciliationRun, ReconciliationSeverity, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, ScheduledTransfer, ScheduledTransferRun, ScheduledTransferStatus, Transaction, TransactionDispute, TransactionStats } from "../types";
 import { apiRequest, toQuery } from "./api";
 import type { AccountValues, BeneficiaryValues, DisputeNoteValues, DisputeStatusValues, DisputeValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, ScheduledTransferValues, TransferValues } from "./schemas";
 import { getSession } from "./session";
@@ -232,13 +232,99 @@ export function acknowledgeOutcomeWarning(eventId: string, idempotencyKey: strin
 
 
 export function acceptOutcomeGuardrail(guardrailId: string, idempotencyKey: string) {
-  return apiRequest<OutcomeGuardrail>("transaction", `/api/outcome-protection/guardrails/${guardrailId}/accept`, {
+  return apiRequest<OutcomeGuardrail>("transaction", "/api/outcome-protection/guardrails/" + guardrailId + "/accept", {
     method: "POST",
     body: { confirmed: true },
     idempotencyKey
   });
 }
 
+export function getOutcomeGuardrailTerms() {
+  return apiRequest<OutcomeGuardrailTerms>("transaction", "/api/outcome-protection/guardrails/terms");
+}
+
+export function getOutcomeGuardrailControl() {
+  return apiRequest<OutcomeGuardrailControl>("transaction", "/api/outcome-protection/guardrails/runtime-control");
+}
+
+export function getAdminOutcomeGuardrailControl() {
+  return apiRequest<OutcomeGuardrailControl>("transaction", "/api/admin/outcome-protection/guardrails/control");
+}
+
+export function updateAdminOutcomeGuardrailControl(executionEnabled: boolean, reason: string, idempotencyKey: string) {
+  return apiRequest<OutcomeGuardrailControl>("transaction", "/api/admin/outcome-protection/guardrails/control", {
+    method: "PUT", body: { executionEnabled, reason }, idempotencyKey
+  });
+}
+
+export function listAdminOutcomeGuardrailPolicies() {
+  return apiRequest<OutcomeGuardrailOperatorPolicy[]>("transaction", "/api/admin/outcome-protection/guardrails");
+}
+
+export function listAdminOutcomeGuardrailControlEvents() {
+  return apiRequest<OutcomeGuardrailControlEvent[]>("transaction", "/api/admin/outcome-protection/guardrails/control/events");
+}
+export function consentOutcomeGuardrail(
+  guardrailId: string,
+  values: {
+    confirmed: true;
+    termsVersion: string;
+    termsHash: string;
+    fundingAccountId: string;
+    protectedAccountId: string;
+    maxActionAmount: number;
+    totalLimit: number;
+    maxExecutions: number;
+    expiresAt: string;
+  },
+  idempotencyKey: string
+) {
+  return apiRequest<OutcomeGuardrailPolicy>("transaction", "/api/outcome-protection/guardrails/" + guardrailId + "/consent", {
+    method: "POST", body: values, idempotencyKey
+  });
+}
+
+export function activateOutcomeGuardrail(guardrailId: string, proof: string) {
+  return apiRequest<OutcomeGuardrailPolicy>("transaction", "/api/outcome-protection/guardrails/" + guardrailId + "/activate", {
+    method: "POST", body: { proof }
+  });
+}
+
+export function suspendOutcomeGuardrail(guardrailId: string, reason: string, idempotencyKey: string) {
+  return apiRequest<OutcomeGuardrailPolicy>("transaction", "/api/outcome-protection/guardrails/" + guardrailId + "/suspend", {
+    method: "POST", body: { reason }, idempotencyKey
+  });
+}
+
+export function resumeOutcomeGuardrail(guardrailId: string, reason: string, idempotencyKey: string) {
+  return apiRequest<OutcomeGuardrailPolicy>("transaction", "/api/outcome-protection/guardrails/" + guardrailId + "/resume", {
+    method: "POST", body: { reason }, idempotencyKey
+  });
+}
+
+export function revokeOutcomeGuardrail(guardrailId: string, reason: string, idempotencyKey: string) {
+  return apiRequest<OutcomeGuardrailPolicy>("transaction", "/api/outcome-protection/guardrails/" + guardrailId + "/revoke", {
+    method: "POST", body: { reason }, idempotencyKey
+  });
+}
+
+export function executeOutcomeGuardrail(guardrailId: string, amount: number, idempotencyKey: string) {
+  return apiRequest<OutcomeGuardrailExecution>("transaction", "/api/outcome-protection/guardrails/" + guardrailId + "/executions", {
+    method: "POST", body: { confirmed: true, amount }, idempotencyKey
+  });
+}
+
+export function authorizeOutcomeGuardrailExecution(executionId: string, proof: string, idempotencyKey: string) {
+  return apiRequest<OutcomeGuardrailExecution>("transaction", "/api/outcome-protection/guardrail-executions/" + executionId + "/authorize", {
+    method: "POST", body: { proof }, idempotencyKey
+  });
+}
+
+export function cancelOutcomeGuardrailExecution(executionId: string, idempotencyKey: string) {
+  return apiRequest<OutcomeGuardrailExecution>("transaction", "/api/outcome-protection/guardrail-executions/" + executionId, {
+    method: "DELETE", idempotencyKey
+  });
+}
 function scheduledTransferPayload(values: ScheduledTransferValues) {
   return {
     ...values,

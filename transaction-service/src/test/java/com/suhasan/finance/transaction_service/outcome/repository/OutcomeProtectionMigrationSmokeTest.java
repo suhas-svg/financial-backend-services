@@ -62,4 +62,30 @@ class OutcomeProtectionMigrationSmokeTest {
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("immutable");
     }
+    @Test
+    void createsFailClosedConsentGuardrailControlAndImmutableEvidence() {
+        Integer tableCount = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name IN ('outcome_guardrail_policies', 'outcome_guardrail_executions',
+                                     'outcome_guardrail_runtime_controls', 'outcome_guardrail_control_events')
+                """, Integer.class);
+        assertThat(tableCount).isEqualTo(4);
+        assertThat(jdbc.queryForObject("""
+                SELECT execution_enabled FROM outcome_guardrail_runtime_controls
+                WHERE control_id = 'GLOBAL'
+                """, Boolean.class)).isFalse();
+
+        String eventId = UUID.randomUUID().toString();
+        jdbc.update("""
+                INSERT INTO outcome_guardrail_control_events (
+                    event_id, execution_enabled, reason, actor, idempotency_key,
+                    request_fingerprint, created_at)
+                VALUES (?, FALSE, 'fresh smoke evidence', 'operator', ?, ?, CURRENT_TIMESTAMP)
+                """, eventId, "control-" + eventId, "fingerprint-" + eventId);
+        assertThatThrownBy(() -> jdbc.update(
+                "UPDATE outcome_guardrail_control_events SET reason = 'changed' WHERE event_id = ?", eventId))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("immutable");
+    }
 }

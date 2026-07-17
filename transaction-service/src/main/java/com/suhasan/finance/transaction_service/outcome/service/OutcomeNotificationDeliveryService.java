@@ -34,18 +34,25 @@ public class OutcomeNotificationDeliveryService {
 
     @Transactional
     public OutcomeNotificationDelivery enqueue(OutcomeDomainEvent warning, OutcomeScenario scenario, SimulationProof simulation) {
-        return repository.findByWarningEventId(warning.getEventId()).orElseGet(() -> {
-            String deliveryId = UUID.nameUUIDFromBytes(("balance-shield:" + warning.getEventId())
+        return enqueueEvent(warning, scenario, "OUTCOME_PROTECTION_AT_RISK", "WARNING",
+                "Balance Shield needs attention",
+                "Your saved outcome may fall below %s %s on %s. Review the causal timeline and guardrail drafts."
+                        .formatted(scenario.getCurrency(), simulation.baseline().protectedMinimum().toPlainString(),
+                                simulation.baseline().failureDate()),
+                "outcome-protection:" + warning.getEventId());
+    }
+
+    @Transactional
+    public OutcomeNotificationDelivery enqueueEvent(OutcomeDomainEvent event, OutcomeScenario scenario,
+                                                     String type, String severity, String title,
+                                                     String message, String dedupeKey) {
+        return repository.findByWarningEventId(event.getEventId()).orElseGet(() -> {
+            String deliveryId = UUID.nameUUIDFromBytes(("balance-shield:" + event.getEventId())
                     .getBytes(StandardCharsets.UTF_8)).toString();
-            String dedupeKey = "outcome-protection:" + warning.getEventId();
-            Payload payload = new Payload(scenario.getUserId(), "OUTCOME_PROTECTION_AT_RISK", "WARNING",
-                    "Balance Shield needs attention",
-                    "Your saved outcome may fall below %s %s on %s. Review the causal timeline and guardrail drafts."
-                            .formatted(scenario.getCurrency(), simulation.baseline().protectedMinimum().toPlainString(),
-                                    simulation.baseline().failureDate()),
+            Payload payload = new Payload(scenario.getUserId(), type, severity, title, message,
                     "OUTCOME_PROTECTION", scenario.getScenarioId(), dedupeKey);
             return repository.save(OutcomeNotificationDelivery.builder()
-                    .deliveryId(deliveryId).warningEventId(warning.getEventId()).userId(scenario.getUserId())
+                    .deliveryId(deliveryId).warningEventId(event.getEventId()).userId(scenario.getUserId())
                     .scenarioId(scenario.getScenarioId()).dedupeKey(dedupeKey).payloadJson(json(payload))
                     .state("PENDING").attemptCount(0).nextAttemptAt(Instant.now()).build());
         });

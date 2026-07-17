@@ -37,7 +37,7 @@ financial-backend-services/
 - Create one-time or recurring scheduled transfers between accounts.
 - Pause, resume, cancel, and inspect scheduled transfer run history.
 - Protect a minimum available balance with the Outcome Protection / Balance Shield reverse-stress lab.
-- Review exact baseline and stressed timelines, minimal failure sets, and consent-gated preview-only guardrail drafts.
+- Review exact baseline and stressed timelines, minimal failure sets, preview guardrails, and explicitly confirmed consent-driven top-ups.
 - Use available-balance validation for withdrawals and outgoing transfer sources.
 - Keep frozen accounts selectable for credits, while debit-source controls are disabled.
 - Generate an `Idempotency-Key` per money-movement submit.
@@ -141,14 +141,20 @@ Customer API:
 - `GET /api/outcome-protection/scenarios/{scenarioId}`
 - `POST /api/outcome-protection/scenarios/{scenarioId}/versions` (requires `Idempotency-Key`)
 - `POST /api/outcome-protection/scenarios/{scenarioId}/refresh`
-- `POST /api/outcome-protection/guardrails/{guardrailId}/accept` (requires explicit confirmation and `Idempotency-Key`)
+- `POST /api/outcome-protection/guardrails/{guardrailId}/accept` (records preview acceptance only)
+- `GET /api/outcome-protection/guardrails/terms`
+- `POST /api/outcome-protection/guardrails/{guardrailId}/consent` (versioned informed consent and `Idempotency-Key`)
+- `POST /api/outcome-protection/guardrails/{guardrailId}/activate` (action-bound MFA; activation moves no money)
+- `POST /api/outcome-protection/guardrails/{guardrailId}/execute` (explicit confirmation and `Idempotency-Key`)
+- `POST /api/outcome-protection/guardrail-executions/{executionId}/authorize` (risk-based MFA when required)
+- `POST /api/outcome-protection/guardrails/{guardrailId}/suspend`, `/resume`, or `/revoke`
 - `POST /api/outcome-protection/warnings/{eventId}/acknowledge`
 
 Scenario inputs, ledger/schedule snapshots, and simulation results are versioned and immutable. USD, EUR, GBP, and INR are supported; INR remains decimal-safe end to end and is rendered with Indian digit grouping in the frontend. Active customer-owned schedules are expanded with status, cadence, effective time zone, currency, and inclusive horizon boundaries in the causal timeline. Search is capped by `OUTCOME_PROTECTION_MAX_COMBINATION_SIZE` (default `3`) and `OUTCOME_PROTECTION_MAX_EVALUATED_COMBINATIONS` (default `5000`); capped results say so explicitly.
 
 Refresh and the five-minute monitor compare the saved proof with fresh authoritative ledger and scheduled-transfer state. Each comparison persists a `DIVERGENCE_EVALUATED` evidence event. A saved-safe result that is now unsafe transactionally enqueues one deterministic `OUTCOME_PROTECTION_AT_RISK` delivery. Bounded retry/backoff, terminal failure, SLA escalation, and account-service receipt evidence are visible without changing balances or schedules; acknowledgement remains owned, audited, and idempotent.
 
-Guardrails are preview-only. Accepting a draft records consent, scope, threshold, expiry, idempotency, and an audit/domain event. It does not hold, move, schedule, or transmit money. Cross-currency forecasts use read-only decimal quotes with provider/as-of/provenance and fail-closed staleness handling; they never execute FX. External rails, automatic scheduled-transfer changes, investment advice, and executable guardrails remain out of scope. See [the MVP design](docs/superpowers/specs/2026-07-15-outcome-protection-money-debugger-design.md) and [the production-boundary increment](docs/superpowers/specs/2026-07-15-outcome-protection-balance-shield-production-increment.md).
+Reserve-buffer drafts may become bounded same-currency top-up policies only after versioned informed consent and action-bound MFA. Activation never moves money. Every action is initiated and explicitly confirmed by the authenticated customer, passes through the existing authorized transfer flow, and may require risk MFA. Limits, expiry, suspension, revocation, a persisted fail-closed operator kill switch, immutable audit events, idempotency, and notification evidence remain visible. There is no autonomous execution worker. Cross-currency forecasts use read-only decimal quotes with provider/as-of/provenance and fail-closed staleness handling; they never execute FX. See [the MVP design](docs/superpowers/specs/2026-07-15-outcome-protection-money-debugger-design.md), [the production-readiness increment](docs/superpowers/specs/2026-07-16-balance-shield-production-readiness.md), [the executable guardrail specification](docs/superpowers/specs/2026-07-16-balance-shield-consent-guardrails.md), and [the operator runbook](docs/operations/balance-shield-guardrail-runbook.md).
 
 ## Risk-based Step-up Authorization
 
@@ -263,7 +269,7 @@ Authenticated customer pages use these routes:
 - `/accounts` - customer accounts
 - `/move-money` - deposits, withdrawals, and transfers
 - `/scheduled-transfers` - scheduled and recurring transfers
-- `/outcome-protection` - Balance Shield scenarios, reverse-stress proof, and preview-only guardrails
+- `/outcome-protection` - Balance Shield scenarios, reverse-stress proof, consent/MFA lifecycle, and explicit guardrail actions
 - `/transactions` - transaction history, detail, disputes, and reversals
 - `/disputes` - submitted dispute history
 - `/notifications` - notification inbox
