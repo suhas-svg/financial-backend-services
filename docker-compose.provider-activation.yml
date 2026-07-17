@@ -1,0 +1,6 @@
+services:
+  transaction-service:
+    environment:
+      # Keep production activation fail closed. Set true only through the
+      # approved deployment environment after every external gate is recorded.
+      INTEGRATION_ACTIVATION_PRODUCTION_ENABLED: "false"
