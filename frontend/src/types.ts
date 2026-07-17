@@ -79,7 +79,7 @@ export type CustomerJournal = {
   postings: CustomerJournalPosting[];
 };
 
-export type NotificationType = "TRANSACTION_COMPLETED" | "TRANSACTION_FAILED" | "ACCOUNT_FROZEN" | "ACCOUNT_UNFROZEN" | "DISPUTE_CREATED" | "DISPUTE_STATUS_UPDATED" | "SCHEDULED_TRANSFER_CREATED" | "SCHEDULED_TRANSFER_PAUSED" | "SCHEDULED_TRANSFER_RESUMED" | "SCHEDULED_TRANSFER_CANCELED" | "SCHEDULED_TRANSFER_EXECUTED" | "SCHEDULED_TRANSFER_FAILED" | "OUTCOME_PROTECTION_AT_RISK" | "SECURITY_ACTION_REQUIRED" | "SECURITY_ALERT" | "TRANSFER_AUTHORIZED";
+export type NotificationType = "TRANSACTION_COMPLETED" | "TRANSACTION_FAILED" | "ACCOUNT_FROZEN" | "ACCOUNT_UNFROZEN" | "DISPUTE_CREATED" | "DISPUTE_STATUS_UPDATED" | "SCHEDULED_TRANSFER_CREATED" | "SCHEDULED_TRANSFER_PAUSED" | "SCHEDULED_TRANSFER_RESUMED" | "SCHEDULED_TRANSFER_CANCELED" | "SCHEDULED_TRANSFER_EXECUTED" | "SCHEDULED_TRANSFER_FAILED" | "OUTCOME_PROTECTION_AT_RISK" | "BALANCE_SHIELD_CONSENT_PENDING" | "BALANCE_SHIELD_ACTIVATED" | "BALANCE_SHIELD_SUSPENDED" | "BALANCE_SHIELD_RESUMED" | "BALANCE_SHIELD_REVOKED" | "BALANCE_SHIELD_ACTION_REQUIRES_MFA" | "BALANCE_SHIELD_ACTION_COMPLETED" | "BALANCE_SHIELD_ACTION_FAILED" | "SECURITY_ACTION_REQUIRED" | "SECURITY_ALERT" | "TRANSFER_AUTHORIZED";
 export type NotificationSeverity = "INFO" | "SUCCESS" | "WARNING" | "CRITICAL";
 export type NotificationStatus = "UNREAD" | "READ";
 export type NotificationSourceType = "ACCOUNT" | "TRANSACTION" | "DISPUTE" | "SCHEDULED_TRANSFER" | "OUTCOME_PROTECTION";
@@ -322,6 +322,97 @@ export type OutcomeSimulation = {
   searchCapped: boolean;
 };
 
+export type OutcomeNotificationDelivery = {
+  deliveryId: string;
+  state: "PENDING" | "RETRY_SCHEDULED" | "DELIVERED" | "TERMINAL_FAILED";
+  attemptCount: number;
+  nextAttemptAt?: string;
+  deliveredAt?: string;
+  terminalAt?: string;
+  slaEscalatedAt?: string;
+  lastError?: string;
+  dedupeKey: string;
+};
+
+export type OutcomeGuardrailControl = {
+  executionEnabled: boolean;
+  reason: string;
+  changedBy: string;
+  updatedAt: string;
+};
+
+export type OutcomeGuardrailOperatorPolicy = {
+  userId: string;
+  scenarioId: string;
+  policy: OutcomeGuardrailPolicy;
+};
+
+export type OutcomeGuardrailControlEvent = {
+  eventId: string;
+  executionEnabled: boolean;
+  reason: string;
+  actor: string;
+  createdAt: string;
+};
+
+export type OutcomeGuardrailTerms = {
+  version: string;
+  hash: string;
+  title: string;
+  summary: string;
+  confirmations: string[];
+  backgroundExecution: false;
+};
+
+export type OutcomeGuardrailPolicy = {
+  policyId: string;
+  guardrailId: string;
+  fundingAccountId: string;
+  protectedAccountId: string;
+  currency: string;
+  triggerThreshold: number;
+  maxActionAmount: number;
+  totalLimit: number;
+  totalExecuted: number;
+  totalReserved: number;
+  maxExecutions: number;
+  executionCount: number;
+  termsVersion: string;
+  termsHash: string;
+  status: "CONSENT_PENDING" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED";
+  effectiveStatus: "CONSENT_PENDING" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED";
+  expiresAt: string;
+  consentedAt: string;
+  activatedAt?: string;
+  suspendedAt?: string;
+  suspensionReason?: string;
+  revokedAt?: string;
+  revocationReason?: string;
+  activationChallengeId: string;
+  activationChallengeExpiresAt: string;
+  executionEnabled: boolean;
+  executionControlReason: string;
+  requiresReconsent: boolean;
+  notificationDelivery?: OutcomeNotificationDelivery;
+};
+
+export type OutcomeGuardrailExecution = {
+  executionId: string;
+  guardrailId: string;
+  policyId: string;
+  amount: number;
+  currency: string;
+  status: "REQUESTED" | "AWAITING_AUTHORIZATION" | "COMPLETED" | "CANCELLED" | "FAILED";
+  transactionId?: string;
+  authorizationRequired: boolean;
+  authorizationChallengeId?: string;
+  authorizationExpiresAt?: string;
+  lastError?: string;
+  createdAt: string;
+  completedAt?: string;
+  notificationDelivery?: OutcomeNotificationDelivery;
+};
+
 export type OutcomeGuardrail = {
   guardrailId: string;
   type: string;
@@ -332,6 +423,7 @@ export type OutcomeGuardrail = {
   status: "DRAFT" | "ACCEPTED" | "EXPIRED";
   previewText: string;
   acceptedAt?: string;
+  policy?: OutcomeGuardrailPolicy;
 };
 
 export type OutcomeScenarioSummary = {

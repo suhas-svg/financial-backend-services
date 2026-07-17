@@ -49,6 +49,7 @@ public class OutcomeProtectionService {
     private final OutcomeScheduledTransferForecaster scheduledTransferForecaster;
     private final OutcomeFxConverter fxConverter;
     private final OutcomeNotificationDeliveryService notificationDeliveryService;
+    private final OutcomeGuardrailService guardrailService;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -380,7 +381,8 @@ public class OutcomeProtectionService {
     private GuardrailResponse guardrailResponse(OutcomeGuardrailDraft draft) {
         return new GuardrailResponse(draft.getGuardrailId(), draft.getGuardrailType(), draft.getThresholdAmount(),
                 draft.getCurrency(), read(draft.getScopeJson(), STRING_LIST), draft.getExpiresAt(), draft.getStatus(),
-                draft.getPreviewText(), draft.getAcceptedAt());
+                draft.getPreviewText(), draft.getAcceptedAt(),
+                guardrailService.optionalPolicy(draft.getGuardrailId(), draft.getUserId()));
     }
 
     private ScenarioRequest requestFrom(OutcomeScenario scenario, OutcomeScenarioVersion version) {

@@ -1,6 +1,7 @@
 import { useMutation, useQueries } from "@tanstack/react-query";
 import { triggerAccountHealthCheck, getAccountHealth, getAccountMetrics, getAlertStatus, getAvailableMetrics, getDeploymentInfo, getDetailedHealth, getSystemStats, getTransactionMonitoringStats } from "../lib/queries";
 import { Badge, Button, PageHeader, Panel, Stat } from "../components/ui";
+import { AdminGuardrailControlPanel } from "../components/AdminGuardrailControlPanel";
 
 export function AdminMonitoringPage() {
   const results = useQueries({
@@ -29,6 +30,7 @@ export function AdminMonitoringPage() {
         <Stat label="Alerts" value={<StatusText value={alerts.isLoading ? "loading" : alertSummary.label} />} />
         <Stat label="System" value={<StatusText value={systemStats.isLoading ? "loading" : systemStats.data ? "available" : "unknown"} />} />
       </div>
+      <AdminGuardrailControlPanel />
       <div className="grid gap-6 xl:grid-cols-2">
         <MetricPanel
           title="Account metrics"

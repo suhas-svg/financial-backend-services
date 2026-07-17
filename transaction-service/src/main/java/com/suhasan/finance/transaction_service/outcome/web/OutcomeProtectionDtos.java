@@ -47,6 +47,30 @@ public final class OutcomeProtectionDtos {
 
     public record GuardrailAcceptRequest(boolean confirmed) {}
 
+    public record GuardrailTermsResponse(
+            String version, String hash, String title, String summary,
+            List<String> confirmations, boolean backgroundExecution) {}
+
+    public record GuardrailConsentRequest(
+            boolean confirmed,
+            @NotBlank @Size(max = 64) String termsVersion,
+            @NotBlank @Pattern(regexp = "[a-f0-9]{64}") String termsHash,
+            @NotBlank @Size(max = 64) String fundingAccountId,
+            @NotBlank @Size(max = 64) String protectedAccountId,
+            @NotNull @DecimalMin("0.01") @Digits(integer = 17, fraction = 2) BigDecimal maxActionAmount,
+            @NotNull @DecimalMin("0.01") @Digits(integer = 17, fraction = 2) BigDecimal totalLimit,
+            @Min(1) @Max(100) int maxExecutions,
+            @NotNull Instant expiresAt) {}
+
+    public record GuardrailActivationRequest(@NotBlank String proof) {}
+    public record GuardrailLifecycleRequest(@NotBlank @Size(max = 500) String reason) {}
+    public record GuardrailExecutionRequest(
+            boolean confirmed,
+            @NotNull @DecimalMin("0.01") @Digits(integer = 17, fraction = 2) BigDecimal amount) {}
+    public record GuardrailExecutionAuthorizationRequest(@NotBlank String proof) {}
+    public record GuardrailControlUpdateRequest(boolean executionEnabled,
+                                                @NotBlank @Size(max = 500) String reason) {}
+
     public record LedgerAccountSnapshot(
             String accountId, String currency, BigDecimal availableBalance,
             long projectionVersion, Instant capturedAt,
@@ -113,7 +137,45 @@ public final class OutcomeProtectionDtos {
     public record GuardrailResponse(
             String guardrailId, String type, BigDecimal thresholdAmount, String currency,
             List<String> accountIds, Instant expiresAt, String status,
-            String previewText, Instant acceptedAt) {}
+            String previewText, Instant acceptedAt, GuardrailPolicyResponse policy) {
+        public GuardrailResponse(String guardrailId, String type, BigDecimal thresholdAmount, String currency,
+                                 List<String> accountIds, Instant expiresAt, String status,
+                                 String previewText, Instant acceptedAt) {
+            this(guardrailId, type, thresholdAmount, currency, accountIds, expiresAt, status,
+                    previewText, acceptedAt, null);
+        }
+    }
+
+    public record GuardrailControlResponse(
+            boolean executionEnabled, String reason, String changedBy, Instant updatedAt) {}
+
+    public record GuardrailPolicyResponse(
+            String policyId, String guardrailId, String fundingAccountId, String protectedAccountId,
+            String currency, BigDecimal triggerThreshold, BigDecimal maxActionAmount,
+            BigDecimal totalLimit, BigDecimal totalExecuted, BigDecimal totalReserved,
+            int maxExecutions, int executionCount, String termsVersion, String termsHash,
+            String status, String effectiveStatus, Instant expiresAt, Instant consentedAt,
+            Instant activatedAt, Instant suspendedAt, String suspensionReason,
+            Instant revokedAt, String revocationReason, String activationChallengeId,
+            Instant activationChallengeExpiresAt, boolean executionEnabled,
+            String executionControlReason, boolean requiresReconsent,
+            NotificationDeliveryEvidence notificationDelivery) {}
+
+    public record GuardrailExecutionResponse(
+            String executionId, String guardrailId, String policyId, BigDecimal amount, String currency,
+            String status, String transactionId, boolean authorizationRequired,
+            String authorizationChallengeId, Instant authorizationExpiresAt,
+            String lastError, Instant createdAt, Instant completedAt,
+            NotificationDeliveryEvidence notificationDelivery) {}
+
+    public record GuardrailAuditEventResponse(
+            String eventId, String eventType, String guardrailId, String fieldsJson, Instant createdAt) {}
+
+    public record GuardrailOperatorPolicyResponse(
+            String userId, String scenarioId, GuardrailPolicyResponse policy) {}
+
+    public record GuardrailControlEventResponse(
+            String eventId, boolean executionEnabled, String reason, String actor, Instant createdAt) {}
 
     public record ScenarioSummary(
             String scenarioId, String name, int version, String status, String currency,

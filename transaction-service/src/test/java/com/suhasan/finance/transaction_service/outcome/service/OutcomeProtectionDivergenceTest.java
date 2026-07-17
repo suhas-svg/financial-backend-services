@@ -57,6 +57,7 @@ class OutcomeProtectionDivergenceTest {
     @Mock LedgerBalanceProjectionRepository projectionRepository;
     @Mock ScheduledTransferRepository scheduledTransferRepository;
     @Mock OutcomeNotificationDeliveryService notificationDeliveryService;
+    @Mock OutcomeGuardrailService outcomeGuardrailService;
 
     private OutcomeProtectionService service;
     private final Map<String, OutcomeDomainEvent> events = new HashMap<>();
@@ -70,7 +71,7 @@ class OutcomeProtectionDivergenceTest {
                 new OutcomeScheduledTransferForecaster(),
                 new OutcomeFxConverter((quote, base, time) -> new FxRateQuote(quote, base, BigDecimal.ONE,
                         Instant.EPOCH, "TEST", "Deterministic test rate", false, "REJECT")),
-                notificationDeliveryService, objectMapper);
+                notificationDeliveryService, outcomeGuardrailService, objectMapper);
 
         OutcomeScenario scenario = OutcomeScenario.builder()
                 .scenarioId("scenario-1").userId("customer-1").name("INR shield").status("ACTIVE")
