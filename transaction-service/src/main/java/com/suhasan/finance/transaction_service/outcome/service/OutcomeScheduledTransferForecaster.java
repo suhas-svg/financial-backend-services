@@ -55,13 +55,23 @@ public class OutcomeScheduledTransferForecaster {
                 if (!localDate.isBefore(request.horizonStart())) {
                     String cadence = schedule.getScheduleType() == ScheduledTransferType.ONE_TIME
                             ? "ONE_TIME" : schedule.getFrequency().name();
+                    String flexibility = schedule.getReference() == null
+                            ? "" : schedule.getReference().trim().toUpperCase(java.util.Locale.ROOT);
+                    boolean repairEligible = flexibility.equals("FLEXIBLE") || flexibility.equals("OPTIONAL");
+                    String sourceTimeZone = schedule.getSourceTimeZone() == null || schedule.getSourceTimeZone().isBlank()
+                            ? "UTC" : schedule.getSourceTimeZone();
                     events.add(new ScheduledCashflowSnapshot(
                             "schedule:" + schedule.getScheduleId() + ":" + occurrence,
                             schedule.getScheduleId(), occurrence, localDate, signedAmount,
                             schedule.getCurrency(), schedule.getStatus().name(), cadence, zone.getId(),
                             schedule.getDescription() == null || schedule.getDescription().isBlank()
                                     ? "Scheduled transfer" : schedule.getDescription(),
-                            schedule.getFromAccountId(), schedule.getToAccountId()));
+                            schedule.getFromAccountId(), schedule.getToAccountId(),
+                            signedAmount, schedule.getCurrency(), null,
+                            schedule.getVersion(), schedule.getUserId(), schedule.getSourceTimeZone(),
+                            occurrence.atZone(ZoneId.of(sourceTimeZone)).toLocalDate(),
+                            true, false, repairEligible,
+                            repairEligible ? null : "Schedule reference is not explicitly FLEXIBLE or OPTIONAL"));
                 }
                 if (schedule.getScheduleType() == ScheduledTransferType.ONE_TIME) {
                     break;

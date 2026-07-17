@@ -15,6 +15,7 @@ public final class OutcomeProtectionDtos {
 
     public enum AssumptionType { INCOME, EXPENSE, OTHER }
     public enum ShockType { INCOME_DELAY, INCOME_REDUCTION, EXPENSE_SPIKE, PAYMENT_TIMING_SHIFT }
+    public enum OutcomeType { BALANCE_FLOOR, SCHEDULED_OBLIGATION }
 
     public record AssumptionInput(
             @NotBlank @Size(max = 64) String id,
@@ -43,9 +44,24 @@ public final class OutcomeProtectionDtos {
             @Min(1) @Max(90) int horizonDays,
             @NotNull @DecimalMin("0.00") @Digits(integer = 17, fraction = 2) BigDecimal protectedMinimum,
             @NotNull @Size(max = 64) List<@Valid AssumptionInput> assumptions,
-            @NotNull @Size(max = 16) List<@Valid ShockInput> shocks) {}
+            @NotNull @Size(max = 16) List<@Valid ShockInput> shocks,
+            OutcomeType outcomeType,
+            @Size(max = 36) String protectedScheduleId,
+            @PositiveOrZero Long protectedScheduleVersion) {
+        public ScenarioRequest(String name, List<String> accountIds, String currency, String timeZone,
+                               LocalDate horizonStart, int horizonDays, BigDecimal protectedMinimum,
+                               List<AssumptionInput> assumptions, List<ShockInput> shocks) {
+            this(name, accountIds, currency, timeZone, horizonStart, horizonDays, protectedMinimum,
+                    assumptions, shocks, OutcomeType.BALANCE_FLOOR, null, null);
+        }
+
+        public OutcomeType effectiveOutcomeType() {
+            return outcomeType == null ? OutcomeType.BALANCE_FLOOR : outcomeType;
+        }
+    }
 
     public record GuardrailAcceptRequest(boolean confirmed) {}
+    public record RepairDraftSelectRequest(boolean confirmed) {}
 
     public record GuardrailTermsResponse(
             String version, String hash, String title, String summary,
@@ -86,26 +102,55 @@ public final class OutcomeProtectionDtos {
             String eventId, String scheduleId, Instant scheduledFor, LocalDate date, BigDecimal amount,
             String currency, String status, String cadence, String evaluationTimeZone,
             String label, String fromAccountId, String toAccountId,
-            BigDecimal sourceAmount, String sourceCurrency, FxRateQuote fxQuote) {
+            BigDecimal sourceAmount, String sourceCurrency, FxRateQuote fxQuote,
+            Long scheduleVersion, String scheduleOwnerId, String sourceTimeZone,
+            LocalDate dueLocalDate, boolean sourceOwnedByCustomer, boolean destinationOwnedByCustomer,
+            boolean repairEligible, String repairIneligibilityReason) {
         public ScheduledCashflowSnapshot(String eventId, String scheduleId, Instant scheduledFor, LocalDate date,
                                          BigDecimal amount, String currency, String status, String cadence,
                                          String evaluationTimeZone, String label, String fromAccountId, String toAccountId) {
             this(eventId, scheduleId, scheduledFor, date, amount, currency, status, cadence,
-                    evaluationTimeZone, label, fromAccountId, toAccountId, amount, currency, null);
+                    evaluationTimeZone, label, fromAccountId, toAccountId, amount, currency, null,
+                    0L, null, evaluationTimeZone, date, true, false, false,
+                    "Schedule flexibility was not established");
         }
     }
+
+    public record ProtectedObligationSnapshot(
+            String scheduleId, long scheduleVersion, String status, String ownerId,
+            String fromAccountId, String toAccountId,
+            boolean sourceOwnedByCustomer, boolean destinationOwnedByCustomer,
+            BigDecimal amount, String currency, String scheduleType, String cadence,
+            Instant dueAt, LocalDate dueLocalDate, String sourceTimeZone,
+            String evaluationTimeZone, Instant endAt, long sourceProjectionVersion,
+            Instant capturedAt, boolean valid, String invalidReason) {}
 
     public record SourceSnapshot(
             BigDecimal startingAvailableBalance, String baseCurrency,
             List<LedgerAccountSnapshot> ledgerAccounts,
             List<ScheduledCashflowSnapshot> scheduledCashflows,
+            ProtectedObligationSnapshot protectedObligation,
             List<FxRateQuote> fxQuotes,
             boolean executableFx,
-            String sourceFingerprint) {}
+            String sourceFingerprint) {
+        public SourceSnapshot(BigDecimal startingAvailableBalance, String baseCurrency,
+                              List<LedgerAccountSnapshot> ledgerAccounts,
+                              List<ScheduledCashflowSnapshot> scheduledCashflows,
+                              List<FxRateQuote> fxQuotes, boolean executableFx, String sourceFingerprint) {
+            this(startingAvailableBalance, baseCurrency, ledgerAccounts, scheduledCashflows,
+                    null, fxQuotes, executableFx, sourceFingerprint);
+        }
+    }
 
     public record TimelineEvent(
             String eventId, LocalDate date, BigDecimal amount, String source,
-            String label, boolean flexible, boolean critical) {}
+            String label, boolean flexible, boolean critical,
+            String scheduleId, boolean protectedObligation) {
+        public TimelineEvent(String eventId, LocalDate date, BigDecimal amount, String source,
+                             String label, boolean flexible, boolean critical) {
+            this(eventId, date, amount, source, label, flexible, critical, null, false);
+        }
+    }
 
     public record TimelineDay(LocalDate date, BigDecimal openingBalance,
                               List<TimelineEvent> events, BigDecimal closingBalance) {}
@@ -113,7 +158,20 @@ public final class OutcomeProtectionDtos {
     public record ForecastProof(
             boolean safe, BigDecimal startingBalance, BigDecimal protectedMinimum,
             LocalDate failureDate, BigDecimal lowestBalance, BigDecimal closingBalance,
-            List<TimelineEvent> triggeringEvents, List<TimelineDay> timeline) {}
+            List<TimelineEvent> triggeringEvents, List<TimelineDay> timeline,
+            boolean balanceFloorSatisfied, boolean protectedObligationSatisfied,
+            List<InvariantBreach> invariantBreaches) {
+        public ForecastProof(boolean safe, BigDecimal startingBalance, BigDecimal protectedMinimum,
+                             LocalDate failureDate, BigDecimal lowestBalance, BigDecimal closingBalance,
+                             List<TimelineEvent> triggeringEvents, List<TimelineDay> timeline) {
+            this(safe, startingBalance, protectedMinimum, failureDate, lowestBalance, closingBalance,
+                    triggeringEvents, timeline, safe, true, List.of());
+        }
+    }
+
+    public record InvariantBreach(String type, LocalDate date, String eventId, String scheduleId,
+                                  BigDecimal balanceBefore, BigDecimal requiredAmount, BigDecimal shortfall,
+                                  String explanation) {}
 
     public record AppliedShock(String shockId, ShockType type, String label,
                                String targetAssumptionId, BigDecimal severityScore) {}
@@ -125,10 +183,40 @@ public final class OutcomeProtectionDtos {
             List<TimelineDay> timeline, String minimalityExplanation) {}
 
     public record RepairAction(String actionId, String type, BigDecimal amount,
-                               List<String> affectedEventIds, String explanation) {}
+                               List<String> affectedEventIds, String explanation,
+                               String targetScheduleId, LocalDate effectiveDate, BigDecimal originalAmount,
+                               int disruptionScore, boolean previewOnly) {
+        public RepairAction(String actionId, String type, BigDecimal amount,
+                            List<String> affectedEventIds, String explanation) {
+            this(actionId, type, amount, affectedEventIds, explanation,
+                    null, null, null, 0, true);
+        }
+    }
+
+    public record RepairRankingFactors(boolean restoresAllInvariants, int actionCount,
+                                       int disruptionScore, BigDecimal moneyMovedOrDeferred,
+                                       List<String> stableActionIds) {}
+
+    public record RepairAlternative(int rank, String alternativeId, List<RepairAction> actions,
+                                    ForecastProof replay, RepairRankingFactors rankingFactors,
+                                    String certificateHash, String explanation) {}
+
+    public record RejectedRepairCandidate(String candidateId, String type, String targetId,
+                                          String reasonCode, String explanation) {}
 
     public record RepairPlan(BigDecimal maximumShortfall, List<RepairAction> selectedRepairs,
-                             boolean verifiedInModel, String minimalityExplanation) {}
+                             boolean verifiedInModel, String minimalityExplanation,
+                             List<RepairAlternative> alternatives,
+                             List<RejectedRepairCandidate> rejectedCandidates,
+                             int evaluatedCombinations, boolean searchCapped,
+                             int maxCombinationSize, int maxEvaluatedCombinations,
+                             String engineVersion, String certificateHash) {
+        public RepairPlan(BigDecimal maximumShortfall, List<RepairAction> selectedRepairs,
+                          boolean verifiedInModel, String minimalityExplanation) {
+            this(maximumShortfall, selectedRepairs, verifiedInModel, minimalityExplanation,
+                    List.of(), List.of(), 0, false, 0, 0, "outcome-v1", null);
+        }
+    }
 
     public record SimulationProof(
             ForecastProof baseline, FailureProof reverseStress, RepairPlan repair,
@@ -137,12 +225,15 @@ public final class OutcomeProtectionDtos {
     public record GuardrailResponse(
             String guardrailId, String type, BigDecimal thresholdAmount, String currency,
             List<String> accountIds, Instant expiresAt, String status,
-            String previewText, Instant acceptedAt, GuardrailPolicyResponse policy) {
+            String previewText, Instant acceptedAt, GuardrailPolicyResponse policy,
+            Integer alternativeRank, List<RepairAction> candidateActions,
+            String replayCertificateHash, RepairRankingFactors rankingFactors,
+            Instant previewSelectedAt) {
         public GuardrailResponse(String guardrailId, String type, BigDecimal thresholdAmount, String currency,
                                  List<String> accountIds, Instant expiresAt, String status,
                                  String previewText, Instant acceptedAt) {
             this(guardrailId, type, thresholdAmount, currency, accountIds, expiresAt, status,
-                    previewText, acceptedAt, null);
+                    previewText, acceptedAt, null, null, List.of(), null, null, null);
         }
     }
 
@@ -180,7 +271,15 @@ public final class OutcomeProtectionDtos {
     public record ScenarioSummary(
             String scenarioId, String name, int version, String status, String currency,
             LocalDate horizonStart, int horizonDays, BigDecimal protectedMinimum,
-            boolean baselineSafe, Instant updatedAt) {}
+            boolean baselineSafe, Instant updatedAt, OutcomeType outcomeType,
+            String protectedScheduleId) {
+        public ScenarioSummary(String scenarioId, String name, int version, String status, String currency,
+                               LocalDate horizonStart, int horizonDays, BigDecimal protectedMinimum,
+                               boolean baselineSafe, Instant updatedAt) {
+            this(scenarioId, name, version, status, currency, horizonStart, horizonDays,
+                    protectedMinimum, baselineSafe, updatedAt, OutcomeType.BALANCE_FLOOR, null);
+        }
+    }
 
     public record ScenarioResponse(
             String scenarioId, String name, int version, String status, String currency,
@@ -188,7 +287,9 @@ public final class OutcomeProtectionDtos {
             BigDecimal protectedMinimum, List<String> accountIds,
             List<AssumptionInput> assumptions, List<ShockInput> shocks,
             SourceSnapshot sourceSnapshot, SimulationProof simulation,
-            List<GuardrailResponse> guardrails, Instant createdAt) {}
+            List<GuardrailResponse> guardrails, Instant createdAt,
+            OutcomeType outcomeType, String protectedScheduleId,
+            Long protectedScheduleVersion) {}
 
     public record NotificationDeliveryEvidence(
             String deliveryId, String state, int attemptCount, Instant nextAttemptAt,

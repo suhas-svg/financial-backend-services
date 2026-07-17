@@ -20,6 +20,7 @@
 
   <properties>
     <java.version>21</java.version>
+    <testcontainers.version>1.21.4</testcontainers.version>
     <maven.compiler.source>21</maven.compiler.source>
     <maven.compiler.target>21</maven.compiler.target>
     

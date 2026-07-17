@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
-import { addRiskCaseNote, cancelScheduledTransfer, claimRiskCase, createBeneficiary, createRiskCaseFromAlert, createScheduledTransfer, disableBeneficiary, exportInvestigationTimelineCsv, getCustomerJournal, getInvestigationSummary, getInvestigationTimeline, getScheduledTransfer, listBeneficiaries, listLedgerAccounts, listScheduledTransferRuns, listScheduledTransfers, pauseScheduledTransfer, resumeScheduledTransfer, searchAuditEvents, searchRiskAlerts, searchRiskCases, updateAccountStatus, updateBeneficiary, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
+import { addRiskCaseNote, cancelScheduledTransfer, claimRiskCase, createBeneficiary, createRiskCaseFromAlert, createScheduledTransfer, disableBeneficiary, exportInvestigationTimelineCsv, getCustomerJournal, getInvestigationSummary, getInvestigationTimeline, getScheduledTransfer, listBeneficiaries, listLedgerAccounts, listScheduledTransferRuns, listScheduledTransfers, pauseScheduledTransfer, resumeScheduledTransfer, searchAuditEvents, searchRiskAlerts, searchRiskCases, selectOutcomeRepairDraft, updateAccountStatus, updateBeneficiary, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
 import { clearSession, saveSession } from "./session";
 
 function tokenFor(payload: object) {
@@ -299,6 +299,7 @@ describe("apiRequest", () => {
     await resumeScheduledTransfer("schedule-1");
     await cancelScheduledTransfer("schedule-1");
     await listScheduledTransferRuns("schedule-1");
+    await selectOutcomeRepairDraft("guardrail-1", "repair-select-test");
 
     expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers", expect.objectContaining({ method: "POST" }));
     const createBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
@@ -311,5 +312,6 @@ describe("apiRequest", () => {
     expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers/schedule-1/resume", expect.objectContaining({ method: "PATCH" }));
     expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers/schedule-1", expect.objectContaining({ method: "DELETE" }));
     expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers/schedule-1/runs", expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/outcome-protection/repairs/guardrail-1/select", expect.objectContaining({ method: "POST", headers: expect.objectContaining({ "idempotency-key": "repair-select-test" }) }));
   });
 });

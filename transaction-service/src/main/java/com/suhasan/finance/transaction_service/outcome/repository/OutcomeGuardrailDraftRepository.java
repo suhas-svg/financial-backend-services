@@ -14,6 +14,7 @@ public interface OutcomeGuardrailDraftRepository extends JpaRepository<OutcomeGu
     List<OutcomeGuardrailDraft> findByResultIdOrderByCreatedAtAsc(String resultId);
     Optional<OutcomeGuardrailDraft> findByGuardrailIdAndUserId(String guardrailId, String userId);
     Optional<OutcomeGuardrailDraft> findByUserIdAndAcceptanceIdempotencyKey(String userId, String key);
+    Optional<OutcomeGuardrailDraft> findByUserIdAndPreviewSelectionIdempotencyKey(String userId, String key);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select d from OutcomeGuardrailDraft d where d.guardrailId = :guardrailId and d.userId = :userId")

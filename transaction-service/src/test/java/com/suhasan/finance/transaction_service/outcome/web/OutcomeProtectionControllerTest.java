@@ -78,6 +78,19 @@ class OutcomeProtectionControllerTest {
     }
 
     @Test
+    @WithMockUser(username = "customer", roles = "USER")
+    void repairDraftSelectionIsExplicitOwnerScopedAndIdempotent() throws Exception {
+        mockMvc.perform(post("/api/outcome-protection/repairs/guardrail-2/select")
+                        .header("Idempotency-Key", "repair-select-test")
+                        .contentType("application/json")
+                        .content("{\"confirmed\":true}"))
+                .andExpect(status().isOk());
+
+        verify(service).selectRepairDraft(org.mockito.ArgumentMatchers.eq("guardrail-2"),
+                argThat(request -> request.confirmed()), org.mockito.ArgumentMatchers.eq("customer"),
+                org.mockito.ArgumentMatchers.eq("repair-select-test"));
+    }
+    @Test
     void unauthenticatedScenarioMutationIsRejected() throws Exception {
         mockMvc.perform(post("/api/outcome-protection/scenarios")
                         .header("Idempotency-Key", "test")
