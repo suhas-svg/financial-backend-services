@@ -27,6 +27,9 @@ public class MfaMethod {
     @Column(name = "secret_ciphertext", nullable = false, length = 1024)
     private String secretCiphertext;
 
+    @Column(name = "secret_key_id", nullable = false, length = 64)
+    private String secretKeyId = "legacy";
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private MfaMethodStatus status = MfaMethodStatus.PENDING;

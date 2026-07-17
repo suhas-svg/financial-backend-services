@@ -7,6 +7,7 @@ import { createIdempotencyKey } from "../lib/idempotency";
 import { compactDate, money } from "../lib/format";
 import { Badge, Button, EmptyState, ErrorNotice, Field, Input, PageHeader, Panel, Select, StatusNotice } from "../components/ui";
 import { OutcomeGuardrailCard } from "../components/OutcomeGuardrailCard";
+import { ConsentGovernanceReadinessPanel } from "../components/ConsentGovernanceReadinessPanel";
 
 type CashflowDraft = {
   id: string;
@@ -158,6 +159,7 @@ export function OutcomeProtectionPage() {
 
   return <div className="grid gap-6">
     <PageHeader eyebrow="Outcome Protection" title="Balance Shield lab" detail="Forecast risks, review drafts, and activate only bounded customer-confirmed top-ups through MFA and existing transfer controls." />
+    <ConsentGovernanceReadinessPanel />
     <ErrorNotice message={error} />
     {create.isPending ? <StatusNotice pending message="Snapshotting authoritative balances and searching bounded shock combinations..." /> : null}
     {refreshMessage ? <StatusNotice message={refreshMessage} /> : null}
