@@ -1,0 +1,35 @@
+services:
+  account-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+      NOTIFICATION_PROVIDER: ${NOTIFICATION_PROVIDER:?Contracted provider adapter is required}
+      NOTIFICATION_PROVIDER_CONTRACT_ID: ${NOTIFICATION_PROVIDER_CONTRACT_ID:?Provider contract reference is required}
+      OPERATOR_IDP_ISSUER: ${OPERATOR_IDP_ISSUER:?Operator IdP issuer is required}
+      OPERATOR_IDP_AUDIENCE: ${OPERATOR_IDP_AUDIENCE:?Account-service audience is required}
+      OPERATOR_IDP_ROLE_MAPPINGS: ${OPERATOR_IDP_ROLE_MAPPINGS:?Explicit claim-to-role mapping is required}
+      OPERATOR_ACCESS_REVIEW_REFERENCE: ${OPERATOR_ACCESS_REVIEW_REFERENCE:?Access review evidence is required}
+      OPERATOR_REVOCATION_FEED: ${OPERATOR_REVOCATION_FEED:?Revocation feed is required}
+      MFA_KMS_PROVIDER: ${MFA_KMS_PROVIDER:?External KMS provider is required}
+      MFA_ACTIVE_KEY_ID: ${MFA_ACTIVE_KEY_ID:?Versioned active key identifier is required}
+      MFA_KMS_HEALTH_REFERENCE: ${MFA_KMS_HEALTH_REFERENCE:?KMS health evidence is required}
+      # Provider/KMS credentials must be injected by the deployment secret manager.
+  transaction-service:
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+      BALANCE_SHIELD_RISK_PROVIDER: ${BALANCE_SHIELD_RISK_PROVIDER:?Contracted fraud/risk provider is required}
+      BALANCE_SHIELD_RISK_CONTRACT_ID: ${BALANCE_SHIELD_RISK_CONTRACT_ID:?Risk contract reference is required}
+      BALANCE_SHIELD_RISK_POLICY_VERSION: ${BALANCE_SHIELD_RISK_POLICY_VERSION:?Risk policy version is required}
+      BALANCE_SHIELD_RISK_AUTH_REFERENCE: ${BALANCE_SHIELD_RISK_AUTH_REFERENCE:?Risk authentication reference is required}
+      BALANCE_SHIELD_FX_PROVIDER_MODE: ${BALANCE_SHIELD_FX_PROVIDER_MODE:?Licensed FX provider is required}
+      BALANCE_SHIELD_FX_CONTRACT_ID: ${BALANCE_SHIELD_FX_CONTRACT_ID:?FX entitlement reference is required}
+      BALANCE_SHIELD_FX_AUTH_REFERENCE: ${BALANCE_SHIELD_FX_AUTH_REFERENCE:?FX authentication reference is required}
+      BALANCE_SHIELD_FX_RECONCILIATION_REFERENCE: ${BALANCE_SHIELD_FX_RECONCILIATION_REFERENCE:?FX reconciliation feed is required}
+      BALANCE_SHIELD_APPROVED_CONSENT_VERSION: ${BALANCE_SHIELD_APPROVED_CONSENT_VERSION:?Approved consent version is required}
+      BALANCE_SHIELD_ELIGIBLE_JURISDICTIONS: ${BALANCE_SHIELD_ELIGIBLE_JURISDICTIONS:?Jurisdiction eligibility is required}
+      BALANCE_SHIELD_CONSENT_RETENTION_POLICY: ${BALANCE_SHIELD_CONSENT_RETENTION_POLICY:?Retention policy is required}
+      BALANCE_SHIELD_ACCESSIBILITY_REFERENCE: ${BALANCE_SHIELD_ACCESSIBILITY_REFERENCE:?Accessibility evidence is required}
+      OPERATOR_IDP_ISSUER: ${OPERATOR_IDP_ISSUER:?Operator IdP issuer is required}
+      OPERATOR_IDP_AUDIENCE: ${TRANSACTION_OPERATOR_IDP_AUDIENCE:?Transaction-service audience is required}
+      OPERATOR_IDP_ROLE_MAPPINGS: ${OPERATOR_IDP_ROLE_MAPPINGS:?Explicit claim-to-role mapping is required}
+      OPERATOR_ACCESS_REVIEW_REFERENCE: ${OPERATOR_ACCESS_REVIEW_REFERENCE:?Access review evidence is required}
+      OPERATOR_REVOCATION_FEED: ${OPERATOR_REVOCATION_FEED:?Revocation feed is required}

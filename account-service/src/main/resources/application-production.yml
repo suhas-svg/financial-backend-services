@@ -1,0 +1,3 @@
+integration:
+  iam:
+    strict: true

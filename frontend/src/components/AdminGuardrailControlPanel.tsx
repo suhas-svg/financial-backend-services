@@ -8,6 +8,7 @@ import {
 } from "../lib/queries";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { Badge, Button, ErrorNotice, Field, Input, Panel, StatusNotice } from "./ui";
+import { ProductionIntegrationStatusPanel } from "./ProductionIntegrationStatusPanel";
 
 export function AdminGuardrailControlPanel() {
   const queryClient = useQueryClient();
@@ -33,6 +34,7 @@ export function AdminGuardrailControlPanel() {
 
   return <Panel title="Balance Shield execution control">
     <div className="grid gap-4">
+      <ProductionIntegrationStatusPanel />
       <ErrorNotice message={error instanceof Error ? error.message : undefined} />
       {control.isLoading ? <StatusNotice pending message="Loading fail-closed execution control..." /> : null}
       {control.data ? <div className="grid gap-2 text-sm sm:grid-cols-2">
