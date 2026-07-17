@@ -36,6 +36,7 @@ public class OutcomeProtectionService {
     private static final TypeReference<List<ShockInput>> SHOCK_LIST = new TypeReference<>() {};
     private static final TypeReference<List<LedgerAccountSnapshot>> LEDGER_LIST = new TypeReference<>() {};
     private static final TypeReference<List<ScheduledCashflowSnapshot>> SCHEDULE_LIST = new TypeReference<>() {};
+    private static final TypeReference<List<RepairAction>> REPAIR_ACTION_LIST = new TypeReference<>() {};
 
     private final OutcomeScenarioRepository scenarioRepository;
     private final OutcomeScenarioVersionRepository versionRepository;
@@ -63,7 +64,7 @@ public class OutcomeProtectionService {
             return response(replay.get());
         }
 
-        Snapshot snapshot = captureSnapshot(request, userId);
+        Snapshot snapshot = captureSnapshot(request, userId, true);
         String scenarioId = UUID.randomUUID().toString();
         OutcomeScenario scenario = OutcomeScenario.builder()
                 .scenarioId(scenarioId).userId(userId).name(request.name().trim()).status("ACTIVE")
@@ -92,7 +93,7 @@ public class OutcomeProtectionService {
             return response(scenario, replay.get().getScenarioVersion());
         }
 
-        Snapshot snapshot = captureSnapshot(request, userId);
+        Snapshot snapshot = captureSnapshot(request, userId, true);
         SimulationProof simulation = simulate(request, snapshot);
         int nextVersion = scenario.getCurrentVersion() + 1;
         scenario.setCurrentVersion(nextVersion);
@@ -110,9 +111,13 @@ public class OutcomeProtectionService {
         return scenarioRepository.findByUserIdOrderByUpdatedAtDesc(userId).stream().map(scenario -> {
             OutcomeScenarioVersion version = requiredVersion(scenario, scenario.getCurrentVersion());
             OutcomeSimulationResult result = requiredResult(scenario.getScenarioId(), scenario.getCurrentVersion());
+            ProtectedObligationSnapshot obligation = version.getProtectedObligationJson() == null
+                    ? null : read(version.getProtectedObligationJson(), ProtectedObligationSnapshot.class);
             return new ScenarioSummary(scenario.getScenarioId(), scenario.getName(), scenario.getCurrentVersion(),
                     scenario.getStatus(), scenario.getCurrency(), version.getHorizonStart(), version.getHorizonDays(),
-                    version.getProtectedMinimum(), result.isBaselineSafe(), scenario.getUpdatedAt());
+                    version.getProtectedMinimum(), result.isBaselineSafe(), scenario.getUpdatedAt(),
+                    version.getOutcomeType() == null ? OutcomeType.BALANCE_FLOOR : OutcomeType.valueOf(version.getOutcomeType()),
+                    obligation == null ? null : obligation.scheduleId());
         }).toList();
     }
 
@@ -161,6 +166,43 @@ public class OutcomeProtectionService {
     }
 
     @Transactional
+    public GuardrailResponse selectRepairDraft(String guardrailId, RepairDraftSelectRequest request,
+                                               String userId, String idempotencyKey) {
+        if (request == null || !request.confirmed()) {
+            throw new IllegalArgumentException("Explicit confirmation is required to select a repair draft");
+        }
+        String key = requireIdempotencyKey(idempotencyKey);
+        OutcomeGuardrailDraft draft = guardrailRepository.findByGuardrailIdAndUserId(guardrailId, userId)
+                .orElseThrow(() -> new AccessDeniedException("Repair draft not found"));
+        if (draft.getAlternativeRank() == null) {
+            throw new IllegalArgumentException("Only ranked repair alternatives can be selected");
+        }
+        String selectionFingerprint = fingerprint(Map.of("guardrailId", guardrailId, "confirmed", true));
+        guardrailRepository.findByUserIdAndPreviewSelectionIdempotencyKey(userId, key)
+                .filter(existing -> !existing.getGuardrailId().equals(guardrailId))
+                .ifPresent(existing -> { throw new IllegalStateException(
+                        "Idempotency-Key was already used to select a different repair draft"); });
+        if (draft.getPreviewSelectedAt() != null) {
+            requireSameFingerprint(draft.getPreviewSelectionFingerprint(), selectionFingerprint);
+            if (!key.equals(draft.getPreviewSelectionIdempotencyKey())) {
+                throw new IllegalStateException("Repair draft was already selected with a different idempotency key");
+            }
+            return guardrailResponse(draft);
+        }
+        draft.setPreviewSelectedAt(Instant.now());
+        draft.setPreviewSelectionIdempotencyKey(key);
+        draft.setPreviewSelectionFingerprint(selectionFingerprint);
+        guardrailRepository.save(draft);
+        OutcomeScenario scenario = scenarioRepository.findById(draft.getScenarioId()).orElseThrow();
+        recordEvent("REPAIR_DRAFT_SELECTED", scenario, draft.getResultId(), draft.getGuardrailId(),
+                "repair-selected:" + draft.getGuardrailId(), Map.of(
+                        "alternativeRank", draft.getAlternativeRank(),
+                        "certificateHash", draft.getReplayCertificateHash(),
+                        "previewOnly", true, "financialMutation", false));
+        return guardrailResponse(draft);
+    }
+
+    @Transactional
     public WarningAcknowledgementResponse acknowledgeWarning(String eventId, String userId, String idempotencyKey) {
         String key = requireIdempotencyKey(idempotencyKey);
         OutcomeDomainEvent warning = eventRepository.findByEventIdAndUserId(eventId, userId)
@@ -195,7 +237,7 @@ public class OutcomeProtectionService {
         OutcomeScenarioVersion saved = requiredVersion(scenario, scenario.getCurrentVersion());
         OutcomeSimulationResult savedResult = requiredResult(scenario.getScenarioId(), scenario.getCurrentVersion());
         ScenarioRequest request = requestFrom(scenario, saved);
-        Snapshot fresh = captureSnapshot(request, scenario.getUserId());
+        Snapshot fresh = captureSnapshot(request, scenario.getUserId(), false);
         SimulationProof simulation = simulate(request, fresh);
         String previousFingerprint = scenario.getLastSourceFingerprint();
         boolean diverged = !fresh.sourceFingerprint().equals(saved.getSourceFingerprint());
@@ -249,7 +291,11 @@ public class OutcomeProtectionService {
         OutcomeScenarioVersion version = OutcomeScenarioVersion.builder()
                 .versionId(UUID.randomUUID().toString()).scenarioId(scenario.getScenarioId()).scenarioVersion(number)
                 .horizonStart(request.horizonStart()).horizonDays(request.horizonDays())
-                .protectedMinimum(money(request.protectedMinimum())).accountIdsJson(json(sortedDistinct(request.accountIds())))
+                .protectedMinimum(money(request.protectedMinimum()))
+                .outcomeType(request.effectiveOutcomeType().name())
+                .protectedObligationJson(snapshot.protectedObligation() == null ? null : json(snapshot.protectedObligation()))
+                .canonicalInputsJson(json(canonicalRequest(request)))
+                .accountIdsJson(json(sortedDistinct(request.accountIds())))
                 .assumptionsJson(json(sortedAssumptions(request.assumptions()))).shocksJson(json(sortedShocks(request.shocks())))
                 .ledgerSnapshotJson(json(snapshot.ledgerAccounts())).scheduleSnapshotJson(json(snapshot.scheduledCashflows()))
                 .sourceFingerprint(snapshot.sourceFingerprint()).mutationIdempotencyKey(mutationKey)
@@ -263,7 +309,24 @@ public class OutcomeProtectionService {
                 .baselineFailureDate(simulation.baseline().failureDate()).proofJson(json(simulation))
                 .failureJson(json(simulation.reverseStress())).repairJson(json(simulation.repair()))
                 .evaluatedCombinations(simulation.evaluatedCombinations()).searchCapped(simulation.searchCapped())
-                .resultFingerprint(fingerprint(simulation)).build();
+                .resultFingerprint(fingerprint(simulation))
+                .engineVersion(simulation.repair().engineVersion())
+                .canonicalInputsJson(json(canonicalRequest(request)))
+                .sourceVersionsJson(json(Map.of(
+                        "ledger", snapshot.ledgerAccounts().stream().collect(java.util.stream.Collectors.toMap(
+                                LedgerAccountSnapshot::accountId, LedgerAccountSnapshot::projectionVersion)),
+                        "schedules", snapshot.scheduledCashflows().stream().collect(java.util.stream.Collectors.toMap(
+                                ScheduledCashflowSnapshot::eventId, value -> value.scheduleVersion() == null ? 0L : value.scheduleVersion())))))
+                .candidateActionsJson(json(simulation.repair().alternatives().stream()
+                        .flatMap(value -> value.actions().stream()).distinct().toList()))
+                .replayOutputJson(json(simulation.repair().alternatives()))
+                .certificateHash(simulation.repair().certificateHash())
+                .rankingFactorsJson(json(simulation.repair().alternatives().stream()
+                        .map(RepairAlternative::rankingFactors).toList()))
+                .rejectionReasonsJson(json(simulation.repair().rejectedCandidates()))
+                .repairEvaluatedCombinations(simulation.repair().evaluatedCombinations())
+                .repairSearchCapped(simulation.repair().searchCapped())
+                .build();
         resultRepository.save(result);
         createGuardrails(scenario, version, result, simulation, request.accountIds());
         recordEvent("SCENARIO_COMPLETED", scenario, resultId, null,
@@ -291,19 +354,29 @@ public class OutcomeProtectionService {
                 .previewText("Warn me when projected available balance drops below %s %s before this scenario expires. No money will move."
                         .formatted(scenario.getCurrency(), version.getProtectedMinimum().toPlainString()))
                 .expiresAt(expiresAt).build());
-        for (RepairAction action : simulation.repair().selectedRepairs()) {
+        for (RepairAlternative alternative : simulation.repair().alternatives()) {
+            List<RepairAction> actions = alternative.actions();
+            String type = actions.size() == 1 ? actions.getFirst().type() : "REPAIR_BUNDLE";
+            BigDecimal threshold = actions.stream().map(RepairAction::amount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
             guardrailRepository.save(OutcomeGuardrailDraft.builder()
                     .guardrailId(UUID.randomUUID().toString()).scenarioId(scenario.getScenarioId())
-                    .resultId(result.getResultId()).userId(scenario.getUserId()).guardrailType(action.type())
-                    .thresholdAmount(action.amount()).currency(scenario.getCurrency()).scopeJson(json(scope))
-                    .previewText(action.explanation() + " This is a read-only recommendation and will not move or schedule money.")
+                    .resultId(result.getResultId()).userId(scenario.getUserId()).guardrailType(type)
+                    .thresholdAmount(threshold).currency(scenario.getCurrency()).scopeJson(json(scope))
+                    .alternativeRank(alternative.rank()).candidateActionsJson(json(actions))
+                    .replayProofJson(json(alternative.replay()))
+                    .replayCertificateHash(alternative.certificateHash())
+                    .rankingFactorsJson(json(alternative.rankingFactors()))
+                    .rejectionReasonsJson(json(simulation.repair().rejectedCandidates()))
+                    .previewText(alternative.explanation() + " This is a replay-proven preview; selection cannot mutate schedules, limits, ledgers, or funds.")
                     .expiresAt(expiresAt).build());
         }
     }
 
-    private Snapshot captureSnapshot(ScenarioRequest request, String userId) {
+    private Snapshot captureSnapshot(ScenarioRequest request, String userId, boolean rejectStaleObligation) {
         Instant capturedAt = Instant.now();
         List<String> accountIds = sortedDistinct(request.accountIds());
+        Set<String> selectedAccounts = new LinkedHashSet<>(accountIds);
         List<LedgerAccountSnapshot> ledger = new ArrayList<>();
         for (String accountId : accountIds) {
             LedgerAccount account = ledgerAccountRepository.findByExternalAccountId(accountId)
@@ -324,19 +397,79 @@ public class OutcomeProtectionService {
         }
 
         List<ScheduledCashflowSnapshot> rawSchedules = scheduledTransferForecaster.forecast(request, userId,
-                new LinkedHashSet<>(accountIds),
+                selectedAccounts,
                 scheduledTransferRepository.findByUserIdAndStatusOrderByNextRunAtAsc(userId, ScheduledTransferStatus.ACTIVE));
         List<ScheduledCashflowSnapshot> schedules = rawSchedules.stream().map(schedule -> {
             var conversion = fxConverter.convert(schedule.amount(), schedule.currency(), request.currency(), capturedAt);
+            boolean sourceOwned = ledgerAccountRepository.findByExternalAccountId(schedule.fromAccountId())
+                    .map(account -> userId.equals(account.getOwnerId())).orElse(false);
+            boolean destinationOwned = ledgerAccountRepository.findByExternalAccountId(schedule.toAccountId())
+                    .map(account -> userId.equals(account.getOwnerId())).orElse(false);
+            boolean repairEligible = schedule.repairEligible() && sourceOwned;
+            String ineligibleReason = repairEligible ? null : (sourceOwned
+                    ? schedule.repairIneligibilityReason()
+                    : "The schedule source is not an owned authoritative ledger account");
             return new ScheduledCashflowSnapshot(schedule.eventId(), schedule.scheduleId(), schedule.scheduledFor(),
                     schedule.date(), conversion.convertedAmount(), request.currency(), schedule.status(),
                     schedule.cadence(), schedule.evaluationTimeZone(), schedule.label(), schedule.fromAccountId(),
-                    schedule.toAccountId(), conversion.sourceAmount(), conversion.sourceCurrency(), conversion.quote());
+                    schedule.toAccountId(), conversion.sourceAmount(), conversion.sourceCurrency(), conversion.quote(),
+                    schedule.scheduleVersion(), schedule.scheduleOwnerId(), schedule.sourceTimeZone(),
+                    schedule.dueLocalDate(), sourceOwned, destinationOwned, repairEligible, ineligibleReason);
         }).toList();
-        String sourceFingerprint = fingerprint(new SourceFingerprint(ledger, schedules));
-        return new Snapshot(ledger, schedules, sourceFingerprint);
-    }
 
+        ProtectedObligationSnapshot protectedObligation = null;
+        if (request.effectiveOutcomeType() == OutcomeType.SCHEDULED_OBLIGATION) {
+            ScheduledTransfer schedule = scheduledTransferRepository.findById(request.protectedScheduleId())
+                    .orElseThrow(() -> new AccessDeniedException("Protected scheduled obligation not found"));
+            if (!userId.equals(schedule.getUserId())) {
+                throw new AccessDeniedException("Protected scheduled obligation not found");
+            }
+            boolean sourceOwned = ledgerAccountRepository.findByExternalAccountId(schedule.getFromAccountId())
+                    .map(account -> userId.equals(account.getOwnerId())).orElse(false);
+            boolean destinationOwned = ledgerAccountRepository.findByExternalAccountId(schedule.getToAccountId())
+                    .map(account -> userId.equals(account.getOwnerId())).orElse(false);
+            LedgerAccount sourceLedger = ledgerAccountRepository.findByExternalAccountId(schedule.getFromAccountId())
+                    .filter(account -> account.getAccountKind() == LedgerAccountKind.CUSTOMER)
+                    .orElse(null);
+            long sourceProjectionVersion = sourceLedger == null ? -1L : projectionRepository
+                    .findById(sourceLedger.getLedgerAccountId())
+                    .map(LedgerBalanceProjection::getProjectionVersion).orElse(-1L);
+            List<ScheduledCashflowSnapshot> occurrences = schedules.stream()
+                    .filter(value -> schedule.getScheduleId().equals(value.scheduleId())).toList();
+            boolean valid = true;
+            String invalidReason = null;
+            if (!Objects.equals(schedule.getVersion(), request.protectedScheduleVersion())) {
+                valid = false;
+                invalidReason = "The protected obligation version changed after selection.";
+            } else if (schedule.getStatus() != ScheduledTransferStatus.ACTIVE) {
+                valid = false;
+                invalidReason = "The protected obligation is no longer active.";
+            } else if (!sourceOwned || !selectedAccounts.contains(schedule.getFromAccountId())) {
+                valid = false;
+                invalidReason = "The protected obligation must debit an owned selected ledger account.";
+            } else if (occurrences.isEmpty()) {
+                valid = false;
+                invalidReason = "The protected obligation has no due occurrence inside the inclusive horizon.";
+            }
+            fxConverter.convert(schedule.getAmount(), schedule.getCurrency(), request.currency(), capturedAt);
+            if (rejectStaleObligation && !valid) {
+                throw new IllegalStateException(invalidReason);
+            }
+            ZoneId sourceZone = ZoneId.of(schedule.getSourceTimeZone() == null
+                    ? "UTC" : schedule.getSourceTimeZone());
+            String cadence = schedule.getScheduleType() == ScheduledTransferType.ONE_TIME
+                    ? "ONE_TIME" : schedule.getFrequency().name();
+            protectedObligation = new ProtectedObligationSnapshot(
+                    schedule.getScheduleId(), schedule.getVersion() == null ? 0L : schedule.getVersion(),
+                    schedule.getStatus().name(), schedule.getUserId(), schedule.getFromAccountId(),
+                    schedule.getToAccountId(), sourceOwned, destinationOwned, money(schedule.getAmount()),
+                    schedule.getCurrency(), schedule.getScheduleType().name(), cadence, schedule.getNextRunAt(),
+                    schedule.getNextRunAt().atZone(sourceZone).toLocalDate(), sourceZone.getId(),
+                    request.timeZone(), schedule.getEndAt(), sourceProjectionVersion, capturedAt, valid, invalidReason);
+        }
+        String sourceFingerprint = fingerprint(new SourceFingerprint(ledger, schedules, protectedObligation));
+        return new Snapshot(ledger, schedules, protectedObligation, sourceFingerprint);
+    }
     private SimulationProof simulate(ScenarioRequest request, Snapshot snapshot) {
         List<OutcomeSimulationEngine.Cashflow> cashflows = new ArrayList<>();
         for (AssumptionInput assumption : sortedAssumptions(request.assumptions())) {
@@ -344,15 +477,28 @@ public class OutcomeProtectionService {
                     "ASSUMPTION", assumption.label(), assumption.flexible(), assumption.critical()));
         }
         for (ScheduledCashflowSnapshot schedule : snapshot.scheduledCashflows()) {
+            boolean protectedObligation = snapshot.protectedObligation() != null
+                    && snapshot.protectedObligation().scheduleId().equals(schedule.scheduleId());
             cashflows.add(new OutcomeSimulationEngine.Cashflow(schedule.eventId(), schedule.date(), schedule.amount(),
-                    "SCHEDULED_TRANSFER", schedule.label(), false, true));
+                    "SCHEDULED_TRANSFER", schedule.label(), schedule.repairEligible(), protectedObligation,
+                    schedule.scheduleId(), protectedObligation,
+                    schedule.repairEligible() && !protectedObligation, schedule.repairIneligibilityReason()));
         }
-        BigDecimal starting = snapshot.ledgerAccounts().stream().map(account -> account.baseAvailableBalance() == null ? account.availableBalance() : account.baseAvailableBalance())
+        BigDecimal starting = snapshot.ledgerAccounts().stream()
+                .map(account -> account.baseAvailableBalance() == null
+                        ? account.availableBalance() : account.baseAvailableBalance())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        OutcomeSimulationEngine.ProtectionTarget target = request.effectiveOutcomeType() == OutcomeType.SCHEDULED_OBLIGATION
+                ? new OutcomeSimulationEngine.ProtectionTarget(OutcomeType.SCHEDULED_OBLIGATION,
+                    request.protectedScheduleId(), snapshot.protectedObligation() != null
+                            && snapshot.protectedObligation().valid(),
+                    snapshot.protectedObligation() == null
+                            ? "The protected obligation snapshot is missing."
+                            : snapshot.protectedObligation().invalidReason())
+                : OutcomeSimulationEngine.ProtectionTarget.balanceFloor();
         return simulationEngine.simulate(money(starting), money(request.protectedMinimum()),
-                request.horizonStart(), request.horizonDays(), cashflows, sortedShocks(request.shocks()));
+                request.horizonStart(), request.horizonDays(), cashflows, sortedShocks(request.shocks()), target);
     }
-
     private ScenarioResponse response(OutcomeScenario scenario) { return response(scenario, scenario.getCurrentVersion()); }
 
     private ScenarioResponse response(OutcomeScenario scenario, int number) {
@@ -367,29 +513,41 @@ public class OutcomeProtectionService {
         List<FxRateQuote> fxQuotes = new ArrayList<>();
         ledger.stream().map(LedgerAccountSnapshot::fxQuote).filter(Objects::nonNull).forEach(fxQuotes::add);
         schedules.stream().map(ScheduledCashflowSnapshot::fxQuote).filter(Objects::nonNull).forEach(fxQuotes::add);
+        ProtectedObligationSnapshot obligation = version.getProtectedObligationJson() == null
+                ? null : read(version.getProtectedObligationJson(), ProtectedObligationSnapshot.class);
         SourceSnapshot source = new SourceSnapshot(money(starting), scenario.getCurrency(), ledger, schedules,
-                fxQuotes.stream().distinct().toList(), false, version.getSourceFingerprint());
+                obligation, fxQuotes.stream().distinct().toList(), false, version.getSourceFingerprint());
         List<GuardrailResponse> guardrails = guardrailRepository.findByResultIdOrderByCreatedAtAsc(result.getResultId())
                 .stream().map(this::guardrailResponse).toList();
         return new ScenarioResponse(scenario.getScenarioId(), scenario.getName(), number, scenario.getStatus(),
                 scenario.getCurrency(), scenario.getTimeZone(), version.getHorizonStart(), version.getHorizonDays(),
                 version.getProtectedMinimum(), accountIds, read(version.getAssumptionsJson(), ASSUMPTION_LIST),
                 read(version.getShocksJson(), SHOCK_LIST), source, read(result.getProofJson(), SimulationProof.class),
-                guardrails, version.getCreatedAt());
+                guardrails, version.getCreatedAt(), version.getOutcomeType() == null ? OutcomeType.BALANCE_FLOOR : OutcomeType.valueOf(version.getOutcomeType()),
+                obligation == null ? null : obligation.scheduleId(),
+                obligation == null ? null : obligation.scheduleVersion());
     }
 
     private GuardrailResponse guardrailResponse(OutcomeGuardrailDraft draft) {
         return new GuardrailResponse(draft.getGuardrailId(), draft.getGuardrailType(), draft.getThresholdAmount(),
                 draft.getCurrency(), read(draft.getScopeJson(), STRING_LIST), draft.getExpiresAt(), draft.getStatus(),
                 draft.getPreviewText(), draft.getAcceptedAt(),
-                guardrailService.optionalPolicy(draft.getGuardrailId(), draft.getUserId()));
+                guardrailService.optionalPolicy(draft.getGuardrailId(), draft.getUserId()),
+                draft.getAlternativeRank(), read(draft.getCandidateActionsJson(), REPAIR_ACTION_LIST),
+                draft.getReplayCertificateHash(), draft.getRankingFactorsJson() == null
+                    ? null : read(draft.getRankingFactorsJson(), RepairRankingFactors.class),
+                draft.getPreviewSelectedAt());
     }
 
     private ScenarioRequest requestFrom(OutcomeScenario scenario, OutcomeScenarioVersion version) {
+        ProtectedObligationSnapshot obligation = version.getProtectedObligationJson() == null
+                ? null : read(version.getProtectedObligationJson(), ProtectedObligationSnapshot.class);
         return new ScenarioRequest(scenario.getName(), read(version.getAccountIdsJson(), STRING_LIST),
                 scenario.getCurrency(), scenario.getTimeZone(), version.getHorizonStart(), version.getHorizonDays(),
                 version.getProtectedMinimum(), read(version.getAssumptionsJson(), ASSUMPTION_LIST),
-                read(version.getShocksJson(), SHOCK_LIST));
+                read(version.getShocksJson(), SHOCK_LIST), version.getOutcomeType() == null ? OutcomeType.BALANCE_FLOOR : OutcomeType.valueOf(version.getOutcomeType()),
+                obligation == null ? null : obligation.scheduleId(),
+                obligation == null ? null : obligation.scheduleVersion());
     }
 
     private OutcomeDomainEvent recordEvent(String type, OutcomeScenario scenario, String resultId, String guardrailId,
@@ -404,6 +562,20 @@ public class OutcomeProtectionService {
 
     private void validateRequest(ScenarioRequest request) {
         ZoneId.of(request.timeZone());
+        if (request.effectiveOutcomeType() == OutcomeType.SCHEDULED_OBLIGATION) {
+            if (request.accountIds().size() != 1) {
+                throw new IllegalArgumentException(
+                        "Scheduled-obligation outcomes must select exactly one authoritative source account");
+            }
+            if (request.protectedScheduleId() == null || request.protectedScheduleId().isBlank()) {
+                throw new IllegalArgumentException("A protected schedule is required for a scheduled-obligation outcome");
+            }
+            if (request.protectedScheduleVersion() == null || request.protectedScheduleVersion() < 0) {
+                throw new IllegalArgumentException("The current protected schedule version is required");
+            }
+        } else if (request.protectedScheduleId() != null || request.protectedScheduleVersion() != null) {
+            throw new IllegalArgumentException("Balance-floor outcomes must not include a protected schedule");
+        }
         if (request.accountIds().stream().distinct().count() != request.accountIds().size())
             throw new IllegalArgumentException("Selected account IDs must be unique");
         LocalDate end = request.horizonStart().plusDays(request.horizonDays() - 1L);
@@ -458,7 +630,9 @@ public class OutcomeProtectionService {
                         value.label().trim())).toList();
         return new ScenarioRequest(request.name().trim(), sortedDistinct(request.accountIds()), request.currency(),
                 ZoneId.of(request.timeZone()).getId(), request.horizonStart(), request.horizonDays(),
-                money(request.protectedMinimum()), assumptions, shocks);
+                money(request.protectedMinimum()), assumptions, shocks, request.effectiveOutcomeType(),
+                request.protectedScheduleId() == null ? null : request.protectedScheduleId().trim(),
+                request.protectedScheduleVersion());
     }
     private String requireIdempotencyKey(String key) {
         if (key == null || key.isBlank() || key.length() < 8 || key.length() > 128)
@@ -492,7 +666,9 @@ public class OutcomeProtectionService {
 
     private record Snapshot(List<LedgerAccountSnapshot> ledgerAccounts,
                             List<ScheduledCashflowSnapshot> scheduledCashflows,
+                            ProtectedObligationSnapshot protectedObligation,
                             String sourceFingerprint) {}
     private record SourceFingerprint(List<LedgerAccountSnapshot> ledger,
-                                     List<ScheduledCashflowSnapshot> schedules) {}
+                                     List<ScheduledCashflowSnapshot> schedules,
+                                     ProtectedObligationSnapshot protectedObligation) {}
 }

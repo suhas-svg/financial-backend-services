@@ -28,6 +28,26 @@ const sampleLedgerAccount = {
   updatedAt: "2026-06-25T07:00:00Z"
 };
 
+const sampleScheduledObligation = {
+  scheduleId: "rent-schedule",
+  userId: "customer",
+  fromAccountId: "101",
+  toAccountId: "landlord-202",
+  amount: 900,
+  currency: "USD",
+  description: "Monthly rent",
+  reference: "RENT",
+  scheduleType: "RECURRING",
+  frequency: "MONTHLY",
+  nextRunAt: "2026-07-25T09:00:00Z",
+  timeZone: "America/New_York",
+  sourceLocalDateTime: "2026-07-25T05:00:00",
+  nextRunLocalDateTime: "2026-07-25T05:00:00",
+  dstOverlapPolicy: "EARLIER",
+  dstGapPolicy: "SHIFT_FORWARD",
+  status: "ACTIVE",
+  version: 4
+};
 const frozenAccount = {
   ...sampleAccount,
   id: 202,
@@ -183,8 +203,10 @@ afterEach(() => {
 });
 
 it("opens the customer Balance Shield reverse-stress workflow", async () => {
+  const user = userEvent.setup();
   mockFetch((url) => {
     if (url.includes("/api/ledger/accounts")) return jsonResponse([sampleLedgerAccount]);
+    if (url.includes("/api/scheduled-transfers")) return jsonResponse({ ...emptyPage, content: [sampleScheduledObligation], totalElements: 1, totalPages: 1 });
     if (url.includes("/api/outcome-protection/scenarios")) return jsonResponse([]);
     return undefined;
   });
@@ -193,6 +215,10 @@ it("opens the customer Balance Shield reverse-stress workflow", async () => {
 
   expect(await screen.findByRole("heading", { name: "Balance Shield lab" })).toBeInTheDocument();
   expect(await screen.findByText("Account 101")).toBeInTheDocument();
+  await user.click(screen.getByRole("checkbox", { name: /Account 101/i }));
+  await user.selectOptions(screen.getByLabelText("Protected outcome type"), "SCHEDULED_OBLIGATION");
+  await user.selectOptions(screen.getByLabelText("Protected scheduled obligation"), "rent-schedule");
+  expect(screen.getByText(/Monthly rent.*v4/i)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /Run reverse-stress lab/i })).toBeInTheDocument();
   expect(screen.getByText(/cannot move funds, change schedules, or contact external payment rails/i)).toBeInTheDocument();
 });

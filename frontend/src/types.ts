@@ -222,6 +222,7 @@ export type ScheduledTransfer = {
   lastRunStatus?: ScheduledTransferRunStatus;
   lastRunFailureReason?: string;
   lastTransactionId?: string;
+  version: number;
 };
 
 export type ScheduledTransferRun = {
@@ -269,6 +270,9 @@ export type OutcomeScenarioRequest = {
   protectedMinimum: number;
   assumptions: OutcomeAssumption[];
   shocks: OutcomeShock[];
+  outcomeType?: "BALANCE_FLOOR" | "SCHEDULED_OBLIGATION";
+  protectedScheduleId?: string;
+  protectedScheduleVersion?: number;
 };
 
 export type OutcomeTimelineEvent = {
@@ -279,6 +283,8 @@ export type OutcomeTimelineEvent = {
   label: string;
   flexible: boolean;
   critical: boolean;
+  scheduleId?: string;
+  protectedObligation?: boolean;
 };
 
 export type OutcomeTimelineDay = {
@@ -297,8 +303,48 @@ export type OutcomeForecast = {
   closingBalance: number;
   triggeringEvents: OutcomeTimelineEvent[];
   timeline: OutcomeTimelineDay[];
+  balanceFloorSatisfied: boolean;
+  protectedObligationSatisfied: boolean;
+  invariantBreaches: Array<{
+    type: "BALANCE_FLOOR_BREACH" | "PROTECTED_OBLIGATION_INSUFFICIENT_FUNDS" | "PROTECTED_OBLIGATION_MISSING_OR_CHANGED" | string;
+    date: string;
+    eventId?: string;
+    scheduleId?: string;
+    balanceBefore?: number;
+    requiredAmount?: number;
+    shortfall?: number;
+    explanation: string;
+  }>;
 };
 
+export type OutcomeRepairAction = {
+  actionId: string;
+  type: "RESERVE_BUFFER" | "SHIFT_OPTIONAL_SCHEDULE" | "REDUCE_OPTIONAL_SCHEDULE" | "TEMPORARY_SPENDING_LIMIT" | "REVIEW_FLEXIBLE_EXPENSES" | string;
+  amount: number;
+  affectedEventIds: string[];
+  explanation: string;
+  targetScheduleId?: string;
+  effectiveDate?: string;
+  originalAmount?: number;
+  disruptionScore: number;
+  previewOnly: boolean;
+};
+
+export type OutcomeRepairAlternative = {
+  rank: number;
+  alternativeId: string;
+  actions: OutcomeRepairAction[];
+  replay: OutcomeForecast;
+  rankingFactors: {
+    restoresAllInvariants: boolean;
+    actionCount: number;
+    disruptionScore: number;
+    moneyMovedOrDeferred: number;
+    stableActionIds: string[];
+  };
+  certificateHash: string;
+  explanation: string;
+};
 export type OutcomeSimulation = {
   baseline: OutcomeForecast;
   reverseStress: {
@@ -314,9 +360,17 @@ export type OutcomeSimulation = {
   };
   repair: {
     maximumShortfall: number;
-    selectedRepairs: Array<{ actionId: string; type: string; amount: number; affectedEventIds: string[]; explanation: string }>;
+    selectedRepairs: OutcomeRepairAction[];
     verifiedInModel: boolean;
     minimalityExplanation: string;
+    alternatives: OutcomeRepairAlternative[];
+    rejectedCandidates: Array<{ candidateId: string; type: string; targetId?: string; reasonCode: string; explanation: string }>;
+    evaluatedCombinations: number;
+    searchCapped: boolean;
+    maxCombinationSize: number;
+    maxEvaluatedCombinations: number;
+    engineVersion: string;
+    certificateHash: string;
   };
   evaluatedCombinations: number;
   searchCapped: boolean;
@@ -424,6 +478,11 @@ export type OutcomeGuardrail = {
   previewText: string;
   acceptedAt?: string;
   policy?: OutcomeGuardrailPolicy;
+  alternativeRank?: number;
+  candidateActions: OutcomeRepairAction[];
+  replayCertificateHash?: string;
+  rankingFactors?: OutcomeRepairAlternative["rankingFactors"];
+  previewSelectedAt?: string;
 };
 
 export type OutcomeScenarioSummary = {
@@ -437,6 +496,8 @@ export type OutcomeScenarioSummary = {
   protectedMinimum: number;
   baselineSafe: boolean;
   updatedAt: string;
+  outcomeType?: "BALANCE_FLOOR" | "SCHEDULED_OBLIGATION";
+  protectedScheduleId?: string;
 };
 
 export type OutcomeFxQuote = {
@@ -458,7 +519,8 @@ export type OutcomeScenario = OutcomeScenarioSummary & {
     startingAvailableBalance: number;
     baseCurrency: string;
     ledgerAccounts: Array<{ accountId: string; currency: string; availableBalance: number; projectionVersion: number; capturedAt: string; baseAvailableBalance: number; baseCurrency: string; fxQuote?: OutcomeFxQuote }>;
-    scheduledCashflows: Array<{ eventId: string; scheduleId: string; scheduledFor: string; date: string; amount: number; currency: string; status: string; cadence: string; evaluationTimeZone: string; label: string; fromAccountId: string; toAccountId: string; sourceAmount: number; sourceCurrency: string; fxQuote?: OutcomeFxQuote }>;
+    scheduledCashflows: Array<{ eventId: string; scheduleId: string; scheduledFor: string; date: string; amount: number; currency: string; status: string; cadence: string; evaluationTimeZone: string; label: string; fromAccountId: string; toAccountId: string; sourceAmount: number; sourceCurrency: string; fxQuote?: OutcomeFxQuote; scheduleVersion: number; scheduleOwnerId: string; sourceTimeZone: string; dueLocalDate: string; sourceOwnedByCustomer: boolean; destinationOwnedByCustomer: boolean; repairEligible: boolean; repairIneligibilityReason?: string }>;
+    protectedObligation?: { scheduleId: string; scheduleVersion: number; status: string; ownerId: string; fromAccountId: string; toAccountId: string; sourceOwnedByCustomer: boolean; destinationOwnedByCustomer: boolean; amount: number; currency: string; scheduleType: string; cadence: string; dueAt: string; dueLocalDate: string; sourceTimeZone: string; evaluationTimeZone: string; endAt?: string; sourceProjectionVersion: number; capturedAt: string; valid: boolean; invalidReason?: string };
     fxQuotes: OutcomeFxQuote[];
     executableFx: false;
     sourceFingerprint: string;
@@ -466,6 +528,9 @@ export type OutcomeScenario = OutcomeScenarioSummary & {
   simulation: OutcomeSimulation;
   guardrails: OutcomeGuardrail[];
   createdAt: string;
+  outcomeType: "BALANCE_FLOOR" | "SCHEDULED_OBLIGATION";
+  protectedScheduleId?: string;
+  protectedScheduleVersion?: number;
 };
 
 export type OutcomeDivergence = {

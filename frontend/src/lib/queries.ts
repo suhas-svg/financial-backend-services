@@ -231,6 +231,13 @@ export function acknowledgeOutcomeWarning(eventId: string, idempotencyKey: strin
 }
 
 
+export function selectOutcomeRepairDraft(guardrailId: string, idempotencyKey: string) {
+  return apiRequest<OutcomeGuardrail>("transaction", `/api/outcome-protection/repairs/${guardrailId}/select`, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: { confirmed: true }
+  });
+}
 export function acceptOutcomeGuardrail(guardrailId: string, idempotencyKey: string) {
   return apiRequest<OutcomeGuardrail>("transaction", "/api/outcome-protection/guardrails/" + guardrailId + "/accept", {
     method: "POST",

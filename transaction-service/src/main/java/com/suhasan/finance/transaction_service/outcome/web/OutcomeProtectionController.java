@@ -59,6 +59,13 @@ public class OutcomeProtectionController {
         return service.acceptGuardrail(guardrailId, request, currentUser(authentication), idempotencyKey);
     }
 
+    @PostMapping("/repairs/{guardrailId}/select")
+    public GuardrailResponse selectRepairDraft(@PathVariable String guardrailId,
+                                               @Valid @RequestBody RepairDraftSelectRequest request,
+                                               @RequestHeader("Idempotency-Key") String idempotencyKey,
+                                               Authentication authentication) {
+        return service.selectRepairDraft(guardrailId, request, currentUser(authentication), idempotencyKey);
+    }
     @GetMapping("/guardrails/terms")
     public GuardrailTermsResponse guardrailTerms() {
         return guardrailService.terms();

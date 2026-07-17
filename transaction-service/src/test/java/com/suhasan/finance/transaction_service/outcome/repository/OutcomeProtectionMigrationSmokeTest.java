@@ -63,6 +63,24 @@ class OutcomeProtectionMigrationSmokeTest {
                 .hasMessageContaining("immutable");
     }
     @Test
+    void addsOutcomeTypeReplayCertificateAndDraftSelectionEvidence() {
+        Integer columnCount = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND ((table_name = 'outcome_scenario_versions' AND column_name IN
+                        ('outcome_type', 'protected_obligation_json', 'canonical_inputs_json'))
+                    OR (table_name = 'outcome_simulation_results' AND column_name IN
+                        ('engine_version', 'candidate_actions_json', 'replay_output_json',
+                         'certificate_hash', 'ranking_factors_json', 'rejection_reasons_json',
+                         'repair_evaluated_combinations', 'repair_search_capped'))
+                    OR (table_name = 'outcome_guardrail_drafts' AND column_name IN
+                        ('alternative_rank', 'candidate_actions_json', 'replay_proof_json',
+                         'replay_certificate_hash', 'preview_selected_at',
+                         'preview_selection_idempotency_key')))
+                """, Integer.class);
+        assertThat(columnCount).isEqualTo(17);
+    }
+    @Test
     void createsFailClosedConsentGuardrailControlAndImmutableEvidence() {
         Integer tableCount = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM information_schema.tables
