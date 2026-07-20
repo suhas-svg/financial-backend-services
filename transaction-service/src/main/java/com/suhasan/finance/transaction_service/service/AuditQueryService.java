@@ -36,12 +36,7 @@ public class AuditQueryService {
     public AuditSummaryResponse getSummary(LocalDateTime from, LocalDateTime to) {
         LocalDateTime effectiveFrom = from != null ? from : LocalDateTime.now().minusDays(7);
         LocalDateTime effectiveTo = to != null ? to : LocalDateTime.now();
-        return new AuditSummaryResponse(
-                repository.countByCreatedAtBetween(effectiveFrom, effectiveTo),
-                repository.countByOutcomeAndCreatedAtBetween("FAILURE", effectiveFrom, effectiveTo),
-                repository.countByActionAndCreatedAtBetween("TRANSACTION_REVERSED", effectiveFrom, effectiveTo),
-                repository.countByEventTypeAndCreatedAtBetween("SECURITY", effectiveFrom, effectiveTo)
-        );
+        return repository.summarize(effectiveFrom, effectiveTo);
     }
 
     private Specification<AuditLogEntry> toSpecification(AuditEventFilter filter) {

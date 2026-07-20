@@ -1,5 +1,7 @@
 package com.suhasan.finance.account_service.service;
 
+import com.suhasan.finance.account_service.dto.AccountCreateRequest;
+import com.suhasan.finance.account_service.dto.AccountMetadataUpdateRequest;
 import com.suhasan.finance.account_service.dto.AccountResponse;
 import com.suhasan.finance.account_service.dto.BalanceOperationRequest;
 import com.suhasan.finance.account_service.dto.BalanceOperationResponse;
@@ -12,6 +14,9 @@ import com.suhasan.finance.account_service.entity.AccountBalanceOperation;
 import com.suhasan.finance.account_service.entity.AccountBalanceOperationId;
 import com.suhasan.finance.account_service.entity.AccountDebitHold;
 import com.suhasan.finance.account_service.entity.AccountStatus;
+import com.suhasan.finance.account_service.entity.CheckingAccount;
+import com.suhasan.finance.account_service.entity.CreditCardAccount;
+import com.suhasan.finance.account_service.entity.SavingsAccount;
 import com.suhasan.finance.account_service.entity.BalanceOperationStatus;
 import com.suhasan.finance.account_service.entity.DebitHoldStatus;
 import com.suhasan.finance.account_service.entity.NotificationSeverity;
@@ -78,6 +83,10 @@ public class AccountService {
     }
 
     public Account create(Account account) {
+        account.setBalance(BigDecimal.ZERO);
+        account.setLedgerBalance(BigDecimal.ZERO);
+        account.setAvailableBalance(BigDecimal.ZERO);
+        account.setPendingBalance(BigDecimal.ZERO);
         if (account.getStatus() == null) {
             account.setStatus(AccountStatus.ACTIVE);
         }
@@ -92,6 +101,29 @@ public class AccountService {
         });
     }
 
+    public Account create(AccountCreateRequest request, String ownerId) {
+        Account account = switch (request.accountType().trim().toUpperCase()) {
+            case "CHECKING" -> new CheckingAccount();
+            case "SAVINGS" -> {
+                SavingsAccount savings = new SavingsAccount();
+                savings.setInterestRate(request.interestRate() == null ? 0D : request.interestRate());
+                yield savings;
+            }
+            case "CREDIT" -> {
+                if (request.creditLimit() == null || request.dueDate() == null) {
+                    throw new IllegalArgumentException("Credit limit and due date are required");
+                }
+                CreditCardAccount credit = new CreditCardAccount();
+                credit.setCreditLimit(request.creditLimit());
+                credit.setDueDate(request.dueDate());
+                yield credit;
+            }
+            default -> throw new IllegalArgumentException("Unsupported account type");
+        };
+        account.setOwnerId(ownerId);
+        account.setCurrency(request.currency() == null ? "USD" : request.currency());
+        return create(account);
+    }
     @Transactional(readOnly = true)
     public Account findById(Long id) {
         return accountRepository.findById(id)
@@ -103,19 +135,36 @@ public class AccountService {
         return accountRepository.findAll();
     }
 
-    public Account update(Long id, Account updated) {
+    public Account updateMetadata(Long id, AccountMetadataUpdateRequest updated) {
         Account existing = findById(id);
-        existing.setBalance(updated.getBalance());
-        existing.setLedgerBalance(updated.getBalance());
-        existing.setAvailableBalance(updated.getBalance());
+        if (existing.getStatus() == AccountStatus.CLOSED) {
+            throw new IllegalStateException("Closed accounts cannot be updated");
+        }
+        if (existing instanceof SavingsAccount savings && updated.interestRate() != null) {
+            savings.setInterestRate(updated.interestRate());
+        }
+        if (existing instanceof CreditCardAccount credit) {
+            if (updated.creditLimit() != null) credit.setCreditLimit(updated.creditLimit());
+            if (updated.dueDate() != null) credit.setDueDate(updated.dueDate());
+        }
         return accountRepository.save(existing);
     }
 
+    /** Compatibility API which is deliberately metadata-only. */
+    public Account update(Long id, Account updated) {
+        Double interestRate = updated instanceof SavingsAccount savings ? savings.getInterestRate() : null;
+        BigDecimal creditLimit = updated instanceof CreditCardAccount credit ? credit.getCreditLimit() : null;
+        java.time.LocalDate dueDate = updated instanceof CreditCardAccount credit ? credit.getDueDate() : null;
+        return updateMetadata(id, new AccountMetadataUpdateRequest(interestRate, creditLimit, dueDate));
+    }
     public Account updateStatus(Long id, AccountStatus status, String reason, String actor) {
         if (reason == null || reason.isBlank()) {
             throw new IllegalArgumentException("Status reason is required");
         }
         Account existing = findById(id);
+        if (status == AccountStatus.CLOSED || existing.getStatus() == AccountStatus.CLOSED) {
+            throw new IllegalStateException("Closed lifecycle transitions require the closure coordinator");
+        }
         existing.setStatus(status);
         existing.setStatusReason(reason.trim());
         existing.setStatusUpdatedAt(LocalDateTime.now());
@@ -125,10 +174,27 @@ public class AccountService {
         return saved;
     }
 
-    public void delete(Long id) {
-        accountRepository.deleteById(id);
+    public Account close(Long id, String reason, String actor) {
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("Closure reason is required");
+        }
+        Account account = accountRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found: " + id));
+        normalizeBalances(account);
+        if (account.getLedgerBalance().signum() != 0
+                || account.getAvailableBalance().signum() != 0
+                || account.getPendingBalance().signum() != 0) {
+            throw new IllegalStateException("Account closure requires zero posted, available, and pending balances");
+        }
+        if (debitHoldRepository.existsByAccountIdAndStatus(id, DebitHoldStatus.PLACED)) {
+            throw new IllegalStateException("Account closure requires no active debit holds");
+        }
+        account.setStatus(AccountStatus.CLOSED);
+        account.setStatusReason(reason.trim());
+        account.setStatusUpdatedAt(LocalDateTime.now());
+        account.setStatusUpdatedBy(actor);
+        return accountRepository.save(account);
     }
-
     @Transactional(readOnly = true)
     public Page<AccountResponse> listAccounts(String ownerId, String accountType, AccountStatus status, Pageable pageable) {
         Page<Account> page;
@@ -152,13 +218,6 @@ public class AccountService {
         return page.map(accountMapper::toDto);
     }
 
-    public void updateBalance(Long id, BigDecimal newBalance) {
-        Account existing = findById(id);
-        existing.setBalance(newBalance);
-        existing.setLedgerBalance(newBalance);
-        existing.setAvailableBalance(newBalance);
-        accountRepository.save(existing);
-    }
 
     public AccountResponse applyLedgerProjection(Long accountId, LedgerProjectionUpdateRequest request) {
         Account account = accountRepository.findByIdForUpdate(accountId)
@@ -176,6 +235,9 @@ public class AccountService {
         if (request.version() == currentVersion) {
             requireExactProjectionReplay(account, request);
             return accountMapper.toDto(account);
+        }
+        if (account.getStatus() == AccountStatus.CLOSED) {
+            throw new IllegalStateException("Closed accounts cannot receive newer ledger projections");
         }
 
         account.setLedgerBalance(request.postedBalance());
@@ -224,6 +286,9 @@ public class AccountService {
         BigDecimal newAvailableBalance = account.getAvailableBalance().add(request.getDelta());
         boolean allowNegative = Boolean.TRUE.equals(request.getAllowNegative());
 
+        if (account.getStatus() == AccountStatus.CLOSED) {
+            throw new IllegalStateException("Closed accounts cannot receive balance operations");
+        }
         if (account.getStatus() == AccountStatus.FROZEN && request.getDelta().compareTo(BigDecimal.ZERO) < 0) {
             AccountBalanceOperation rejectedOperation = AccountBalanceOperation.builder()
                     .id(operationId)

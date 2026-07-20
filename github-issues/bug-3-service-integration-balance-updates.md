@@ -118,7 +118,7 @@ services.account-service.url=http://localhost:8080
 
 # JWT Configuration for service communication
 jwt.service.expiration=300000
-jwt.service.secret=${JWT_SECRET:defaultServiceSecret}
+jwt.service.secret=<set-via-secret-manager>
 ```
 
 ## 🔧 Files Modified

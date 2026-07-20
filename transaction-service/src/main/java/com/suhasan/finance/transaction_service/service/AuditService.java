@@ -319,6 +319,14 @@ public class AuditService {
             
             AUDIT_LOGGER.info("API access: {} {} user {} from {} status {} time {}ms",
                     method, endpoint, userId, ipAddress, responseStatus, responseTime);
+            persist(AuditLogEntry.builder()
+                    .eventType("API_ACCESS")
+                    .action(method + " " + endpoint)
+                    .outcome(responseStatus < 400 ? "SUCCESS" : "FAILURE")
+                    .userId(userId != null ? userId : "anonymous")
+                    .ipAddress(ipAddress != null ? ipAddress : "unknown")
+                    .details("status=" + responseStatus + ";durationMs=" + responseTime)
+                    .build());
         } finally {
             MDC.clear();
         }

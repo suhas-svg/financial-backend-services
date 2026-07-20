@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
 import { Badge, Button, EmptyState, Input, PageHeader, Panel, Select, Stat } from "../components/ui";
 import { getAuditSummary, searchAuditEvents } from "../lib/queries";
+import { utcDateTime } from "../lib/format";
 import type { AuditLogEntry } from "../types";
 
 const defaultFilters = {
@@ -156,5 +157,5 @@ function formatNumber(value: number | undefined) {
 }
 
 function formatDate(value: string) {
-  return value ? new Date(value).toLocaleString() : "n/a";
+  return utcDateTime(value);
 }

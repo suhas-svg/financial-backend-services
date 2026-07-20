@@ -158,9 +158,12 @@ curl http://localhost:9090/api/v1/label/__name__/values
 # Check application metrics endpoint
 curl http://localhost:8080/actuator/prometheus
 
-# Check Grafana datasources
-curl -u admin:admin http://localhost:3000/api/datasources
+# Check Grafana datasources using a local, untracked curl config
+curl --config "$GRAFANA_CURL_CONFIG" http://localhost:3000/api/datasources
 ```
+
+Store Grafana credentials only in the local curl config and restrict its file
+permissions. Do not put credentials on the command line or in tracked files.
 
 ## Production Considerations
 

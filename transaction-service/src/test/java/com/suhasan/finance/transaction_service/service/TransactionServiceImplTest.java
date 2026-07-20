@@ -55,6 +55,12 @@ class TransactionServiceImplTest {
         @Mock
         private RiskEvaluationService riskEvaluationService;
 
+        @Mock
+        private com.suhasan.finance.transaction_service.ledger.service.LedgerPostingService ledgerPostingService;
+
+        @Mock
+        private com.suhasan.finance.transaction_service.ledger.service.AccountLedgerResolver accountLedgerResolver;
+
         @InjectMocks
         private TransactionServiceImpl transactionService;
 
@@ -409,6 +415,69 @@ class TransactionServiceImplTest {
                 verify(accountServiceClient).applyBalanceOperation(eq(accountId), anyString(), eq(amount), anyString(),
                                 eq("DEPOSIT"), eq(true));
                 verify(transactionRepository, times(2)).save(any(Transaction.class));
+        }
+
+        @Test
+        void processDeposit_RetriesFailedLedgerAttemptWithSameIdempotencyKey() {
+                String accountId = "acc1";
+                BigDecimal amount = new BigDecimal("25.00");
+                String description = "[SYNTHETIC] beta seed";
+                String reference = "SYNTHETIC:fund-1";
+                String idempotencyKey = "synthetic:fund-1";
+                java.util.UUID journalId = java.util.UUID.randomUUID();
+                Transaction failed = Transaction.builder()
+                                .transactionId("funding-txn-1")
+                                .fromAccountId("EXTERNAL")
+                                .toAccountId(accountId)
+                                .amount(amount)
+                                .currency("USD")
+                                .type(TransactionType.DEPOSIT)
+                                .status(TransactionStatus.FAILED)
+                                .processingState(com.suhasan.finance.transaction_service.entity.TransactionProcessingState.INITIATED)
+                                .description(description)
+                                .reference(reference)
+                                .idempotencyKey(idempotencyKey)
+                                .createdBy(userId)
+                                .createdAt(LocalDateTime.now())
+                                .build();
+                fromAccount.setOwnerId(userId);
+                fromAccount.setCurrency("USD");
+
+                when(transactionRepository.findFirstByCreatedByAndTypeAndIdempotencyKey(
+                                userId, TransactionType.DEPOSIT, idempotencyKey))
+                                .thenReturn(Optional.of(failed));
+                when(accountServiceClient.getAccount(accountId)).thenReturn(fromAccount);
+                when(accountLedgerResolver.resolveSystemAccount(
+                                com.suhasan.finance.transaction_service.ledger.domain.LedgerAccountKind.CLEARING,
+                                "USD"))
+                                .thenReturn(java.util.UUID.randomUUID());
+                when(accountLedgerResolver.resolveCustomerAccount(accountId, fromAccount))
+                                .thenReturn(java.util.UUID.randomUUID());
+                when(ledgerPostingService.createPending(any(
+                                com.suhasan.finance.transaction_service.ledger.service.JournalCommand.class)))
+                                .thenReturn(new com.suhasan.finance.transaction_service.ledger.service.JournalResult(
+                                                journalId,
+                                                com.suhasan.finance.transaction_service.ledger.domain.JournalState.PENDING,
+                                                false));
+                when(ledgerPostingService.post(journalId, "SYSTEM"))
+                                .thenReturn(new com.suhasan.finance.transaction_service.ledger.service.JournalResult(
+                                                journalId,
+                                                com.suhasan.finance.transaction_service.ledger.domain.JournalState.POSTED,
+                                                true));
+                when(transactionRepository.save(any(Transaction.class)))
+                                .thenAnswer(invocation -> invocation.getArgument(0));
+                org.springframework.test.util.ReflectionTestUtils.setField(
+                                transactionService, "ledgerAuthoritative", true);
+
+                TransactionResponse result = transactionService.processDeposit(
+                                accountId, amount, description, reference, userId, idempotencyKey);
+
+                assertEquals(TransactionStatus.COMPLETED, result.getStatus());
+                assertEquals(journalId, result.getJournalId());
+                assertEquals("funding-txn-1", result.getTransactionId());
+                verify(ledgerPostingService).createPending(any(
+                                com.suhasan.finance.transaction_service.ledger.service.JournalCommand.class));
+                verify(ledgerPostingService).post(journalId, "SYSTEM");
         }
 
         @Test

@@ -310,7 +310,7 @@ spring.datasource.username=postgres
 spring.datasource.password=postgres
 
 # JWT Configuration
-security.jwt.secret=AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14=
+security.jwt.secret=<set-via-secret-manager>
 security.jwt.expiration-in-ms=3600000
 
 # Monitoring Configuration
@@ -336,7 +336,7 @@ account-service.base-url=http://localhost:8080
 account-service.timeout=5000
 
 # JWT Configuration
-security.jwt.secret=AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14=
+security.jwt.secret=<set-via-secret-manager>
 
 # Spring Cloud Compatibility
 spring.cloud.compatibility-verifier.enabled=false
@@ -406,37 +406,47 @@ curl -X POST http://localhost:8080/api/auth/register \
 
 #### 2. Login and Get JWT Token
 ```bash
+read -s DEMO_PASSWORD
 curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "username": "john.doe",
-    "password": "SecurePassword123!"
+    "password": "'"${DEMO_PASSWORD}"'"
   }'
 ```
+
+Keep the returned token in a local, untracked credential helper. Supply the
+`Authorization` header from that helper for the authenticated requests below;
+never paste a token into tracked scripts or documentation.
 
 #### 3. Create an Account
 ```bash
-curl -X POST http://localhost:8080/api/accounts \
+curl --config "$AUTHENTICATED_CURL_CONFIG" -X POST http://localhost:8080/api/accounts \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
     "ownerId": "john.doe",
-    "accountType": "CHECKING",
-    "balance": 1000.00
+    "accountType": "CHECKING"
   }'
 ```
 
-#### 4. Make a Deposit
+Accounts always open with a zero balance. Ordinary create/update requests reject
+money fields.
+
+#### 4. Fund a Synthetic Account (Controlled Beta Only)
 ```bash
-curl -X POST http://localhost:8081/api/transactions/deposit \
+curl --config "$AUTHENTICATED_CURL_CONFIG" -X POST http://localhost:8081/api/controlled-beta/synthetic-funding \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Idempotency-Key: demo-funding-1" \
   -d '{
     "accountId": "1",
     "amount": 500.00,
-    "description": "Salary deposit"
+    "reason": "Controlled beta demo funding"
   }'
 ```
+
+This endpoint additionally requires an operator-authenticated request and is
+disabled outside the synthetic controlled-beta profile. It posts a balanced,
+auditable ledger journal; it is not a balance setter.
 
 ## 🧪 Testing
 
@@ -622,7 +632,7 @@ ON transactions(created_at DESC);
 public void updateAccountBalance(String accountId, BigDecimal newBalance) {
     WebClient webClient = webClientBuilder.baseUrl(accountServiceBaseUrl).build();
     
-    String jwtToken = getCurrentJwtToken();
+    String jwtToken = loadTokenFromSecureCredentialContext();
     BalanceUpdateRequest request = new BalanceUpdateRequest(newBalance);
     
     webClient.put()

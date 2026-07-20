@@ -1,5 +1,7 @@
 package com.suhasan.finance.account_service.controller;
 
+import com.suhasan.finance.account_service.dto.AccountCreateRequest;
+import com.suhasan.finance.account_service.dto.AccountMetadataUpdateRequest;
 import com.suhasan.finance.account_service.dto.AccountResponse;
 import com.suhasan.finance.account_service.dto.AccountStatusUpdateRequest;
 import com.suhasan.finance.account_service.entity.Account;
@@ -15,7 +17,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -62,31 +63,22 @@ public class AccountController {
     }
 
     @PostMapping
-    public ResponseEntity<Account> create(@Valid @RequestBody Account account, Authentication authentication) {
-        if (!isAdmin(authentication) && !isInternalService(authentication)) {
-            account.setOwnerId(authentication.getName());
-        } else if (account.getOwnerId() == null || account.getOwnerId().isBlank()) {
-            account.setOwnerId(authentication.getName());
-        }
-        Account created = service.create(account);
-        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    public ResponseEntity<Account> create(@Valid @RequestBody AccountCreateRequest request, Authentication authentication) {
+        String ownerId = isAdmin(authentication) || isInternalService(authentication)
+                ? request.ownerId() : authentication.getName();
+        if (ownerId == null || ownerId.isBlank()) ownerId = authentication.getName();
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request, ownerId));
     }
-
     @PutMapping("/{id}")
     public ResponseEntity<Account> update(
             @PathVariable Long id,
-            @Valid @RequestBody Account account,
+            @Valid @RequestBody AccountMetadataUpdateRequest request,
             Authentication authentication
     ) {
         Account existing = service.findById(id);
         assertOwnerOrPrivileged(existing, authentication);
-        if (!isAdmin(authentication) && !isInternalService(authentication)) {
-            account.setOwnerId(existing.getOwnerId());
-        }
-        Account updated = service.update(id, account);
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.ok(service.updateMetadata(id, request));
     }
-
     @PatchMapping("/{id}/status")
     public ResponseEntity<Account> updateStatus(
             @PathVariable Long id,
@@ -101,14 +93,6 @@ public class AccountController {
         }
         Account updated = service.updateStatus(id, request.getStatus(), request.getReason(), authentication.getName());
         return ResponseEntity.ok(updated);
-    }
-
-    @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id, Authentication authentication) {
-        Account existing = service.findById(id);
-        assertOwnerOrPrivileged(existing, authentication);
-        service.delete(id);
     }
 
     private void assertOwnerOrPrivileged(Account account, Authentication authentication) {

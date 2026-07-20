@@ -65,51 +65,6 @@ public class AccountServiceClient {
     }
     
     /**
-     * Update account balance by calling the Account Service balance update endpoint
-     */
-    public void updateAccountBalance(String accountId, BigDecimal newBalance) {
-        try {
-            log.debug("Updating balance for account {} to {}", accountId, newBalance);
-            
-            WebClient webClient = webClientBuilder
-                    .baseUrl(accountServiceBaseUrl)
-                    .build();
-            
-            // Create balance update request
-            BalanceUpdateRequest request = new BalanceUpdateRequest(newBalance);
-            
-            // Get current JWT token from security context
-            String jwtToken = getCurrentJwtToken();
-            
-            WebClient.RequestHeadersSpec<?> requestSpec = webClient
-                    .put()
-                    .uri("/api/accounts/{id}/balance", accountId)
-                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                    .bodyValue(request);
-            
-            // Add Authorization header if JWT token is available
-            if (jwtToken != null) {
-                requestSpec = requestSpec.header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtToken);
-            }
-            
-            requestSpec
-                    .retrieve()
-                    .bodyToMono(Void.class)
-                    .timeout(Duration.ofMillis(timeout))
-                    .block();
-            
-            log.info("Successfully updated balance for account {}: new balance = {}", accountId, newBalance);
-            
-        } catch (WebClientResponseException e) {
-            log.error("Failed to update account balance {}: HTTP {} - {}", accountId, e.getStatusCode(), e.getResponseBodyAsString());
-            throw new RuntimeException("Failed to update account balance: " + e.getMessage());
-        } catch (Exception e) {
-            log.error("Error updating account balance for {}: {}", accountId, e.getMessage());
-            throw new RuntimeException("Account service unavailable: " + e.getMessage());
-        }
-    }
-    
-    /**
      * Get current JWT token from security context
      */
     private String getCurrentJwtToken() {
@@ -123,27 +78,6 @@ public class AccountServiceClient {
             log.debug("Could not extract JWT token from security context: {}", e.getMessage());
         }
         return null;
-    }
-    
-    /**
-     * Balance update request DTO
-     */
-    public static class BalanceUpdateRequest {
-        private BigDecimal balance;
-        
-        public BalanceUpdateRequest() {}
-        
-        public BalanceUpdateRequest(BigDecimal balance) {
-            this.balance = balance;
-        }
-        
-        public BigDecimal getBalance() {
-            return balance;
-        }
-        
-        public void setBalance(BigDecimal balance) {
-            this.balance = balance;
-        }
     }
     
     /**

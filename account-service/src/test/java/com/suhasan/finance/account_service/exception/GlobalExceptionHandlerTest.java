@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,6 +33,20 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().getMessage()).isEqualTo("No static resource api/nonexistent-endpoint-xyz.");
         assertThat(response.getBody().getPath()).isEqualTo("/api/nonexistent-endpoint-xyz");
         assertThat(response.getBody().getStatus()).isEqualTo(404);
+    }
+
+    @Test
+    void handleMethodNotSupported_Returns405Response() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getRequestURI()).thenReturn("/api/accounts/42");
+
+        ResponseEntity<ErrorResponse> response = handler.handleMethodNotSupported(
+                new HttpRequestMethodNotSupportedException("DELETE"), request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getError()).isEqualTo("Method Not Allowed");
+        assertThat(response.getBody().getStatus()).isEqualTo(405);
     }
 
     @Test

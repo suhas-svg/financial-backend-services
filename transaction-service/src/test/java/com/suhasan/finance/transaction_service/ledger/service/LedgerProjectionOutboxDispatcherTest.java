@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -119,6 +121,15 @@ class LedgerProjectionOutboxDispatcherTest {
         assertThat(summary.failed()).isEqualTo(1);
         assertThat(failing.getDeliveredAt()).isNull();
         assertThat(succeeding.getDeliveredAt()).isEqualTo(LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC));
+    }
+
+    @Test
+    void scheduledEntryPointOwnsTransactionSoClaimedRowsRemainManaged() throws NoSuchMethodException {
+        Transactional transaction = AnnotatedElementUtils.findMergedAnnotation(
+                LedgerProjectionOutboxDispatcher.class.getMethod("dispatchScheduled"),
+                Transactional.class);
+
+        assertThat(transaction).isNotNull();
     }
 
     private LedgerProjectionOutbox outbox(String externalAccountId, long projectionVersion) {

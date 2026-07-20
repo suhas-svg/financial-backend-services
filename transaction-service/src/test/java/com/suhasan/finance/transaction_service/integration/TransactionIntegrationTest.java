@@ -103,7 +103,7 @@ class TransactionIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void shouldProcessDepositSuccessfully() {
+    void shouldRejectOrdinaryDepositEndpoint() {
         // Given
         String accountId = "account-001";
         BigDecimal depositAmount = BigDecimal.valueOf(1000.00);
@@ -123,27 +123,15 @@ class TransactionIntegrationTest extends BaseIntegrationTest {
         HttpEntity<DepositRequest> request = new HttpEntity<>(depositRequest, headers);
 
         // When
-        ResponseEntity<TransactionResponse> response = restTemplate.postForEntity(
+        ResponseEntity<String> response = restTemplate.postForEntity(
                 getBaseUrl() + "/api/transactions/deposit",
                 request,
-                TransactionResponse.class
+                String.class
         );
 
         // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().getAmount()).isEqualByComparingTo(depositAmount);
-        assertThat(response.getBody().getToAccountId()).isEqualTo(accountId);
-        assertThat(response.getBody().getStatus()).isEqualTo(TransactionStatus.COMPLETED);
-        assertThat(response.getBody().getType()).isEqualTo(TransactionType.DEPOSIT);
-
-        // Verify database record
-        List<Transaction> transactions = transactionRepository.findAll();
-        assertThat(transactions).hasSize(1);
-        Transaction savedTransaction = transactions.get(0);
-        assertThat(savedTransaction.getAmount()).isEqualByComparingTo(depositAmount);
-        assertThat(savedTransaction.getToAccountId()).isEqualTo(accountId);
-        assertThat(savedTransaction.getStatus()).isEqualTo(TransactionStatus.COMPLETED);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
+        assertThat(transactionRepository.findAll()).isEmpty();
     }
 
     @Test

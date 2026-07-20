@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseFormRegisterReturn } from "react-hook-form";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { authorizeTransfer, cancelTransferAuthorization, deposit, listAccounts, listBeneficiaries, transfer, verifyStepUpChallenge, withdraw } from "../lib/queries";
+import { authorizeTransfer, cancelTransferAuthorization, listAccounts, listBeneficiaries, transfer, verifyStepUpChallenge, withdraw } from "../lib/queries";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { availableBalance, canDebit } from "../lib/accountBalances";
 import { moneyMovementSchema, transferSchema, type MoneyMovementValues, type TransferValues } from "../lib/schemas";
@@ -26,12 +26,10 @@ function AccountSelect({ field, debitSource = false, amount = 0 }: { field: UseF
 
 export function MoveMoneyPage() {
   const queryClient = useQueryClient();
-  const depositForm = useForm<MoneyMovementValues>({ resolver: zodResolver(moneyMovementSchema), defaultValues: { accountId: "", amount: 0, currency: "USD", description: "", reference: "" } });
   const withdrawForm = useForm<MoneyMovementValues>({ resolver: zodResolver(moneyMovementSchema), defaultValues: { accountId: "", amount: 0, currency: "USD", description: "", reference: "" } });
   const transferForm = useForm<TransferValues>({ resolver: zodResolver(transferSchema), defaultValues: { fromAccountId: "", toAccountId: "", beneficiaryId: "", amount: 0, currency: "USD", description: "", reference: "" } });
   const [pendingAuthorization, setPendingAuthorization] = useState<Transaction>();
   const [verificationCode, setVerificationCode] = useState("");
-  const [depositStatus, setDepositStatus] = useState<string>();
   const [withdrawStatus, setWithdrawStatus] = useState<string>();
   const [transferStatus, setTransferStatus] = useState<string>();
   const beneficiaries = useQuery({ queryKey: ["beneficiaries", "ACTIVE"], queryFn: () => listBeneficiaries({ status: "ACTIVE" }) });
@@ -43,15 +41,6 @@ export function MoveMoneyPage() {
     queryClient.invalidateQueries({ queryKey: ["transactions"] });
     queryClient.invalidateQueries({ queryKey: ["stats"] });
   };
-  const depositMutation = useMutation({
-    mutationFn: (values: MoneyMovementValues) => deposit(values, createIdempotencyKey("deposit")),
-    onMutate: () => setDepositStatus(undefined),
-    onSuccess: (result, values) => {
-      setDepositStatus(`Deposit complete. ${formatMoney(result.amount, result.currency)} was added to account #${values.accountId}.`);
-      depositForm.reset();
-      invalidate();
-    }
-  });
   const withdrawMutation = useMutation({
     mutationFn: (values: MoneyMovementValues) => withdraw(values, createIdempotencyKey("withdraw")),
     onMutate: () => setWithdrawStatus(undefined),
@@ -95,21 +84,7 @@ export function MoveMoneyPage() {
   });
 
   return (
-    <div className="grid gap-6 xl:grid-cols-3">
-      <Panel title="Deposit">
-        <form className="grid gap-4" onSubmit={depositForm.handleSubmit((values) => depositMutation.mutate(values))}>
-          <ErrorNotice message={depositMutation.error instanceof Error ? depositMutation.error.message : undefined} />
-          <StatusNotice
-            pending={depositMutation.isPending}
-            message={depositMutation.isPending ? "Deposit is processing. You do not need to submit it again." : depositStatus}
-          />
-          <Field label="Account" error={depositForm.formState.errors.accountId?.message}>
-            <AccountSelect field={depositForm.register("accountId")} />
-          </Field>
-          <MoneyFields form={depositForm} />
-          <Button type="submit" disabled={depositMutation.isPending}>{depositMutation.isPending ? "Processing deposit..." : "Deposit"}</Button>
-        </form>
-      </Panel>
+    <div className="grid gap-6 xl:grid-cols-2">
       <Panel title="Withdraw">
         <form className="grid gap-4" onSubmit={withdrawForm.handleSubmit((values) => withdrawMutation.mutate(values))}>
           <ErrorNotice message={withdrawMutation.error instanceof Error ? withdrawMutation.error.message : undefined} />

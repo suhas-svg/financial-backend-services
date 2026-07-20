@@ -114,41 +114,31 @@ public class AccountServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("Should update account balance")
-    void shouldUpdateAccountBalance() {
-        // Given
+    @DisplayName("Metadata update cannot overwrite balances")
+    void metadataUpdateCannotOverwriteBalance() {
         Account savedAccount = accountService.create(checkingAccount);
         Long accountId = savedAccount.getId();
+        Account attemptedBypass = new CheckingAccount();
+        attemptedBypass.setBalance(BigDecimal.valueOf(2000.00));
 
-        // When
-        Account updateAccount = new CheckingAccount();
-        updateAccount.setBalance(BigDecimal.valueOf(2000.00));
-        Account updatedAccount = accountService.update(accountId, updateAccount);
+        Account updatedAccount = accountService.update(accountId, attemptedBypass);
 
-        // Then
-        assertThat(updatedAccount.getBalance()).isEqualTo(BigDecimal.valueOf(2000.00));
-
-        // Verify persistence
-        Account foundAccount = accountService.findById(accountId);
-        assertThat(foundAccount.getBalance()).isEqualTo(BigDecimal.valueOf(2000.00));
+        assertThat(updatedAccount.getBalance()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(accountService.findById(accountId).getBalance()).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     @Test
-    @DisplayName("Should delete account")
-    void shouldDeleteAccount() {
-        // Given
+    @DisplayName("Close preserves account and financial evidence")
+    void closePreservesAccount() {
         Account savedAccount = accountService.create(checkingAccount);
         Long accountId = savedAccount.getId();
 
-        // When
-        accountService.delete(accountId);
+        Account closed = accountService.close(accountId, "customer requested closure", "user123");
 
-        // Then
-        assertThatThrownBy(() -> accountService.findById(accountId))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Account not found");
+        assertThat(closed.getStatus()).isEqualTo(com.suhasan.finance.account_service.entity.AccountStatus.CLOSED);
+        assertThat(accountService.findById(accountId).getStatus())
+                .isEqualTo(com.suhasan.finance.account_service.entity.AccountStatus.CLOSED);
     }
-
     @Test
     @DisplayName("Should handle concurrent account creation")
     void shouldHandleConcurrentAccountCreation() {

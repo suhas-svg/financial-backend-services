@@ -27,7 +27,6 @@ export function createAccount(values: AccountValues) {
   const session = getSession();
   const payload: Record<string, unknown> = {
     accountType: values.accountType,
-    balance: values.balance,
     currency: values.currency,
     ownerId: values.ownerId || session?.username
   };
@@ -45,8 +44,12 @@ export function updateAccount(id: number, values: AccountValues) {
   return apiRequest<Account>("account", `/api/accounts/${id}`, { method: "PUT", body: values });
 }
 
-export function deleteAccount(id: number) {
-  return apiRequest<void>("account", `/api/accounts/${id}`, { method: "DELETE" });
+export function closeAccount(id: number, reason: string) {
+  return apiRequest<Account>("transaction", `/api/controlled-beta/accounts/${id}/close`, { method: "POST", body: { reason } });
+}
+
+export function syntheticFundAccount(accountId: number, amount: number, reason: string, idempotencyKey: string) {
+  return apiRequest<Transaction>("transaction", "/api/controlled-beta/synthetic-funding", { method: "POST", body: { accountId: String(accountId), amount, reason }, idempotencyKey });
 }
 
 export function updateAccountStatus(id: number, values: { status: AccountStatus; reason: string }) {

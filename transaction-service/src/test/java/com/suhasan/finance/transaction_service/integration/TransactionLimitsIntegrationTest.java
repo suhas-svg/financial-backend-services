@@ -239,7 +239,7 @@ class TransactionLimitsIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void shouldEnforceDepositLimitsCorrectly() {
+    void shouldRejectOrdinaryDepositBeforeLimitEvaluation() {
         // Given - Standard account deposit limits: 10000.00 per transaction, 20000.00 daily
         String accountId = "account-001";
         BigDecimal excessiveAmount = BigDecimal.valueOf(15000.00); // Exceeds per-transaction limit
@@ -265,8 +265,7 @@ class TransactionLimitsIntegrationTest extends BaseIntegrationTest {
         );
 
         // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody()).contains("Transaction exceeds limits");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
         
         // Verify no transaction was created
         assertThat(transactionRepository.findAll()).isEmpty();

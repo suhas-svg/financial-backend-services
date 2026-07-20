@@ -98,8 +98,8 @@ public class AccountServiceTest {
         Account result = accountService.create(testAccount);
 
         assertThat(result.getStatus()).isEqualTo(AccountStatus.ACTIVE);
-        assertThat(result.getLedgerBalance()).isEqualByComparingTo("1000.00");
-        assertThat(result.getAvailableBalance()).isEqualByComparingTo("1000.00");
+        assertThat(result.getLedgerBalance()).isEqualByComparingTo("0.00");
+        assertThat(result.getAvailableBalance()).isEqualByComparingTo("0.00");
         assertThat(result.getCurrency()).isEqualTo("USD");
     }
 
@@ -122,6 +122,21 @@ public class AccountServiceTest {
         assertThat(testAccount.getAvailableBalance()).isEqualByComparingTo("105.00");
         assertThat(testAccount.getBalance()).isEqualByComparingTo("125.00");
         verify(accountRepository).save(testAccount);
+    }
+
+    @Test
+    @DisplayName("Should reject a newer ledger projection for a closed account")
+    void shouldRejectNewerProjectionForClosedAccount() {
+        testAccount.setCurrency("USD");
+        testAccount.setStatus(AccountStatus.CLOSED);
+        testAccount.setLedgerProjectionVersion(6L);
+        when(accountRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(testAccount));
+
+        assertThatThrownBy(() -> accountService.applyLedgerProjection(1L, projection(7L)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Closed accounts");
+
+        verify(accountRepository, never()).save(any(Account.class));
     }
 
     @Test

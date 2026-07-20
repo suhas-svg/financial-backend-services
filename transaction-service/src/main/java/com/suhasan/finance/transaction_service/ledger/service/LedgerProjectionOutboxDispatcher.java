@@ -52,6 +52,7 @@ public class LedgerProjectionOutboxDispatcher {
     }
 
     @Scheduled(fixedDelayString = "${ledger.projection-outbox.dispatch-interval-ms:5000}")
+    @Transactional
     public void dispatchScheduled() {
         dispatchDue(DEFAULT_BATCH_SIZE);
     }

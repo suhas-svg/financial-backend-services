@@ -5,6 +5,7 @@ import com.suhasan.finance.transaction_service.ledger.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -68,6 +69,9 @@ class LedgerPostingServiceTest {
             List<UUID> ordered = List.copyOf(ids);
             return ordered.equals(ordered.stream().sorted().toList());
         }));
+        InOrder lockingOrder = inOrder(projectionRepository, accountRepository);
+        lockingOrder.verify(projectionRepository).lockAllOrdered(any());
+        lockingOrder.verify(accountRepository).findAllById(any());
         verify(projectionOutboxService).enqueue(customerAccount(sourceId), eq(sourceProjection), any(UUID.class));
         verify(projectionOutboxService).enqueue(customerAccount(destinationId), eq(destinationProjection), any(UUID.class));
     }

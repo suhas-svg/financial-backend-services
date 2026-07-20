@@ -3,6 +3,7 @@ import { Activity, ArrowRight, CircleAlert, CircleCheck, Clock3, FolderKanban, R
 import { Link } from "react-router-dom";
 import { getAccountHealth, getAuditSummary, getDisputeSummary, getRiskCaseSummary, getRiskSummary, getTransactionMonitoringStats, listAccounts, listReconciliationExceptions, searchAuditEvents } from "../lib/queries";
 import type { AuditLogEntry } from "../types";
+import { utcDateTime } from "../lib/format";
 import { Badge, ErrorNotice, PageHeader, Panel, Skeleton } from "./ui";
 
 export function AdminOperationsDashboard() {
@@ -78,7 +79,7 @@ function PostureRow({ label, value, loading, unavailable }: { label: string; val
 }
 
 function ActivityRow({ event }: { event: AuditLogEntry }) {
-  return <div className="flex items-center gap-4 py-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-100"><Clock3 className="h-4 w-4 text-slate-500" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-900">{event.action}</p><p className="truncate text-xs text-muted">{event.userId || "system"}<span aria-hidden="true"> / </span>{event.transactionId || event.eventType}</p></div><Badge tone={event.outcome === "SUCCESS" ? "good" : event.outcome === "FAILURE" ? "bad" : "neutral"}>{event.outcome}</Badge><time className="hidden text-xs text-muted sm:block">{new Date(event.createdAt).toLocaleString()}</time></div>;
+  return <div className="flex items-center gap-4 py-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-100"><Clock3 className="h-4 w-4 text-slate-500" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-900">{event.action}</p><p className="truncate text-xs text-muted">{event.userId || "system"}<span aria-hidden="true"> / </span>{event.transactionId || event.eventType}</p></div><Badge tone={event.outcome === "SUCCESS" ? "good" : event.outcome === "FAILURE" ? "bad" : "neutral"}>{event.outcome}</Badge><time className="hidden text-xs text-muted sm:block">{utcDateTime(event.createdAt)}</time></div>;
 }
 
 function readStatus(data: unknown) {

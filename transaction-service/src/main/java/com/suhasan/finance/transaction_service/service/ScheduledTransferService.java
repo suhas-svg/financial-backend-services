@@ -21,6 +21,7 @@ import com.suhasan.finance.transaction_service.repository.ScheduledTransferRunRe
 import com.suhasan.finance.transaction_service.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -52,6 +53,9 @@ public class ScheduledTransferService {
     private final ResilientAccountServiceClient accountServiceClient;
     private final MetricsService metricsService;
     private final TransactionTemplate transactionTemplate;
+
+    @Value("${scheduled-transfer.processing-stale-seconds:300}")
+    private long processingStaleSeconds;
 
     @Transactional
     public ScheduledTransferResponse create(ScheduledTransferCreateRequest request, String userId) {
@@ -194,9 +198,9 @@ public class ScheduledTransferService {
 
                     Instant scheduledFor = schedule.getNextRunAt();
                     if (runRepository.existsByScheduleScheduleIdAndScheduledFor(schedule.getScheduleId(), scheduledFor)) {
-                        if (recoverExistingProcessingRun(schedule, scheduledFor)) {
-                            return new ClaimedScheduledTransfer(schedule, null, scheduledFor,
-                                    idempotencyKey(schedule.getScheduleId(), scheduledFor), true);
+                        ClaimedScheduledTransfer recovery = recoverExistingProcessingRun(schedule, scheduledFor, now);
+                        if (recovery != null) {
+                            return recovery;
                         }
                         metricsService.recordScheduledTransferDuplicatePrevented();
                         continue;
@@ -271,24 +275,58 @@ public class ScheduledTransferService {
         }
     }
 
-    private boolean recoverExistingProcessingRun(ScheduledTransfer schedule, Instant scheduledFor) {
+    private ClaimedScheduledTransfer recoverExistingProcessingRun(
+            ScheduledTransfer schedule, Instant scheduledFor, Instant now) {
         try {
-            return runRepository.findByScheduleScheduleIdAndScheduledFor(schedule.getScheduleId(), scheduledFor)
-                    .filter(run -> run.getStatus() == ScheduledTransferRunStatus.PROCESSING)
-                    .flatMap(run -> transactionRepository.findFirstByCreatedByAndTypeAndStatusAndIdempotencyKey(
-                                    schedule.getUserId(), TransactionType.TRANSFER, TransactionStatus.COMPLETED,
-                                    run.getIdempotencyKey())
-                            .map(transaction -> {
-                                finalizeRecoveredRun(schedule, run, scheduledFor, transaction);
-                                metricsService.recordScheduledTransferCompleted(0L);
-                                return true;
-                            }))
-                    .orElse(false);
+            var existing = runRepository.findByScheduleScheduleIdAndScheduledFor(
+                    schedule.getScheduleId(), scheduledFor)
+                    .filter(run -> run.getStatus() == ScheduledTransferRunStatus.PROCESSING);
+            if (existing.isEmpty()) return null;
+            ScheduledTransferRun run = existing.get();
+            var transaction = transactionRepository.findFirstByCreatedByAndTypeAndIdempotencyKey(
+                    schedule.getUserId(), TransactionType.TRANSFER, run.getIdempotencyKey());
+            if (transaction.isPresent()) {
+                Transaction found = transaction.get();
+                switch (found.getStatus()) {
+                    case COMPLETED -> {
+                        finalizeRecoveredRun(schedule, run, scheduledFor, found);
+                        metricsService.recordScheduledTransferCompleted(0L);
+                        return new ClaimedScheduledTransfer(
+                                schedule, null, scheduledFor, run.getIdempotencyKey(), true);
+                    }
+                    case FAILED, FAILED_REQUIRES_MANUAL_ACTION, REVERSED, CANCELLED -> {
+                        run.setStatus(ScheduledTransferRunStatus.FAILED);
+                        run.setTransactionId(found.getTransactionId());
+                        run.setFailureReason("Recovered terminal transaction status: " + found.getStatus());
+                        run.setCompletedAt(now);
+                        schedule.setLastRunAt(scheduledFor);
+                        advanceOrComplete(schedule, scheduledFor);
+                        runRepository.save(run);
+                        scheduleRepository.save(schedule);
+                        metricsService.recordScheduledTransferFailed(0L);
+                        return new ClaimedScheduledTransfer(
+                                schedule, null, scheduledFor, run.getIdempotencyKey(), true);
+                    }
+                    case PENDING, PROCESSING -> {
+                        return null;
+                    }
+                }
+            }
+            Instant staleBefore = now.minusSeconds(Math.max(30, processingStaleSeconds));
+            if (run.getStartedAt().isBefore(staleBefore)) {
+                run.setStartedAt(now);
+                run.setFailureReason("Recovered stale processing lease before transaction creation");
+                runRepository.save(run);
+                metricsService.recordScheduledTransferClaimed();
+                return new ClaimedScheduledTransfer(
+                        schedule, run, scheduledFor, run.getIdempotencyKey(), false);
+            }
+            return null;
         } catch (RuntimeException e) {
             metricsService.recordScheduledTransferFailed(0L);
             log.warn("Failed to recover processing scheduled transfer {} due at {}: {}",
                     schedule.getScheduleId(), scheduledFor, e.getMessage());
-            return false;
+            return null;
         }
     }
 

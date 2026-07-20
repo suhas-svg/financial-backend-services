@@ -29,7 +29,7 @@ class TestSystemValidation:
             mock_settings = MagicMock()
             mock_settings.account_service_url = "http://localhost:8080"
             mock_settings.transaction_service_url = "http://localhost:8081"
-            mock_settings.jwt_secret = "AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14="
+            mock_settings.jwt_secret = "test-only-placeholder-secret-at-least-32-bytes"
             mock_settings.server_timeout = 5000
             mock_settings_class.return_value = mock_settings
             
@@ -39,7 +39,7 @@ class TestSystemValidation:
     @pytest.fixture
     def real_jwt_handler(self):
         """Create JWT handler with real secret used by services."""
-        return JWTAuthHandler("AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14=")
+        return JWTAuthHandler("test-only-placeholder-secret-at-least-32-bytes")
     
     @pytest.fixture
     def admin_user_context(self):

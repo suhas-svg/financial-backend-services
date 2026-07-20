@@ -7,7 +7,7 @@
       "env": {
         "ACCOUNT_SERVICE_URL": "http://localhost:8083",
         "TRANSACTION_SERVICE_URL": "http://localhost:8082",
-        "JWT_SECRET": "AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14=",
+        "JWT_SECRET": "test-only-placeholder-secret-at-least-32-bytes",
         "LOG_LEVEL": "INFO",
         "METRICS_ENABLED": "true"
       },

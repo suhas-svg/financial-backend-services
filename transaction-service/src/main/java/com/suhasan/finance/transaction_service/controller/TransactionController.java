@@ -1,7 +1,6 @@
 package com.suhasan.finance.transaction_service.controller;
 
 import com.suhasan.finance.transaction_service.dto.TransferRequest;
-import com.suhasan.finance.transaction_service.dto.DepositRequest;
 import com.suhasan.finance.transaction_service.dto.WithdrawalRequest;
 import com.suhasan.finance.transaction_service.dto.ReversalRequest;
 import com.suhasan.finance.transaction_service.dto.TransactionResponse;
@@ -73,27 +72,6 @@ public class TransactionController {
             Authentication authentication) {
         return ResponseEntity.ok(transferAuthorizationService.cancel(
                 authorizationId, authentication.getName()));
-    }
-    
-    /**
-     * Process a deposit to an account
-     */
-    @PostMapping("/deposit")
-    public ResponseEntity<TransactionResponse> processDeposit(
-            @Valid @RequestBody DepositRequest request,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-            Authentication authentication) {
-        
-        log.info("Processing deposit to account {} for amount {}", request.getAccountId(), request.getAmount());
-        
-        String userId = authentication.getName();
-        TransactionResponse response = idempotencyKey == null || idempotencyKey.isBlank()
-                ? transactionService.processDeposit(
-                    request.getAccountId(), request.getAmount(), request.getDescription(), request.getReference(), userId, null)
-                : transactionService.processDeposit(
-                    request.getAccountId(), request.getAmount(), request.getDescription(), request.getReference(), userId, idempotencyKey);
-        
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
     
     /**

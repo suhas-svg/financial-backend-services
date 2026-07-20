@@ -40,13 +40,19 @@ public class NotificationProviderRetryDispatcher {
                  ORDER BY receipt_id FOR UPDATE SKIP LOCKED LIMIT 50
                 """, Timestamp.from(now));
         for (var row : due) {
-            long receiptId = ((Number) row.get("receipt_id")).longValue();
-            long notificationId = ((Number) row.get("notification_id")).longValue();
-            int attempts = ((Number) row.get("attempt_count")).intValue() + 1;
+            retryOne(row, now);
+        }
+    }
+
+    private void retryOne(java.util.Map<String, Object> row, Instant now) {
+        long receiptId = ((Number) row.get("receipt_id")).longValue();
+        long notificationId = ((Number) row.get("notification_id")).longValue();
+        int attempts = ((Number) row.get("attempt_count")).intValue() + 1;
+        try {
             var notification = notifications.findById(notificationId).orElse(null);
             if (notification == null) {
                 terminal(receiptId, attempts, now, "Notification row is missing");
-                continue;
+                return;
             }
             var result = provider.deliver(notification);
             String classification = result.classification().name();
@@ -61,18 +67,29 @@ public class NotificationProviderRetryDispatcher {
             } else if (!RETRYABLE.contains(classification) || attempts >= Math.max(1, maxAttempts)) {
                 terminal(receiptId, attempts, now, sanitize(result.detail()));
             } else {
-                long multiplier = 1L << Math.min(20, attempts - 1);
-                long delay = Math.min(Math.max(1, maxBackoffSeconds),
-                        Math.max(1, initialBackoffSeconds) * multiplier);
-                jdbc.update("""
-                        UPDATE notification_provider_receipts
-                           SET classification=?,reconciliation_status=?,attempted_at=?,attempt_count=?,
-                               next_attempt_at=?,detail=?
-                         WHERE receipt_id=?
-                        """, classification, "UNRECONCILED", utc(result.attemptedAt()), attempts,
-                        utc(now.plusSeconds(delay)), sanitize(result.detail()), receiptId);
+                scheduleRetry(receiptId, attempts, now, classification, result.attemptedAt(), result.detail());
+            }
+        } catch (RuntimeException failure) {
+            if (attempts >= Math.max(1, maxAttempts)) {
+                terminal(receiptId, attempts, now, sanitize(failure.getClass().getSimpleName()));
+            } else {
+                scheduleRetry(receiptId, attempts, now, "UNAVAILABLE", now, failure.getClass().getSimpleName());
             }
         }
+    }
+
+    private void scheduleRetry(long receiptId, int attempts, Instant now, String classification,
+                               Instant attemptedAt, String detail) {
+        long multiplier = 1L << Math.min(20, attempts - 1);
+        long delay = Math.min(Math.max(1, maxBackoffSeconds),
+                Math.max(1, initialBackoffSeconds) * multiplier);
+        jdbc.update("""
+                UPDATE notification_provider_receipts
+                   SET classification=?,reconciliation_status=?,attempted_at=?,attempt_count=?,
+                       next_attempt_at=?,detail=?
+                 WHERE receipt_id=?
+                """, classification, "UNRECONCILED", utc(attemptedAt), attempts,
+                utc(now.plusSeconds(delay)), sanitize(detail), receiptId);
     }
 
     private void terminal(long receiptId, int attempts, Instant now, String detail) {

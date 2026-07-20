@@ -24,6 +24,8 @@ public interface LedgerProjectionOutboxRepository extends JpaRepository<LedgerPr
 
     long countByDeliveredAtIsNull();
 
+    long countByExternalAccountIdAndDeliveredAtIsNull(String externalAccountId);
+
     @Query("""
             select min(message.createdAt)
             from LedgerProjectionOutbox message

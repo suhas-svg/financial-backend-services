@@ -88,6 +88,17 @@ public class ScheduledTransferController {
                 scheduledTransferService.listRuns(scheduleId, currentUser(authentication), pageable)));
     }
 
+    @PostMapping("/admin/recover-stale")
+    public ResponseEntity<java.util.Map<String, Integer>> recoverStale(
+            @RequestParam(defaultValue = "100") int batchSize,
+            Authentication authentication) {
+        if (authentication == null || authentication.getAuthorities().stream()
+                .noneMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()))) {
+            throw new org.springframework.security.access.AccessDeniedException("Operator role is required");
+        }
+        int processed = scheduledTransferService.executeDueTransfers(java.time.Instant.now(), batchSize);
+        return ResponseEntity.ok(java.util.Map.of("processed", processed));
+    }
     private String currentUser(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()) {
             throw new AuthenticationCredentialsNotFoundException("Authentication is required");

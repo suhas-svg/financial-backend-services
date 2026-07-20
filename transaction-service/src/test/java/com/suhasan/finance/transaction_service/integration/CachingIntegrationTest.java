@@ -113,21 +113,21 @@ class CachingIntegrationTest extends BaseIntegrationTest {
         accountServiceStubs.stubAccountWithBalance(accountId, BigDecimal.valueOf(1000.00));
         accountServiceStubs.stubBalanceUpdate(accountId);
 
-        com.suhasan.finance.transaction_service.dto.DepositRequest depositRequest = com.suhasan.finance.transaction_service.dto.DepositRequest
+        com.suhasan.finance.transaction_service.dto.WithdrawalRequest withdrawalRequest = com.suhasan.finance.transaction_service.dto.WithdrawalRequest
                 .builder()
                 .accountId(accountId)
                 .amount(BigDecimal.valueOf(200.00))
-                .description("Test deposit for cache eviction")
+                .description("Test withdrawal for cache eviction")
                 .build();
 
-        HttpEntity<com.suhasan.finance.transaction_service.dto.DepositRequest> depositRequestEntity = new HttpEntity<>(
-                depositRequest, headers);
+        HttpEntity<com.suhasan.finance.transaction_service.dto.WithdrawalRequest> withdrawalRequestEntity = new HttpEntity<>(
+                withdrawalRequest, headers);
 
-        ResponseEntity<TransactionResponse> depositResponse = restTemplate.postForEntity(
-                getBaseUrl() + "/api/transactions/deposit",
-                depositRequestEntity,
+        ResponseEntity<TransactionResponse> withdrawalResponse = restTemplate.postForEntity(
+                getBaseUrl() + "/api/transactions/withdraw",
+                withdrawalRequestEntity,
                 TransactionResponse.class);
-        assertThat(depositResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(withdrawalResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
 
         // Then - Request transaction history again (should show updated results)
         ResponseEntity<PageEnvelope<TransactionResponse>> updatedResponse = restTemplate.exchange(
@@ -235,26 +235,26 @@ class CachingIntegrationTest extends BaseIntegrationTest {
         accountServiceStubs.stubAccountWithBalance(accountId, BigDecimal.valueOf(1000.00));
         accountServiceStubs.stubBalanceUpdate(accountId);
 
-        com.suhasan.finance.transaction_service.dto.DepositRequest depositRequest = com.suhasan.finance.transaction_service.dto.DepositRequest
+        com.suhasan.finance.transaction_service.dto.WithdrawalRequest withdrawalRequest = com.suhasan.finance.transaction_service.dto.WithdrawalRequest
                 .builder()
                 .accountId(accountId)
                 .amount(BigDecimal.valueOf(100.00))
-                .description("Test deposit for account validation caching")
+                .description("Test withdrawal for account validation caching")
                 .build();
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(validJwtToken);
-        HttpEntity<com.suhasan.finance.transaction_service.dto.DepositRequest> request = new HttpEntity<>(
-                depositRequest, headers);
+        HttpEntity<com.suhasan.finance.transaction_service.dto.WithdrawalRequest> request = new HttpEntity<>(
+                withdrawalRequest, headers);
 
         // When - Make multiple requests to same account
         ResponseEntity<TransactionResponse> response1 = restTemplate.postForEntity(
-                getBaseUrl() + "/api/transactions/deposit",
+                getBaseUrl() + "/api/transactions/withdraw",
                 request,
                 TransactionResponse.class);
 
         ResponseEntity<TransactionResponse> response2 = restTemplate.postForEntity(
-                getBaseUrl() + "/api/transactions/deposit",
+                getBaseUrl() + "/api/transactions/withdraw",
                 request,
                 TransactionResponse.class);
 

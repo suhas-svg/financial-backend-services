@@ -24,7 +24,7 @@ commonAnnotations:
 # Resources to include
 resources:
   - namespace.yaml
-  - secrets.yaml
+  - access-control.yaml
   - configmap.yaml
   - postgres-deployment.yaml
   - deployment.yaml
@@ -48,12 +48,18 @@ configMapGenerator:
     options:
       disableNameSuffixHash: true
 
-# Secret generator for development secrets
+# Secret generators read ignored, operator-created environment files. Kustomize
+# fails closed when either file is missing.
 secretGenerator:
-  - name: dev-generated-secrets
-    literals:
-      - DEV_API_KEY=dev-api-key-placeholder
-      - DEV_WEBHOOK_SECRET=dev-webhook-secret-placeholder
+  - name: account-service-secrets
+    envs:
+      - account-service-secrets.env
+    type: Opaque
+    options:
+      disableNameSuffixHash: true
+  - name: postgres-secrets
+    envs:
+      - postgres-secrets.env
     type: Opaque
     options:
       disableNameSuffixHash: true

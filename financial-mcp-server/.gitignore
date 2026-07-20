@@ -187,3 +187,5 @@ node_modules/
 # Monitoring data
 prometheus_data/
 grafana_data/
+.env.*
+!.env.example

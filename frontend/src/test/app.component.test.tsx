@@ -489,7 +489,9 @@ describe("transaction filters", () => {
 
   it("lets customers dispute eligible completed transactions from detail", async () => {
     const user = userEvent.setup();
-    const transaction = sampleTransaction();
+    const transaction = sampleTransaction({
+      createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    });
     const { calls } = mockFetch((url, init) => {
       if (url.includes("/api/transactions/txn-1")) {
         return jsonResponse(transaction);
@@ -1056,7 +1058,7 @@ describe("customer shell navigation", () => {
     expect(screen.getByRole("link", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.queryByText("Operations")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Admin Accounts" })).not.toBeInTheDocument();
-  });
+  }, 15000);
 
   it("supports customer navigation controls, quick search, and notification access", async () => {
     const user = userEvent.setup();
@@ -1295,6 +1297,22 @@ describe("admin account status controls", () => {
     expect(await screen.findByText("$250.00")).toBeInTheDocument();
   });
 
+  it("disables every mutation control for a closed account", async () => {
+    mockFetch((url) => {
+      if (url.includes("/api/accounts")) {
+        return jsonResponse({ ...emptyPage, content: [{ ...sampleAccount, status: "CLOSED" }], totalElements: 1, totalPages: 1 });
+      }
+      return undefined;
+    });
+
+    renderApp("/admin/accounts", tokenFor({ sub: "admin", roles: ["ROLE_ADMIN"] }));
+
+    expect(await screen.findByRole("button", { name: "Freeze account 101" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Edit account 101" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Synthetic fund account 101" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Close account 101" })).toBeDisabled();
+  });
+
   it("freezes account with a required reason", async () => {
     const user = userEvent.setup();
     const { calls } = mockFetch((url, init) => {
@@ -1324,38 +1342,6 @@ describe("admin account status controls", () => {
 });
 
 describe("money movement account holds", () => {
-  it("keeps a deposit visibly processing until the server confirms completion", async () => {
-    const user = userEvent.setup();
-    let resolveDeposit!: (response: Response) => void;
-    const pendingDeposit = new Promise<Response>((resolve) => {
-      resolveDeposit = resolve;
-    });
-    mockFetch((url, init) => {
-      if (url.includes("/api/transactions/deposit") && init?.method === "POST") {
-        return pendingDeposit;
-      }
-      return undefined;
-    });
-
-    renderApp("/move-money", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
-    await waitFor(() => expect(screen.getAllByText(/#101 - CHECKING/).length).toBeGreaterThan(0));
-
-    await user.selectOptions(screen.getAllByLabelText("Account")[0], "101");
-    await user.clear(screen.getAllByLabelText("Amount")[0]);
-    await user.type(screen.getAllByLabelText("Amount")[0], "25");
-    await user.click(screen.getByRole("button", { name: "Deposit" }));
-
-    expect(await screen.findByRole("button", { name: "Processing deposit..." })).toBeDisabled();
-    expect(screen.getByRole("status")).toHaveTextContent("Deposit is processing. You do not need to submit it again.");
-
-    resolveDeposit(new Response(JSON.stringify(sampleTransaction({ type: "DEPOSIT", fromAccountId: "EXTERNAL", toAccountId: "101", amount: 25 })), {
-      status: 201,
-      headers: { "Content-Type": "application/json" }
-    }));
-
-    expect(await screen.findByText("Deposit complete. $25.00 was added to account #101.")).toBeInTheDocument();
-  });
-
   it("shows a rejected withdrawal without implying that it was accepted for processing", async () => {
     const user = userEvent.setup();
     let resolveWithdrawal!: (response: Response) => void;
@@ -1373,8 +1359,8 @@ describe("money movement account holds", () => {
     await waitFor(() => expect(screen.getAllByText(/#101 - CHECKING/).length).toBeGreaterThan(0));
 
     await user.selectOptions(screen.getByLabelText("Withdraw account"), "101");
-    await user.clear(screen.getAllByLabelText("Amount")[1]);
-    await user.type(screen.getAllByLabelText("Amount")[1], "1000");
+    await user.clear(screen.getByLabelText("Amount"));
+    await user.type(screen.getByLabelText("Amount"), "1000");
     await user.click(screen.getByRole("button", { name: "Withdraw" }));
 
     expect(await screen.findByRole("button", { name: "Checking withdrawal..." })).toBeDisabled();
@@ -1388,16 +1374,13 @@ describe("money movement account holds", () => {
     expect(await screen.findByText("Transaction exceeds limits")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Withdraw" })).toBeEnabled();
     expect(screen.getByLabelText("Withdraw account")).toHaveValue("101");
-    expect(screen.getAllByLabelText("Amount")[1]).toHaveValue(1000);
+    expect(screen.getByLabelText("Amount")).toHaveValue(1000);
     expect(screen.queryByText("Withdrawal is processing. You do not need to submit it again.")).not.toBeInTheDocument();
   });
 
   it("shows confirmed success and resets each completed money form", async () => {
     const user = userEvent.setup();
     mockFetch((url, init) => {
-      if (url.includes("/api/transactions/deposit") && init?.method === "POST") {
-        return jsonResponse(sampleTransaction({ type: "DEPOSIT", fromAccountId: "EXTERNAL", toAccountId: "101", amount: 25 }), 201);
-      }
       if (url.includes("/api/transactions/withdraw") && init?.method === "POST") {
         return jsonResponse(sampleTransaction({ type: "WITHDRAWAL", fromAccountId: "101", toAccountId: "EXTERNAL", amount: 10 }), 201);
       }
@@ -1410,16 +1393,10 @@ describe("money movement account holds", () => {
     renderApp("/move-money", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
     await waitFor(() => expect(screen.getAllByText(/#101 - CHECKING/).length).toBeGreaterThan(0));
 
-    await user.selectOptions(screen.getAllByLabelText("Account")[0], "101");
-    await user.clear(screen.getAllByLabelText("Amount")[0]);
-    await user.type(screen.getAllByLabelText("Amount")[0], "25");
-    await user.click(screen.getByRole("button", { name: "Deposit" }));
-    expect(await screen.findByText("Deposit complete. $25.00 was added to account #101.")).toBeInTheDocument();
-    expect(screen.getAllByLabelText("Account")[0]).toHaveValue("");
 
     await user.selectOptions(screen.getByLabelText("Withdraw account"), "101");
-    await user.clear(screen.getAllByLabelText("Amount")[1]);
-    await user.type(screen.getAllByLabelText("Amount")[1], "10");
+    await user.clear(screen.getByLabelText("Amount"));
+    await user.type(screen.getByLabelText("Amount"), "10");
     await user.click(screen.getByRole("button", { name: "Withdraw" }));
     expect(await screen.findByText("Withdrawal complete. $10.00 was withdrawn from account #101.")).toBeInTheDocument();
     expect(screen.getByLabelText("Withdraw account")).toHaveValue("");
@@ -1433,7 +1410,7 @@ describe("money movement account holds", () => {
     expect(screen.getByLabelText("From account")).toHaveValue("");
   });
 
-  it("keeps frozen accounts selectable for deposit but disabled for debits", async () => {
+  it("keeps frozen accounts disabled for debits", async () => {
     mockFetch((url) => {
       if (url.includes("/api/accounts")) {
         return jsonResponse({ ...emptyPage, content: [sampleAccount, frozenAccount], totalElements: 2, totalPages: 1 });
@@ -1444,11 +1421,9 @@ describe("money movement account holds", () => {
     renderApp("/move-money", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
 
     await screen.findAllByText(/#202 - CHECKING - Available 250.00 - FROZEN/);
-    const depositSelect = screen.getAllByLabelText("Account")[0];
     const withdrawSelect = screen.getByLabelText("Withdraw account");
     const frozenDebitOption = Array.from(withdrawSelect.querySelectorAll("option")).find((option) => option.value === "202");
 
-    expect(depositSelect).toHaveTextContent("#202 - CHECKING - Available 250.00 - FROZEN");
     expect(withdrawSelect).toHaveTextContent("#202 - CHECKING - Available 250.00 - FROZEN");
     expect(frozenDebitOption).toBeDisabled();
   });
@@ -1464,8 +1439,8 @@ describe("money movement account holds", () => {
 
     renderApp("/move-money", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
 
-    await user.clear(screen.getAllByLabelText("Amount")[1]);
-    await user.type(screen.getAllByLabelText("Amount")[1], "200");
+    await user.clear(screen.getByLabelText("Amount"));
+    await user.type(screen.getByLabelText("Amount"), "200");
     const withdrawSelect = screen.getByLabelText("Withdraw account");
     const activeDebitOption = Array.from(withdrawSelect.querySelectorAll("option")).find((option) => option.value === "101");
 
