@@ -280,8 +280,7 @@ class ScheduledTransferServiceTest {
                 .thenReturn(true);
         when(runRepository.findByScheduleScheduleIdAndScheduledFor("schedule-1", scheduledFor))
                 .thenReturn(Optional.of(strandedRun));
-        when(transactionRepository.findFirstByCreatedByAndTypeAndStatusAndIdempotencyKey("customer", TransactionType.TRANSFER,
-                TransactionStatus.COMPLETED, idempotencyKey)).thenReturn(Optional.of(completedTransfer));
+        when(transactionRepository.findFirstByCreatedByAndTypeAndIdempotencyKey("customer", TransactionType.TRANSFER, idempotencyKey)).thenReturn(Optional.of(completedTransfer));
         when(runRepository.save(any(ScheduledTransferRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(scheduleRepository.save(any(ScheduledTransfer.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -314,8 +313,13 @@ class ScheduledTransferServiceTest {
                 .thenReturn(true);
         when(runRepository.findByScheduleScheduleIdAndScheduledFor("schedule-1", scheduledFor))
                 .thenReturn(Optional.of(strandedRun));
-        when(transactionRepository.findFirstByCreatedByAndTypeAndStatusAndIdempotencyKey("customer", TransactionType.TRANSFER,
-                TransactionStatus.COMPLETED, idempotencyKey)).thenReturn(Optional.empty());
+        when(transactionRepository.findFirstByCreatedByAndTypeAndIdempotencyKey("customer", TransactionType.TRANSFER, idempotencyKey)).thenReturn(Optional.of(Transaction.builder()
+                .transactionId("txn-processing")
+                .createdBy("customer")
+                .type(TransactionType.TRANSFER)
+                .status(TransactionStatus.PROCESSING)
+                .idempotencyKey(idempotencyKey)
+                .build()));
 
         int processed = service.executeDueTransfers(Instant.parse("2026-07-01T09:01:00Z"), 50);
 
@@ -324,6 +328,40 @@ class ScheduledTransferServiceTest {
         verify(runRepository, never()).save(argThat(run -> run.getStatus() == ScheduledTransferRunStatus.COMPLETED));
         assertThat(schedule.getNextRunAt()).isEqualTo(scheduledFor);
         verify(metricsService).recordScheduledTransferDuplicatePrevented();
+    }
+
+    @Test
+    void staleProcessingRunWithoutTransactionIsRetriedWithoutDeletingEvidence() {
+        Instant scheduledFor = Instant.parse("2026-07-01T09:00:00Z");
+        String idempotencyKey = "scheduled-transfer:schedule-1:2026-07-01T09:00:00Z";
+        ScheduledTransfer schedule = activeSchedule("schedule-1", "customer");
+        schedule.setNextRunAt(scheduledFor);
+        ScheduledTransferRun strandedRun = ScheduledTransferRun.builder()
+                .runId("run-1")
+                .schedule(schedule)
+                .scheduledFor(scheduledFor)
+                .startedAt(scheduledFor)
+                .status(ScheduledTransferRunStatus.PROCESSING)
+                .idempotencyKey(idempotencyKey)
+                .build();
+        when(scheduleRepository.findDueActiveForUpdate(any(), any())).thenReturn(List.of(schedule));
+        when(runRepository.existsByScheduleScheduleIdAndScheduledFor("schedule-1", scheduledFor)).thenReturn(true);
+        when(runRepository.findByScheduleScheduleIdAndScheduledFor("schedule-1", scheduledFor))
+                .thenReturn(Optional.of(strandedRun));
+        when(transactionRepository.findFirstByCreatedByAndTypeAndIdempotencyKey(
+                "customer", TransactionType.TRANSFER, idempotencyKey)).thenReturn(Optional.empty());
+        when(runRepository.save(any(ScheduledTransferRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scheduleRepository.save(any(ScheduledTransfer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transactionService.processTransfer(any(TransferRequest.class), eq("customer"), eq(idempotencyKey)))
+                .thenReturn(TransactionResponse.builder().transactionId("txn-recovered").build());
+
+        int processed = service.executeDueTransfers(Instant.parse("2026-07-01T09:10:00Z"), 50);
+
+        assertThat(processed).isEqualTo(1);
+        verify(transactionService).processTransfer(any(TransferRequest.class), eq("customer"), eq(idempotencyKey));
+        verify(runRepository, never()).delete(any(ScheduledTransferRun.class));
+        assertThat(strandedRun.getStatus()).isEqualTo(ScheduledTransferRunStatus.COMPLETED);
+        assertThat(strandedRun.getTransactionId()).isEqualTo("txn-recovered");
     }
 
     private ScheduledTransferCreateRequest baseCreateRequest() {

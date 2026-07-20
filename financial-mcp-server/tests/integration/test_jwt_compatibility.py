@@ -15,7 +15,7 @@ class TestJWTCompatibility:
     @pytest.fixture
     def jwt_secret(self):
         """JWT secret key used by existing services."""
-        return "AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14="
+        return "test-only-placeholder-secret-at-least-32-bytes"
     
     @pytest.fixture
     def auth_handler(self, jwt_secret):

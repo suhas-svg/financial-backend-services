@@ -1,10 +1,10 @@
 package com.suhasan.finance.account_service.controller;
 
+import com.suhasan.finance.account_service.dto.AccountResponse;
 import com.suhasan.finance.account_service.dto.BalanceOperationRequest;
 import com.suhasan.finance.account_service.dto.BalanceOperationResponse;
 import com.suhasan.finance.account_service.dto.DebitHoldRequest;
 import com.suhasan.finance.account_service.dto.DebitHoldResponse;
-import com.suhasan.finance.account_service.dto.AccountResponse;
 import com.suhasan.finance.account_service.dto.LedgerProjectionUpdateRequest;
 import com.suhasan.finance.account_service.entity.Account;
 import com.suhasan.finance.account_service.service.AccountService;
@@ -15,9 +15,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,81 +25,75 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.math.BigDecimal;
-
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/internal/accounts")
 public class InternalAccountController {
-
     private final AccountService accountService;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.suhasan.finance.account_service.service.SpendingLimitService spendingLimitService;
 
     @PostMapping("/{id}/spending-limit-reservations")
-    public ResponseEntity<com.suhasan.finance.account_service.dto.SpendingLimitDtos.ReserveResponse> reserveLimit(@PathVariable Long id, @Valid @RequestBody com.suhasan.finance.account_service.dto.SpendingLimitDtos.ReserveRequest request) { return ResponseEntity.ok(spendingLimitService.reserve(id, request)); }
+    public ResponseEntity<com.suhasan.finance.account_service.dto.SpendingLimitDtos.ReserveResponse> reserveLimit(
+            @PathVariable Long id,
+            @Valid @RequestBody com.suhasan.finance.account_service.dto.SpendingLimitDtos.ReserveRequest request) {
+        return ResponseEntity.ok(spendingLimitService.reserve(id, request));
+    }
 
     @DeleteMapping("/{id}/spending-limit-reservations/{operationType}/{idempotencyKey}")
-    public ResponseEntity<Void> releaseLimit(@PathVariable Long id, @PathVariable String operationType, @PathVariable String idempotencyKey, @RequestParam String userId) { spendingLimitService.release(id, operationType, idempotencyKey, userId); return ResponseEntity.noContent().build(); }
+    public ResponseEntity<Void> releaseLimit(@PathVariable Long id, @PathVariable String operationType,
+            @PathVariable String idempotencyKey, @RequestParam String userId) {
+        spendingLimitService.release(id, operationType, idempotencyKey, userId);
+        return ResponseEntity.noContent().build();
+    }
 
     @GetMapping("/spending-limit-audit")
-    public java.util.List<com.suhasan.finance.account_service.dto.SpendingLimitDtos.AuditResponse> spendingLimitAudit() { return spendingLimitService.auditEvents(); }
+    public java.util.List<com.suhasan.finance.account_service.dto.SpendingLimitDtos.AuditResponse> spendingLimitAudit() {
+        return spendingLimitService.auditEvents();
+    }
 
     @GetMapping("/{id}")
     public ResponseEntity<Account> get(@PathVariable Long id) {
         return ResponseEntity.ok(accountService.findById(id));
     }
 
-    @PutMapping("/{id}/balance")
-    public ResponseEntity<Void> updateBalance(@PathVariable Long id,
-                                              @Valid @RequestBody BalanceUpdateRequest request) {
-        accountService.updateBalance(id, request.getBalance());
-        return ResponseEntity.noContent().build();
+    @PostMapping("/{id}/close")
+    public ResponseEntity<Account> close(@PathVariable Long id, @RequestParam String reason) {
+        return ResponseEntity.ok(accountService.close(id, reason, "transaction-service"));
     }
 
     @PostMapping("/{id}/balance-ops")
     public ResponseEntity<BalanceOperationResponse> applyBalanceOperation(
-            @PathVariable Long id,
-            @Valid @RequestBody BalanceOperationRequest request) {
+            @PathVariable Long id, @Valid @RequestBody BalanceOperationRequest request) {
         return ResponseEntity.ok(accountService.applyBalanceOperation(id, request));
     }
 
     @PutMapping("/{id}/ledger-projection")
     public ResponseEntity<AccountResponse> updateLedgerProjection(
-            @PathVariable Long id,
-            @Valid @RequestBody LedgerProjectionUpdateRequest request) {
+            @PathVariable Long id, @Valid @RequestBody LedgerProjectionUpdateRequest request) {
         return ResponseEntity.ok(accountService.applyLedgerProjection(id, request));
     }
 
     @PostMapping("/{id}/holds")
     public ResponseEntity<DebitHoldResponse> placeDebitHold(
-            @PathVariable Long id,
-            @Valid @RequestBody DebitHoldRequest request) {
+            @PathVariable Long id, @Valid @RequestBody DebitHoldRequest request) {
         return ResponseEntity.ok(accountService.placeDebitHold(id, request));
     }
 
     @PostMapping("/{id}/holds/{holdId}/capture")
     public ResponseEntity<DebitHoldResponse> captureDebitHold(
-            @PathVariable Long id,
-            @PathVariable String holdId,
+            @PathVariable Long id, @PathVariable String holdId,
             @Valid @RequestBody HoldTransitionRequest request) {
-        return ResponseEntity.ok(accountService.captureDebitHold(id, holdId, request.getTransactionId(), request.getReason()));
+        return ResponseEntity.ok(accountService.captureDebitHold(
+                id, holdId, request.getTransactionId(), request.getReason()));
     }
 
     @PostMapping("/{id}/holds/{holdId}/release")
     public ResponseEntity<DebitHoldResponse> releaseDebitHold(
-            @PathVariable Long id,
-            @PathVariable String holdId,
+            @PathVariable Long id, @PathVariable String holdId,
             @Valid @RequestBody HoldTransitionRequest request) {
-        return ResponseEntity.ok(accountService.releaseDebitHold(id, holdId, request.getTransactionId(), request.getReason()));
-    }
-
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class BalanceUpdateRequest {
-        @NotNull(message = "Balance is required")
-        private BigDecimal balance;
+        return ResponseEntity.ok(accountService.releaseDebitHold(
+                id, holdId, request.getTransactionId(), request.getReason()));
     }
 
     @Data

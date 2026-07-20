@@ -226,6 +226,29 @@ class LedgerMigrationIntegrationTest {
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("immutable");
     }
+    @Test
+    void freshMigrationSeedsRequiredZeroBalanceSystemAccounts() {
+        Integer accountCount = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM ledger_accounts
+                WHERE account_kind IN ('CLEARING', 'SUSPENSE', 'FEE')
+                  AND currency IN ('USD', 'EUR', 'GBP', 'INR')
+                  AND status = 'ACTIVE'
+                """, Integer.class);
+        assertThat(accountCount).isEqualTo(12);
+
+        Integer projectionCount = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM ledger_accounts account
+                JOIN ledger_balance_projections projection
+                  ON projection.ledger_account_id = account.ledger_account_id
+                WHERE account.account_kind IN ('CLEARING', 'SUSPENSE', 'FEE')
+                  AND account.currency IN ('USD', 'EUR', 'GBP', 'INR')
+                  AND projection.posted_balance = 0
+                  AND projection.pending_balance = 0
+                  AND projection.available_balance = 0
+                """, Integer.class);
+        assertThat(projectionCount).isEqualTo(12);
+    }
+
     private static UUID insertLedgerAccount(String kind, String currency, String externalAccountId) {
         if (externalAccountId == null && !"CUSTOMER".equals(kind)) {
             var existing = jdbc.query(

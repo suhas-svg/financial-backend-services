@@ -326,7 +326,34 @@ public class TransactionServiceImpl implements TransactionService {
         Optional<Transaction> existing = findIdempotentTransaction(userId, TransactionType.DEPOSIT,
                 normalizedIdempotencyKey);
         if (existing.isPresent()) {
-            return mapToResponse(existing.get());
+            Transaction replay = existing.get();
+            requireDepositReplayMatches(replay, accountId, amount, description, reference);
+            if (replay.getStatus() == TransactionStatus.COMPLETED) {
+                if (ledgerAuthoritative && replay.getJournalId() == null) {
+                    throw new IllegalStateException(
+                            "Completed idempotent deposit has no ledger journal; operator reconciliation required");
+                }
+                return mapToResponse(replay);
+            }
+            if (!ledgerAuthoritative) {
+                throw new IllegalStateException(
+                        "Idempotent deposit did not complete; operator reconciliation required");
+            }
+
+            AccountDto replayAccount = accountServiceClient.getAccount(accountId);
+            if (replayAccount == null) {
+                throw new IllegalArgumentException("Account not found");
+            }
+            ensureAccountOwnedByUser(replayAccount, userId);
+            if (!validateTransactionLimits(
+                    accountId, replayAccount.getAccountType(), TransactionType.DEPOSIT, amount)) {
+                throw new IllegalArgumentException("Transaction exceeds limits");
+            }
+            replay.setStatus(TransactionStatus.PROCESSING);
+            replay.setProcessingState(TransactionProcessingState.INITIATED);
+            replay.setProcessedAt(null);
+            replay.setProcessedBy(null);
+            return processLedgerDeposit(replay, replayAccount, normalizedIdempotencyKey);
         }
 
         AccountDto account = accountServiceClient.getAccount(accountId);
@@ -1175,6 +1202,28 @@ public class TransactionServiceImpl implements TransactionService {
         }
         return transactionRepository.findFirstByCreatedByAndTypeAndIdempotencyKey(
                 userId, type, normalizedIdempotencyKey);
+    }
+
+    private void requireDepositReplayMatches(
+            Transaction existing,
+            String accountId,
+            BigDecimal amount,
+            String description,
+            String reference) {
+        boolean amountMatches = existing.getAmount() != null
+                && amount != null
+                && existing.getAmount().compareTo(amount) == 0;
+        if (!Objects.equals(existing.getToAccountId(), accountId)
+                || !amountMatches
+                || !Objects.equals(existing.getDescription(), description)
+                || !Objects.equals(existing.getReference(), reference)) {
+            throw new IllegalArgumentException("Idempotency key payload conflict");
+        }
+        if (existing.getStatus() != TransactionStatus.FAILED
+                && existing.getStatus() != TransactionStatus.PROCESSING
+                && existing.getStatus() != TransactionStatus.COMPLETED) {
+            throw new IllegalStateException("Idempotent deposit is not recoverable from " + existing.getStatus());
+        }
     }
 
     private void ensureAccountOwnedByUser(AccountDto account, String userId) {

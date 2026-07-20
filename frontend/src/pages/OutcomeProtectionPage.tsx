@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, FlaskConical, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import type { LedgerAccountProjection, OutcomeAssumptionType, OutcomeScenario, OutcomeScenarioRequest, OutcomeShockType } from "../types";
@@ -86,7 +86,7 @@ export function OutcomeProtectionPage() {
   });
   const accept = useMutation({
     mutationFn: (guardrailId: string) => acceptOutcomeGuardrail(guardrailId, createIdempotencyKey("guardrail-accept")),
-    onSuccess: (_guardrail) => queryClient.invalidateQueries({ queryKey: ["outcome-scenario", selectedScenarioId] })
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["outcome-scenario", selectedScenarioId] })
   });
   const acknowledge = useMutation({
     mutationFn: (eventId: string) => acknowledgeOutcomeWarning(eventId, createIdempotencyKey("outcome-warning-ack"))

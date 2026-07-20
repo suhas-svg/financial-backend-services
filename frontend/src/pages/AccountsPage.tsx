@@ -1,9 +1,9 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { createAccount, deleteAccount, listAccounts, listLedgerAccounts, updateAccount } from "../lib/queries";
+import { createAccount, listAccounts, listLedgerAccounts, updateAccount } from "../lib/queries";
 import { accountSchema, type AccountValues } from "../lib/schemas";
 import { compactDate, money } from "../lib/format";
 import { availableBalance, ledgerBalance, pendingBalance, projectionFor, projectionMap } from "../lib/accountBalances";
@@ -21,25 +21,21 @@ export function AccountsPage() {
   const projections = projectionMap(ledgerAccounts.data);
   const form = useForm<AccountValues>({
     resolver: zodResolver(accountSchema),
-    defaultValues: { accountType: "CHECKING", currency: "USD", balance: 0, interestRate: 0 }
+    defaultValues: { accountType: "CHECKING", currency: "USD", interestRate: 0 }
   });
   const accountType = form.watch("accountType");
   const createMutation = useMutation({
     mutationFn: createAccount,
     onSuccess: () => {
-      form.reset({ accountType: "CHECKING", currency: "USD", balance: 0, interestRate: 0 });
+      form.reset({ accountType: "CHECKING", currency: "USD", interestRate: 0 });
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
     }
-  });
-  const deleteMutation = useMutation({
-    mutationFn: deleteAccount,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["accounts"] })
   });
   const updateMutation = useMutation({
     mutationFn: (values: AccountValues) => updateAccount(editing?.id ?? 0, values),
     onSuccess: () => {
       setEditing(null);
-      form.reset({ accountType: "CHECKING", currency: "USD", balance: 0, interestRate: 0 });
+      form.reset({ accountType: "CHECKING", currency: "USD", interestRate: 0 });
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
     }
   });
@@ -50,7 +46,6 @@ export function AccountsPage() {
     form.reset({
       accountType: account.accountType,
       currency: account.currency,
-      balance: account.balance,
       ownerId: account.ownerId,
       interestRate: account.interestRate ?? 0,
       creditLimit: account.creditLimit,
@@ -60,7 +55,7 @@ export function AccountsPage() {
 
   const resetForm = () => {
     setEditing(null);
-    form.reset({ accountType: "CHECKING", currency: "USD", balance: 0, interestRate: 0 });
+    form.reset({ accountType: "CHECKING", currency: "USD", interestRate: 0 });
   };
 
   return (
@@ -83,9 +78,6 @@ export function AccountsPage() {
               <option value="GBP">GBP</option>
               <option value="INR">INR</option>
             </Select>
-          </Field>
-          <Field label="Opening balance" error={form.formState.errors.balance?.message}>
-            <Input type="number" step="0.01" {...form.register("balance")} />
           </Field>
           {accountType === "SAVINGS" ? (
             <Field label="Interest rate" error={form.formState.errors.interestRate?.message}>
@@ -227,9 +219,6 @@ export function AccountsPage() {
                         </Button>
                         <Button variant="ghost" onClick={() => startEdit(account)} aria-label={`Edit account ${account.id}`}>
                           <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" onClick={() => deleteMutation.mutate(account.id)} disabled={deleteMutation.isPending} aria-label={`Delete account ${account.id}`}>
-                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </td>

@@ -68,7 +68,7 @@ Every attempt writes a `ledger_bootstrap_runs` audit row with actor, role, reque
 
 Use the repository orchestration script. Never pass the token on the command line or store it in shell history.
 
-    $env:LEDGER_BOOTSTRAP_OPERATOR_TOKEN = '<short-lived-role-admin-jwt>'
+    $env:LEDGER_BOOTSTRAP_OPERATOR_TOKEN = '<set-via-secret-manager>'
     $requestId = 'change-123-ledger-bootstrap-01'
     .\scripts\ledger-bootstrap-deployment.ps1 -Action Preflight -BaseUrl 'https://transaction-service.example' -MaintenanceConfirmed -RequestId $requestId
     $env:LEDGER_BOOTSTRAP_CONFIRM_RUN = 'RUN'

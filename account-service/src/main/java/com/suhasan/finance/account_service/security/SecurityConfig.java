@@ -64,6 +64,7 @@ public class SecurityConfig {
 
                         // ── Internal service-to-service API ────────────────────────────────
                         .requestMatchers("/api/internal/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
                         // ── Remaining health endpoints (POST /check, POST /deployment, /metrics)
                         // restricted to privileged roles (H2 fix) ──────────────────────

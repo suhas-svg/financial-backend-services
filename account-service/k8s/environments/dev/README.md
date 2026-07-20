@@ -36,8 +36,14 @@ chmod +x deploy.sh
 # Create namespace
 kubectl apply -f namespace.yaml
 
-# Apply secrets and RBAC
-kubectl apply -f secrets.yaml
+# Create ignored local secret inputs from the safe templates, then edit them
+cp account-service-secrets.env.example account-service-secrets.env
+cp postgres-secrets.env.example postgres-secrets.env
+
+# Create/update Secrets without writing rendered Secret manifests to disk
+kubectl create secret generic account-service-secrets --namespace=finance-services-dev --from-env-file=account-service-secrets.env --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic postgres-secrets --namespace=finance-services-dev --from-env-file=postgres-secrets.env --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f access-control.yaml
 
 # Apply configuration
 kubectl apply -f configmap.yaml
@@ -58,6 +64,10 @@ kubectl wait --for=condition=available --timeout=300s deployment/account-service
 kubectl apply -f smoke-tests.yaml
 ```
 
+Before deploying, copy both `*.env.example` files to the corresponding ignored
+`*.env` names and replace every `change-me` value. Both the automated script and
+Kustomize fail closed if these local inputs are missing. Never commit the local
+files or a rendered Kubernetes Secret manifest.
 ### Using Kustomize
 
 ```bash
@@ -273,10 +283,15 @@ kubectl delete namespace finance-services-dev
 kubectl delete -f deployment.yaml
 kubectl delete -f postgres-deployment.yaml
 kubectl delete -f configmap.yaml
-kubectl delete -f secrets.yaml
+kubectl delete secret account-service-secrets postgres-secrets -n finance-services-dev
+kubectl delete -f access-control.yaml
 kubectl delete -f namespace.yaml
 ```
 
+Before deploying, copy both `*.env.example` files to the corresponding ignored
+`*.env` names and replace every `change-me` value. Both the automated script and
+Kustomize fail closed if these local inputs are missing. Never commit the local
+files or a rendered Kubernetes Secret manifest.
 ### Using Kustomize
 
 ```bash

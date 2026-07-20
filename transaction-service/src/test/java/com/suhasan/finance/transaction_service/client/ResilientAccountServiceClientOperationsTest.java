@@ -53,16 +53,12 @@ class ResilientAccountServiceClientOperationsTest {
     }
 
     @Test
-    void balanceUpdateAndIdempotentOperationUseInternalEndpoints() {
-        server.stubFor(put(urlEqualTo("/api/internal/accounts/42/balance"))
-                .willReturn(aResponse().withStatus(204)));
+    void idempotentBalanceOperationUsesInternalLedgerEndpoint() {
         server.stubFor(post(urlEqualTo("/api/internal/accounts/42/balance-ops"))
                 .willReturn(okJson("""
                         {"accountId":42,"operationId":"op-1","applied":true,
                          "newBalance":125.00,"version":3,"status":"ACTIVE"}
                         """)));
-
-        client.updateAccountBalance("42", new BigDecimal("125.00"));
         var response = client.applyBalanceOperation(
                 "42", "op-1", new BigDecimal("25.00"), "transaction-1", "DEPOSIT", false);
 
@@ -70,9 +66,6 @@ class ResilientAccountServiceClientOperationsTest {
         assertThat(response.getOperationId()).isEqualTo("op-1");
         assertThat(response.isApplied()).isTrue();
         assertThat(response.getNewBalance()).isEqualByComparingTo("125.00");
-        server.verify(putRequestedFor(urlEqualTo("/api/internal/accounts/42/balance"))
-                .withHeader(HttpHeaders.AUTHORIZATION, matching("Bearer .+"))
-                .withRequestBody(equalToJson("{\"balance\":125.00}")));
         server.verify(postRequestedFor(urlEqualTo("/api/internal/accounts/42/balance-ops"))
                 .withRequestBody(matchingJsonPath("$.operationId", equalTo("op-1")))
                 .withRequestBody(matchingJsonPath("$.allowNegative", equalTo("false"))));

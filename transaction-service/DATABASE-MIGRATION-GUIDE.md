@@ -69,7 +69,7 @@ src/main/resources/db/migration/
 #### Production Environment
 ```bash
 # Set environment variable for production password
-export FLYWAY_PASSWORD=your_production_password
+export FLYWAY_PASSWORD=<set-via-secret-manager>
 
 # Run migrations for production
 ./mvnw flyway:migrate -Pprod

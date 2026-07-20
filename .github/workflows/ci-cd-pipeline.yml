@@ -20,8 +20,8 @@ jobs:
           set -euo pipefail
 
           disallowed_ddl_files=(
-            "account-service/src/main/resources/application-prod.properties"
-            "transaction-service/src/main/resources/application-prod.properties"
+            "account-service/src/main/resources/application-production.properties"
+            "transaction-service/src/main/resources/application-production.properties"
             "infrastructure/helm/account-service/values-prod.yaml"
           )
 
@@ -32,22 +32,14 @@ jobs:
             fi
           done
 
-          if grep -R \
-              --exclude-dir=.git \
-              --exclude-dir=target \
-              --exclude-dir=src/test \
-              --exclude='*.md' \
-              --exclude='*.log' \
-              "AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14=" \
-              account-service \
-              transaction-service \
-              infrastructure \
-              docker-compose.yml \
-              account-service/docker-compose.yml \
-              transaction-service/docker-compose.yml >/dev/null; then
-            echo "Found disallowed hardcoded JWT secret in repository"
+          if git ls-files --error-unmatch \
+              financial-mcp-server/.env.dev \
+              financial-mcp-server/.env.staging \
+              financial-mcp-server/.env.prod >/dev/null 2>&1; then
+            echo "Tracked MCP runtime environment file found"
             exit 1
           fi
+
 
   account-tests:
     name: Account Service Tests (Java ${{ matrix.java }})
@@ -89,9 +81,39 @@ jobs:
           distribution: temurin
           cache: maven
 
-      - name: Run transaction-service hardening tests
+      - name: Run transaction-service unit/integration tests
         working-directory: transaction-service
-        run: ./mvnw -q -Dtest=TransactionServiceHardeningTest test
+        run: ./mvnw -q test -DskipITs
+
+  frontend-tests:
+    name: Frontend Lint, Tests, and Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Test
+        working-directory: frontend
+        run: npm test
+
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
 
   dependency-scan:
     name: Dependency Scan

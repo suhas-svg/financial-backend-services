@@ -71,14 +71,18 @@ class AuditServicePersistenceTest {
     }
 
     @Test
-    void nonFinancialNoise_IsNotPersisted() {
+    void apiAccessEvidence_IsPersistedWhileNonFinancialNoiseIsNot() {
         auditService.logApiAccess("/api/transactions", "GET", "user-1", "127.0.0.1", 200, 12);
         auditService.logSystemEvent("DAILY_RESET", "MetricsService", "Reset complete", null);
         auditService.logBalanceCheck("acc-1", BigDecimal.TEN, BigDecimal.TEN, true, "user-1");
         auditService.logTransactionLimitCheck("acc-1", "CHECKING", TransactionType.WITHDRAWAL,
                 BigDecimal.TEN, true, "DAILY", new BigDecimal("1000"), "user-1");
 
-        verify(repository, never()).save(any());
+        verify(repository).save(argThat(entry -> "API_ACCESS".equals(entry.getEventType())
+                && "GET /api/transactions".equals(entry.getAction())
+                && "user-1".equals(entry.getUserId())
+                && entry.getDetails().contains("status=200")));
+        verifyNoMoreInteractions(repository);
     }
 
     @Test

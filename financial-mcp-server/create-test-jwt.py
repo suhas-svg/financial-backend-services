@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timedelta
 
 # JWT secret from the services
-JWT_SECRET = "AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14="
+JWT_SECRET = "test-only-placeholder-secret-at-least-32-bytes"
 
 def create_test_token():
     """Create a test JWT token."""

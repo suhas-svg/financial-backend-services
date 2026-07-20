@@ -12,7 +12,7 @@ services:
       - MCP_PORT=8082
       - ACCOUNT_SERVICE_URL=http://account-service:8080
       - TRANSACTION_SERVICE_URL=http://transaction-service:8081
-      - JWT_SECRET=${JWT_SECRET:-your-secret-key}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - METRICS_ENABLED=true
       - METRICS_PORT=9090
@@ -41,7 +41,7 @@ services:
       - DB_NAME=myfirstdb
       - DB_USER=postgres
       - DB_PASSWORD=postgres
-      - JWT_SECRET=${JWT_SECRET:-your-secret-key}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
     depends_on:
       - postgres
     networks:
@@ -60,7 +60,7 @@ services:
       - DB_NAME=transactiondb
       - DB_USER=postgres
       - DB_PASSWORD=postgres
-      - JWT_SECRET=${JWT_SECRET:-your-secret-key}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - ACCOUNT_SERVICE_URL=http://account-service:8080
     depends_on:
       - postgres

@@ -1,7 +1,5 @@
-version: '3.8'
-
 services:
-  # PostgreSQL Database - Shared by both services
+  # PostgreSQL Database - shared server with isolated service schemas
   postgres-e2e:
     image: postgres:15-alpine
     container_name: postgres-full-e2e
@@ -48,7 +46,9 @@ services:
     container_name: account-service-full-e2e
     environment:
       SPRING_PROFILES_ACTIVE: e2e
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-e2e:5432/fullsystem_test
+      TZ: UTC
+      JAVA_TOOL_OPTIONS: -Duser.timezone=UTC
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-e2e:5432/fullsystem_test?currentSchema=account_service
       SPRING_DATASOURCE_USERNAME: testuser
       SPRING_DATASOURCE_PASSWORD: testpass
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
@@ -59,7 +59,8 @@ services:
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
       MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
       # JWT Configuration
-      JWT_SECRET: AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14=
+      JWT_SECRET: ${PHASE1_JWT_SECRET:?set PHASE1_JWT_SECRET}
+      INTERNAL_JWT_SECRET: ${PHASE1_INTERNAL_JWT_SECRET:?set PHASE1_INTERNAL_JWT_SECRET}
       JWT_EXPIRATION: 3600000
     ports:
       - "8081:8080"
@@ -85,7 +86,9 @@ services:
     container_name: transaction-service-full-e2e
     environment:
       SPRING_PROFILES_ACTIVE: e2e
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-e2e:5432/fullsystem_test
+      TZ: UTC
+      JAVA_TOOL_OPTIONS: -Duser.timezone=UTC
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-e2e:5432/fullsystem_test?currentSchema=transaction_service
       SPRING_DATASOURCE_USERNAME: testuser
       SPRING_DATASOURCE_PASSWORD: testpass
       SPRING_DATA_REDIS_HOST: redis-e2e
@@ -100,8 +103,10 @@ services:
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
       MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
       # JWT Configuration
-      JWT_SECRET: AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14=
+      JWT_SECRET: ${PHASE1_JWT_SECRET:?set PHASE1_JWT_SECRET}
+      INTERNAL_JWT_SECRET: ${PHASE1_INTERNAL_JWT_SECRET:?set PHASE1_INTERNAL_JWT_SECRET}
       JWT_EXPIRATION: 3600000
+      CONTROLLED_BETA_SYNTHETIC_FUNDING_ENABLED: "true"
       # Circuit Breaker Configuration
       RESILIENCE4J_CIRCUITBREAKER_INSTANCES_ACCOUNT_SERVICE_SLIDING_WINDOW_SIZE: 10
       RESILIENCE4J_CIRCUITBREAKER_INSTANCES_ACCOUNT_SERVICE_FAILURE_RATE_THRESHOLD: 50
@@ -116,7 +121,7 @@ services:
       account-service-e2e:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
       interval: 30s
       timeout: 10s
       retries: 5

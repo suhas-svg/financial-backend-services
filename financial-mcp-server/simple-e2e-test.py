@@ -28,7 +28,7 @@ class SimpleE2ETest:
     def __init__(self):
         self.account_service_url = "http://localhost:8083"
         self.transaction_service_url = "http://localhost:8082"
-        self.jwt_secret = "AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14="
+        self.jwt_secret = "test-only-placeholder-secret-at-least-32-bytes"
         
         # Test results
         self.test_results = []

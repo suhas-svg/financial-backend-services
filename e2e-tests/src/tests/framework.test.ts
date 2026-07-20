@@ -138,7 +138,7 @@ describe('E2E Testing Framework', () => {
     });
 
     test('should validate JWT token format', () => {
-      const validToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
+      const validToken = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJ0ZXN0LXVzZXIifQ', 'test-signature'].join('.');
       const invalidToken = 'invalid.token';
       
       expect(isValidJwtToken(validToken)).toBe(true);
@@ -184,7 +184,7 @@ describe('E2E Testing Framework', () => {
     });
 
     test('should have custom JWT token matcher', () => {
-      const validToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
+      const validToken = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJ0ZXN0LXVzZXIifQ', 'test-signature'].join('.');
       
       expect(validToken).toHaveValidJwtToken();
     });

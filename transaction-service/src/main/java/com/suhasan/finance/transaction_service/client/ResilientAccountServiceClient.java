@@ -105,37 +105,6 @@ public class ResilientAccountServiceClient {
     }
 
     @CacheEvict(value = "account:validation", key = "#accountId")
-    public void updateAccountBalance(String accountId, BigDecimal newBalance) {
-        try {
-            updateAccountBalanceAsync(accountId, newBalance).block();
-        } catch (Exception e) {
-            throw mapServiceException("balance update", e);
-        }
-    }
-
-    private Mono<Void> updateAccountBalanceAsync(String accountId, BigDecimal newBalance) {
-        String serviceToken = generateInternalServiceToken();
-        return Mono.fromCallable(() -> {
-                    WebClient webClient = webClientBuilder.baseUrl(accountServiceBaseUrl).build();
-                    webClient.put()
-                            .uri("/api/internal/accounts/{id}/balance", accountId)
-                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceToken)
-                            .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                            .bodyValue(new BalanceUpdateRequest(newBalance))
-                            .retrieve()
-                            .bodyToMono(Void.class)
-                            .timeout(Duration.ofMillis(timeout))
-                            .block();
-                    return null;
-                })
-                .subscribeOn(Schedulers.boundedElastic())
-                .then()
-                .transformDeferred(RetryOperator.of(accountServiceRetry))
-                .transformDeferred(CircuitBreakerOperator.of(accountServiceCircuitBreaker))
-                .transformDeferred(TimeLimiterOperator.of(accountServiceTimeLimiter));
-    }
-
-    @CacheEvict(value = "account:validation", key = "#accountId")
     public BalanceOperationResponse applyBalanceOperation(String accountId,
                                                           String operationId,
                                                           BigDecimal delta,
@@ -357,6 +326,20 @@ public class ResilientAccountServiceClient {
         }
     }
 
+    @CacheEvict(value = "account:validation", key = "#accountId")
+    public AccountDto closeAccount(String accountId, String reason) {
+        String serviceToken = generateInternalServiceToken();
+        try {
+            return webClientBuilder.baseUrl(accountServiceBaseUrl).build().post()
+                    .uri(builder -> builder.path("/api/internal/accounts/{id}/close")
+                            .queryParam("reason", reason).build(accountId))
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceToken)
+                    .retrieve().bodyToMono(AccountDto.class)
+                    .timeout(Duration.ofMillis(timeout)).block();
+        } catch (Exception e) {
+            throw mapServiceException("account closure", e);
+        }
+    }
     public boolean checkHealth() {
         try {
             return checkHealthAsync().block();
@@ -502,13 +485,6 @@ public class ResilientAccountServiceClient {
                 .expiration(Date.from(exp))
                 .signWith(Keys.hmacShaKeyFor(internalJwtSecret.getBytes(StandardCharsets.UTF_8)))
                 .compact();
-    }
-
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class BalanceUpdateRequest {
-        private BigDecimal balance;
     }
 
     @Data

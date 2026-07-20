@@ -109,7 +109,8 @@ services:
       MANAGEMENT_HEALTH_RATELIMITERS_ENABLED: true
       
       # JWT Configuration
-      JWT_SECRET: e2e-test-secret-key-for-comprehensive-testing-AY8Ro0HSBFyllm9ZPafT2GWuE
+      JWT_SECRET: ${E2E_JWT_SECRET:?set E2E_JWT_SECRET}
+      INTERNAL_JWT_SECRET: ${E2E_INTERNAL_JWT_SECRET:?set E2E_INTERNAL_JWT_SECRET}
       JWT_EXPIRATION: 3600000
       
       # Logging Configuration
@@ -193,7 +194,8 @@ services:
       MANAGEMENT_HEALTH_RATELIMITERS_ENABLED: true
       
       # JWT Configuration
-      JWT_SECRET: e2e-test-secret-key-for-comprehensive-testing-AY8Ro0HSBFyllm9ZPafT2GWuE
+      JWT_SECRET: ${E2E_JWT_SECRET:?set E2E_JWT_SECRET}
+      INTERNAL_JWT_SECRET: ${E2E_INTERNAL_JWT_SECRET:?set E2E_INTERNAL_JWT_SECRET}
       JWT_EXPIRATION: 3600000
       
       # Circuit Breaker Configuration

@@ -61,11 +61,11 @@ public class LedgerPostingService {
                 .distinct()
                 .sorted()
                 .toList();
-        Map<UUID, LedgerAccount> accounts = toAccountMap(accountRepository.findAllById(accountIds));
-        requirePostableAccounts(command.currency(), accountIds, accounts);
         Map<UUID, LedgerBalanceProjection> projections = toProjectionMap(
                 projectionRepository.lockAllOrdered(accountIds));
         requireAllProjections(accountIds, projections);
+        Map<UUID, LedgerAccount> accounts = toAccountMap(accountRepository.findAllById(accountIds));
+        requirePostableAccounts(command.currency(), accountIds, accounts);
 
         UUID journalId = UUID.randomUUID();
         JournalTransaction journal = journalRepository.save(JournalTransaction.builder()
@@ -199,11 +199,11 @@ public class LedgerPostingService {
                 .distinct()
                 .sorted()
                 .toList();
-        Map<UUID, LedgerAccount> accounts = toAccountMap(accountRepository.findAllById(accountIds));
-        requirePostableAccounts(journal.getCurrency(), accountIds, accounts);
         Map<UUID, LedgerBalanceProjection> projections = toProjectionMap(
                 projectionRepository.lockAllOrdered(accountIds));
         requireAllProjections(accountIds, projections);
+        Map<UUID, LedgerAccount> accounts = toAccountMap(accountRepository.findAllById(accountIds));
+        requirePostableAccounts(journal.getCurrency(), accountIds, accounts);
         for (JournalPosting posting : postings) {
             LedgerBalanceProjection projection = projections.get(posting.getLedgerAccountId());
             long projectionEventSequence = projection.getLastEventSequence() + 1L;

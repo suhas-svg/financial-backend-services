@@ -27,7 +27,7 @@ class TestSecurityValidation:
             mock_settings = MagicMock()
             mock_settings.account_service_url = "http://localhost:8080"
             mock_settings.transaction_service_url = "http://localhost:8081"
-            mock_settings.jwt_secret = "AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14="
+            mock_settings.jwt_secret = "test-only-placeholder-secret-at-least-32-bytes"
             mock_settings.server_timeout = 5000
             mock_settings_class.return_value = mock_settings
             
@@ -37,7 +37,7 @@ class TestSecurityValidation:
     @pytest.fixture
     def security_jwt_handler(self):
         """Create JWT handler for security testing."""
-        return JWTAuthHandler("AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14=")
+        return JWTAuthHandler("test-only-placeholder-secret-at-least-32-bytes")
 
     @pytest.mark.asyncio
     async def test_authentication_security_validation(self, security_server, security_jwt_handler):
@@ -103,7 +103,7 @@ class TestSecurityValidation:
             "",
             "a.b",  # Missing signature
             "a.b.c.d",  # Too many parts
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.invalid_payload.signature"
+            ".".join(("fixture-header", "fixture-payload", "fixture-signature"))
         ]
         
         for malformed_token in malformed_tokens:

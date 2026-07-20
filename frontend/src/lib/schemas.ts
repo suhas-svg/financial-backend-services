@@ -17,7 +17,6 @@ export const accountSchema = z
   .object({
     accountType: z.enum(["CHECKING", "SAVINGS", "CREDIT"]),
     currency,
-    balance: z.coerce.number().min(0, "Balance must be zero or positive"),
     ownerId: z.string().optional(),
     interestRate: z.coerce.number().min(0).optional(),
     creditLimit: z.coerce.number().min(0).optional(),

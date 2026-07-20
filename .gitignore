@@ -133,6 +133,9 @@ frontend/vite.config.js
 
 # Kubernetes secrets
 k8s/secrets.yaml
+**/k8s/**/secrets.yaml
+**/k8s/**/account-service-secrets.env
+**/k8s/**/postgres-secrets.env
 
 # Local development
 *.local
@@ -183,3 +186,7 @@ endpoint-test-results.md
 
 # Service log files captured at root level
 logs.txt
+# Runtime environment files (all modules)
+**/.env
+**/.env.*
+!**/.env.example

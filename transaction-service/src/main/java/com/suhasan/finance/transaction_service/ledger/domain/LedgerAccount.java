@@ -35,4 +35,14 @@ public class LedgerAccount {
     @Version
     @Column(nullable = false)
     private long version;
+
+    public void close() {
+        if (status == LedgerAccountStatus.CLOSED) {
+            return;
+        }
+        if (status != LedgerAccountStatus.ACTIVE) {
+            throw new IllegalStateException("Only active ledger accounts can be closed");
+        }
+        status = LedgerAccountStatus.CLOSED;
+    }
 }

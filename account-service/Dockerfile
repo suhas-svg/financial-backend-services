@@ -94,8 +94,7 @@ ENV JAVA_OPTS="-XX:+UseContainerSupport \
                -XX:+UseG1GC \
                -XX:+UseStringDeduplication \
                -XX:+OptimizeStringConcat \
-               -Djava.security.egd=file:/dev/./urandom \
-               -Dspring.profiles.active=prod"
+               -Djava.security.egd=file:/dev/./urandom"
 
 # Run the application
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher"]

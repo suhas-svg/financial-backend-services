@@ -112,7 +112,7 @@ function Initialize-TestEnvironment {
     
     # Set environment variables
     $env:ENVIRONMENT = $Environment
-    $env:JWT_SECRET = "AY8Ro0HSBFyllm9ZPafT2GWuE/t8Yzq1P0Rf7bNeq14="
+    $env:JWT_SECRET = "test-only-placeholder-secret-at-least-32-bytes"
     $env:ACCOUNT_SERVICE_URL = "http://localhost:8080"
     $env:TRANSACTION_SERVICE_URL = "http://localhost:8081"
     $env:LOG_LEVEL = "INFO"

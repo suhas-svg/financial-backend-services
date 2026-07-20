@@ -28,7 +28,7 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 @pytest.fixture
 def mock_jwt_token() -> str:
     """Mock JWT token for testing."""
-    return "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0X3VzZXIiLCJ1c2VybmFtZSI6InRlc3R1c2VyIiwicm9sZXMiOlsiY3VzdG9tZXIiXSwicGVybWlzc2lvbnMiOlsiYWNjb3VudDpyZWFkIl0sImlhdCI6MTcwNDEwMDAwMCwiZXhwIjoxNzA0MTAzNjAwfQ.test_signature"
+    return "Bearer " + ".".join(("fixture-header", "fixture-payload", "fixture-signature"))
 
 
 @pytest.fixture

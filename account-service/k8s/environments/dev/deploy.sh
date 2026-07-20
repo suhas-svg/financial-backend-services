@@ -225,8 +225,17 @@ main() {
     # Apply manifests in order
     print_status "INFO" "Deploying infrastructure components..."
     
-    # 1. Secrets and RBAC
-    apply_manifests "$SCRIPT_DIR/secrets.yaml" "Secrets and RBAC" || { cleanup_on_failure; exit 1; }
+    # 1. Secrets and RBAC. Local env files are intentionally ignored by Git.
+    for secret_file in account-service-secrets.env postgres-secrets.env; do
+        if [[ ! -f "$SCRIPT_DIR/$secret_file" ]]; then
+            print_status "ERROR" "Missing $SCRIPT_DIR/$secret_file; copy its .example file and supply local development values"
+            cleanup_on_failure
+            exit 1
+        fi
+    done
+    kubectl create secret generic account-service-secrets --namespace="$NAMESPACE" --from-env-file="$SCRIPT_DIR/account-service-secrets.env" --dry-run=client -o yaml | kubectl apply -f -
+    kubectl create secret generic postgres-secrets --namespace="$NAMESPACE" --from-env-file="$SCRIPT_DIR/postgres-secrets.env" --dry-run=client -o yaml | kubectl apply -f -
+    apply_manifests "$SCRIPT_DIR/access-control.yaml" "Service account and RBAC" || { cleanup_on_failure; exit 1; }
     
     # 2. ConfigMaps
     apply_manifests "$SCRIPT_DIR/configmap.yaml" "ConfigMaps" || { cleanup_on_failure; exit 1; }

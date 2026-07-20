@@ -212,6 +212,7 @@ class IdempotencyAndReversalTest {
                                         .amount(BigDecimal.valueOf(200))
                                         .currency("USD")
                                         .toAccountId(ACCOUNT_A)
+                                        .description("Test deposit")
                                         .createdBy(USER_ID)
                                         .idempotencyKey("DEP-IDEM-001")
                                         .build();

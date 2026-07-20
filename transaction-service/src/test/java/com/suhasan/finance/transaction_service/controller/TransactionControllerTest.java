@@ -151,22 +151,14 @@ class TransactionControllerTest {
 
     @Test
     @WithMockUser(username = "user123")
-    void processDeposit_Success() throws Exception {
-        // Arrange
-        when(transactionService.processDeposit(eq("acc1"), eq(BigDecimal.valueOf(200)), 
-                eq("Test deposit"), eq("DEP-REF"), eq("user123"), isNull()))
-                .thenReturn(transactionResponse);
-
-        // Act & Assert
+    void ordinaryDepositEndpoint_IsNotExposed() throws Exception {
         mockMvc.perform(post("/api/transactions/deposit")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(depositRequest)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.transactionId").value("txn123"));
+                .andExpect(status().isMethodNotAllowed());
 
-        verify(transactionService).processDeposit(eq("acc1"), eq(BigDecimal.valueOf(200)), 
-                eq("Test deposit"), eq("DEP-REF"), eq("user123"), isNull());
+        verifyNoInteractions(transactionService);
     }
 
     @Test
@@ -464,21 +456,6 @@ class TransactionControllerTest {
         verify(transactionService).getTransaction(transactionId);
     }
 
-    @Test
-    @WithMockUser(username = "user123")
-    void processDeposit_ValidationError_NegativeAmount() throws Exception {
-        // Arrange
-        depositRequest.setAmount(BigDecimal.valueOf(-100)); // Invalid negative amount
-
-        // Act & Assert
-        mockMvc.perform(post("/api/transactions/deposit")
-                .with(csrf())
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(depositRequest)))
-                .andExpect(status().isBadRequest());
-
-        verifyNoInteractions(transactionService);
-    }
 
     @Test
     @WithMockUser(username = "user123")

@@ -1,10 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Lock, Pencil, Trash2, Unlock } from "lucide-react";
+import { Banknote, CircleX, Lock, Pencil, Unlock } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { createAccount, deleteAccount, listAccounts, updateAccount, updateAccountStatus } from "../lib/queries";
+import { closeAccount, createAccount, listAccounts, syntheticFundAccount, updateAccount, updateAccountStatus } from "../lib/queries";
 import { accountSchema, type AccountValues } from "../lib/schemas";
+import { createIdempotencyKey } from "../lib/idempotency";
 import { compactDate, money } from "../lib/format";
 import { availableBalance, ledgerBalance } from "../lib/accountBalances";
 import type { Account } from "../types";
@@ -20,17 +21,17 @@ export function AdminAccountsPage() {
   const [statusTarget, setStatusTarget] = useState<Account | null>(null);
   const [statusReason, setStatusReason] = useState("");
   const [statusError, setStatusError] = useState("");
-  const accounts = useQuery({ queryKey: ["admin-accounts", ownerId, accountType, status], queryFn: () => listAccounts({ ownerId, accountType, status: status as "" | "ACTIVE" | "FROZEN" }) });
+  const accounts = useQuery({ queryKey: ["admin-accounts", ownerId, accountType, status], queryFn: () => listAccounts({ ownerId, accountType, status: status as "" | "ACTIVE" | "FROZEN" | "CLOSED" }) });
   const form = useForm<AccountValues>({
     resolver: zodResolver(accountSchema),
-    defaultValues: { accountType: "CHECKING", balance: 0, ownerId: "", interestRate: 0 }
+    defaultValues: { accountType: "CHECKING", ownerId: "", interestRate: 0 }
   });
   const watchedType = form.watch("accountType");
   const invalidateAccounts = () => queryClient.invalidateQueries({ queryKey: ["admin-accounts"] });
   const createMutation = useMutation({
     mutationFn: createAccount,
     onSuccess: () => {
-      form.reset({ accountType: "CHECKING", balance: 0, ownerId: "", interestRate: 0 });
+      form.reset({ accountType: "CHECKING", ownerId: "", interestRate: 0 });
       invalidateAccounts();
     }
   });
@@ -38,11 +39,19 @@ export function AdminAccountsPage() {
     mutationFn: (values: AccountValues) => updateAccount(editing?.id ?? 0, values),
     onSuccess: () => {
       setEditing(null);
-      form.reset({ accountType: "CHECKING", balance: 0, ownerId: "", interestRate: 0 });
+      form.reset({ accountType: "CHECKING", ownerId: "", interestRate: 0 });
       invalidateAccounts();
     }
   });
-  const deleteMutation = useMutation({ mutationFn: deleteAccount, onSuccess: invalidateAccounts });
+  const closeMutation = useMutation({
+    mutationFn: ({ account, reason }: { account: Account; reason: string }) => closeAccount(account.id, reason),
+    onSuccess: invalidateAccounts
+  });
+  const fundingMutation = useMutation({
+    mutationFn: ({ account, amount, reason }: { account: Account; amount: number; reason: string }) =>
+      syntheticFundAccount(account.id, amount, reason, createIdempotencyKey("synthetic-funding")),
+    onSuccess: invalidateAccounts
+  });
   const statusMutation = useMutation({
     mutationFn: ({ account, reason }: { account: Account; reason: string }) =>
       updateAccountStatus(account.id, { status: account.status === "FROZEN" ? "ACTIVE" : "FROZEN", reason }),
@@ -58,7 +67,6 @@ export function AdminAccountsPage() {
     setEditing(account);
     form.reset({
       accountType: account.accountType,
-      balance: account.balance,
       ownerId: account.ownerId,
       interestRate: account.interestRate ?? 0,
       creditLimit: account.creditLimit,
@@ -68,7 +76,7 @@ export function AdminAccountsPage() {
 
   const resetForm = () => {
     setEditing(null);
-    form.reset({ accountType: "CHECKING", balance: 0, ownerId: "", interestRate: 0 });
+    form.reset({ accountType: "CHECKING", ownerId: "", interestRate: 0 });
   };
 
   const confirmStatusUpdate = () => {
@@ -97,9 +105,6 @@ export function AdminAccountsPage() {
               <option value="SAVINGS">Savings</option>
               <option value="CREDIT">Credit</option>
             </Select>
-          </Field>
-          <Field label="Balance" error={form.formState.errors.balance?.message}>
-            <Input type="number" step="0.01" {...form.register("balance")} />
           </Field>
           {watchedType === "SAVINGS" ? (
             <Field label="Interest rate" error={form.formState.errors.interestRate?.message}>
@@ -170,6 +175,7 @@ export function AdminAccountsPage() {
               <option value="">All status</option>
               <option value="ACTIVE">Active</option>
               <option value="FROZEN">Frozen</option>
+              <option value="CLOSED">Closed</option>
             </Select>
           </div>
         }
@@ -208,16 +214,25 @@ export function AdminAccountsPage() {
                         setStatusTarget(account);
                         setStatusReason("");
                         setStatusError("");
-                      }} aria-label={`${account.status === "FROZEN" ? "Unfreeze" : "Freeze"} account ${account.id}`}>
+                      }} disabled={account.status === "CLOSED" || statusMutation.isPending} aria-label={`${account.status === "FROZEN" ? "Unfreeze" : "Freeze"} account ${account.id}`}>
                         {account.status === "FROZEN" ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
                       </Button>
-                      <Button type="button" variant="ghost" onClick={() => startEdit(account)} aria-label={`Edit account ${account.id}`}>
+                      <Button type="button" variant="ghost" disabled={account.status === "CLOSED"} onClick={() => startEdit(account)} aria-label={`Edit account ${account.id}`}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button type="button" variant="ghost" onClick={() => deleteMutation.mutate(account.id)} disabled={deleteMutation.isPending} aria-label={`Delete account ${account.id}`}>
-                        <Trash2 className="h-4 w-4" />
+                      <Button type="button" variant="ghost" disabled={account.status === "CLOSED" || fundingMutation.isPending} onClick={() => {
+                        const amount = Number(window.prompt("Synthetic funding amount"));
+                        const reason = window.prompt("Synthetic funding reason")?.trim();
+                        if (amount > 0 && reason) fundingMutation.mutate({ account, amount, reason });
+                      }} aria-label={`Synthetic fund account ${account.id}`}>
+                        <Banknote className="h-4 w-4" />
                       </Button>
-                    </div>
+                      <Button type="button" variant="ghost" disabled={account.status === "CLOSED" || closeMutation.isPending} onClick={() => {
+                        const reason = window.prompt("Account closure reason")?.trim();
+                        if (reason) closeMutation.mutate({ account, reason });
+                      }} aria-label={`Close account ${account.id}`}>
+                        <CircleX className="h-4 w-4" />
+                      </Button>                    </div>
                   </td>
                 </tr>
               ))}

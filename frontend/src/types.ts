@@ -11,7 +11,7 @@ export type Page<T> = {
 };
 
 export type AccountType = "CHECKING" | "SAVINGS" | "CREDIT";
-export type AccountStatus = "ACTIVE" | "FROZEN";
+export type AccountStatus = "ACTIVE" | "FROZEN" | "CLOSED";
 
 export type Account = {
   id: number;

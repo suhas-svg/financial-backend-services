@@ -63,7 +63,7 @@ LOG_LEVEL=INFO                  # Logging level
 ```bash
 ACCOUNT_SERVICE_URL=http://account-service:8080
 TRANSACTION_SERVICE_URL=http://transaction-service:8081
-JWT_SECRET=your-jwt-secret-here
+JWT_SECRET=<set-via-secret-manager>
 ```
 
 #### Performance Settings
@@ -162,7 +162,7 @@ docker-compose -f docker-compose.dev.yml exec mcp-financial-server bash
 1. **Prepare Environment**
    ```bash
    # Set required environment variables
-   export JWT_SECRET="your-staging-jwt-secret"
+   export JWT_SECRET="<set-via-secret-manager>"
    export DB_HOST="staging-db.example.com"
    export DB_USER="mcp_user"
    export DB_PASSWORD="secure-password"

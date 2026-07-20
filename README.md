@@ -4,6 +4,8 @@ Financial Backend Services is a banking-style application made of two Spring Boo
 
 The backend provides account management, authentication, transaction processing, monitoring, and reversal workflows. The frontend in `frontend/` provides the customer banking app first, then the Phase 2 admin and operations dashboard.
 
+Controlled-beta financial integrity contracts and operator controls are documented in [Controlled Beta Phase 1](docs/controlled-beta-phase1-integrity.md).
+
 ## Project Layout
 
 ```text
@@ -229,8 +231,8 @@ The frontend expects:
 The verified Docker path uses `docker-compose.codex.yml` for the complete backend stack and `docker-compose.codex.override.yml` to expose both PostgreSQL instances on loopback-only host ports. Set local-only signing secrets before starting the stack; do not reuse these example values outside local development:
 
 ```powershell
-$env:JWT_SECRET = "local-development-jwt-secret-change-me-at-least-32-characters"
-$env:INTERNAL_JWT_SECRET = "local-development-internal-jwt-secret-change-me-at-least-32-characters"
+$env:JWT_SECRET = "<set-via-secret-manager>"
+$env:INTERNAL_JWT_SECRET = "<set-via-secret-manager>"
 $env:MFA_ENCRYPTION_KEY = "local-development-mfa-encryption-key-change-me-at-least-32-characters"
 $env:STEP_UP_ENABLED = "true"
 docker compose -f docker-compose.codex.yml -f docker-compose.codex.override.yml up --build -d

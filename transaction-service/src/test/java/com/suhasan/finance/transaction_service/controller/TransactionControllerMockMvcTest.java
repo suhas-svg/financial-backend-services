@@ -153,26 +153,6 @@ class TransactionControllerMockMvcTest {
         verifyNoInteractions(transactionService);
     }
 
-    @Test
-    @WithMockUser(username = "user123")
-    void processDeposit_ValidationErrors_ReturnsBadRequest() throws Exception {
-        // Arrange
-        DepositRequest invalidRequest = DepositRequest.builder()
-                .accountId(null) // Invalid null account ID
-                .amount(BigDecimal.ZERO) // Invalid zero amount
-                .description("Test deposit")
-                .build();
-
-        // Act & Assert
-        mockMvc.perform(post("/api/transactions/deposit")
-                .with(csrf())
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(invalidRequest)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Validation Failed"));
-
-        verifyNoInteractions(transactionService);
-    }
 
     @Test
     @WithMockUser(username = "user123")

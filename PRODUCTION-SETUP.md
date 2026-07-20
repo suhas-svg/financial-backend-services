@@ -51,8 +51,8 @@ Update the `.env` file with secure values:
 
 ```env
 # CHANGE THESE IN PRODUCTION!
-POSTGRES_PASSWORD=your-secure-postgres-password-here
-JWT_SECRET=your-secure-jwt-secret-here
+POSTGRES_PASSWORD=<set-via-secret-manager>
+JWT_SECRET=<set-via-secret-manager>
 ```
 
 ### JWT Secret
