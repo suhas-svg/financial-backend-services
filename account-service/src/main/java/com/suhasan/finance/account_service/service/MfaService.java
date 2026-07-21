@@ -6,6 +6,7 @@ import com.suhasan.finance.account_service.entity.MfaMethodStatus;
 import com.suhasan.finance.account_service.entity.MfaRecoveryCode;
 import com.suhasan.finance.account_service.entity.User;
 import com.suhasan.finance.account_service.exception.MfaVerificationException;
+import com.suhasan.finance.account_service.integration.MfaSecretManager;
 import com.suhasan.finance.account_service.repository.MfaMethodRepository;
 import com.suhasan.finance.account_service.repository.MfaRecoveryCodeRepository;
 import com.suhasan.finance.account_service.repository.UserRepository;
@@ -29,7 +30,7 @@ public class MfaService {
     private final MfaRecoveryCodeRepository recoveryCodeRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final SecretEncryptionService encryptionService;
+    private final MfaSecretManager secretManager;
     private final TotpService totpService;
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -50,9 +51,11 @@ public class MfaService {
             throw new IllegalStateException("TOTP is already active");
         }
         String secret = totpService.generateSecret();
+        MfaSecretManager.Ciphertext encrypted = secretManager.encrypt(secret);
         method.setUserId(username);
         method.setMethodType(METHOD);
-        method.setSecretCiphertext(encryptionService.encrypt(secret));
+        method.setSecretCiphertext(encrypted.value());
+        method.setSecretKeyId(encrypted.keyId());
         method.setStatus(MfaMethodStatus.PENDING);
         method.setVerifiedAt(null);
         method = methodRepository.save(method);
@@ -62,7 +65,8 @@ public class MfaService {
 
     public MfaResponses.ConfirmationResponse confirm(String username, String code) {
         MfaMethod method = requireMethod(username, MfaMethodStatus.PENDING);
-        if (!totpService.verify(encryptionService.decrypt(method.getSecretCiphertext()), code, Instant.now())) {
+        if (!totpService.verify(secretManager.decrypt(method.getSecretCiphertext(), method.getSecretKeyId()),
+                code, Instant.now())) {
             throw new MfaVerificationException("Invalid authentication code");
         }
         method.setStatus(MfaMethodStatus.ACTIVE);
@@ -80,7 +84,8 @@ public class MfaService {
     public void disable(String username, String currentPassword, String code) {
         requirePassword(username, currentPassword);
         MfaMethod method = requireMethod(username, MfaMethodStatus.ACTIVE);
-        if (!totpService.verify(encryptionService.decrypt(method.getSecretCiphertext()), code, Instant.now())) {
+        if (!totpService.verify(secretManager.decrypt(method.getSecretCiphertext(), method.getSecretKeyId()),
+                code, Instant.now())) {
             throw new MfaVerificationException("Invalid authentication code");
         }
         method.setStatus(MfaMethodStatus.DISABLED);
@@ -93,7 +98,8 @@ public class MfaService {
     }
 
     boolean verifyCredential(MfaMethod method, String credential) {
-        if (totpService.verify(encryptionService.decrypt(method.getSecretCiphertext()), credential, Instant.now())) {
+        if (totpService.verify(secretManager.decrypt(method.getSecretCiphertext(), method.getSecretKeyId()),
+                credential, Instant.now())) {
             method.setLastUsedAt(Instant.now());
             methodRepository.save(method);
             return true;

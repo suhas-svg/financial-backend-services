@@ -1313,6 +1313,43 @@ describe("admin account status controls", () => {
     expect(screen.getByRole("button", { name: "Close account 101" })).toBeDisabled();
   });
 
+  it("uses accessible inline forms for synthetic funding and closure", async () => {
+    const user = userEvent.setup();
+    const promptSpy = vi.spyOn(window, "prompt");
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/controlled-beta/synthetic-funding") && init?.method === "POST") {
+        return jsonResponse({ transactionId: "synthetic-1", status: "COMPLETED" }, 201);
+      }
+      if (url.includes("/api/controlled-beta/accounts/101/close") && init?.method === "POST") {
+        return jsonResponse({ ...sampleAccount, status: "CLOSED", balance: 0, ledgerBalance: 0, availableBalance: 0 });
+      }
+      return undefined;
+    });
+
+    renderApp("/admin/accounts", tokenFor({ sub: "admin", roles: ["ROLE_ADMIN"] }));
+
+    await screen.findByText("#101");
+    await user.click(screen.getByRole("button", { name: "Synthetic fund account 101" }));
+    expect(screen.getByRole("heading", { name: "Synthetic fund account #101" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Confirm synthetic funding" }));
+    expect(await screen.findByText("Action reason is required")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Synthetic funding amount"), "25.50");
+    await user.type(screen.getByLabelText("Action reason"), "Synthetic UI regression");
+    await user.click(screen.getByRole("button", { name: "Confirm synthetic funding" }));
+    await waitFor(() => expect(calls.some(({ url, init }) => url.includes("/transaction-api/api/controlled-beta/synthetic-funding")
+      && init?.method === "POST" && String(init.body).includes('"amount":25.5') && String(init.body).includes("Synthetic UI regression"))).toBe(true));
+
+    await user.click(screen.getByRole("button", { name: "Close account 101" }));
+    expect(screen.getByRole("heading", { name: "Close account #101" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Confirm account closure" }));
+    expect(await screen.findByText("Action reason is required")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Action reason"), "Zero-balance closure regression");
+    await user.click(screen.getByRole("button", { name: "Confirm account closure" }));
+    await waitFor(() => expect(calls.some(({ url, init }) => url.includes("/transaction-api/api/controlled-beta/accounts/101/close")
+      && init?.method === "POST" && String(init.body).includes("Zero-balance closure regression"))).toBe(true));
+    expect(promptSpy).not.toHaveBeenCalled();
+  });
+
   it("freezes account with a required reason", async () => {
     const user = userEvent.setup();
     const { calls } = mockFetch((url, init) => {

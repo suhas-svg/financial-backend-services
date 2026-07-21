@@ -1,3 +1,6 @@
+# Synthetic sandbox local TLS/private runtime inputs
+.sandbox/
+
 # Compiled class files
 *.class
 

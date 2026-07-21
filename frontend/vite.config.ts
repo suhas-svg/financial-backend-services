@@ -39,7 +39,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
-    exclude: ["node_modules/**", "dist/**", "tests/e2e/**"],
+    exclude: ["node_modules/**", "dist/**", "tests/e2e/**", "tests/sandbox-e2e/**"],
     globals: true
   }
 });

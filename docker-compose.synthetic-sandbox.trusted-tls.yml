@@ -1,0 +1,7 @@
+services:
+  gateway:
+    volumes:
+      - type: bind
+        source: ${SANDBOX_TLS_DIR:?SANDBOX_TLS_DIR must contain tls.crt and tls.key}
+        target: /etc/nginx/tls
+        read_only: true
