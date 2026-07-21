@@ -1,0 +1,18 @@
+#synthetic-sandbox-banner {
+  position: sticky;
+  top: 0;
+  z-index: 99999;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  border-bottom: 2px solid #fbbf24;
+  background: #451a03;
+  color: #fef3c7;
+  font: 800 0.75rem/1.25 system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+
+#synthetic-sandbox-banner[data-verified="false"] {
+  border-color: #fb7185;
+  background: #4c0519;
+}

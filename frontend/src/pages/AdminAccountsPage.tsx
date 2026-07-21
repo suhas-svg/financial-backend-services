@@ -21,6 +21,10 @@ export function AdminAccountsPage() {
   const [statusTarget, setStatusTarget] = useState<Account | null>(null);
   const [statusReason, setStatusReason] = useState("");
   const [statusError, setStatusError] = useState("");
+  const [accountAction, setAccountAction] = useState<{ kind: "FUND" | "CLOSE"; account: Account } | null>(null);
+  const [actionAmount, setActionAmount] = useState("");
+  const [actionReason, setActionReason] = useState("");
+  const [actionError, setActionError] = useState("");
   const accounts = useQuery({ queryKey: ["admin-accounts", ownerId, accountType, status], queryFn: () => listAccounts({ ownerId, accountType, status: status as "" | "ACTIVE" | "FROZEN" | "CLOSED" }) });
   const form = useForm<AccountValues>({
     resolver: zodResolver(accountSchema),
@@ -28,6 +32,12 @@ export function AdminAccountsPage() {
   });
   const watchedType = form.watch("accountType");
   const invalidateAccounts = () => queryClient.invalidateQueries({ queryKey: ["admin-accounts"] });
+  const clearAccountAction = () => {
+    setAccountAction(null);
+    setActionAmount("");
+    setActionReason("");
+    setActionError("");
+  };
   const createMutation = useMutation({
     mutationFn: createAccount,
     onSuccess: () => {
@@ -45,12 +55,18 @@ export function AdminAccountsPage() {
   });
   const closeMutation = useMutation({
     mutationFn: ({ account, reason }: { account: Account; reason: string }) => closeAccount(account.id, reason),
-    onSuccess: invalidateAccounts
+    onSuccess: () => {
+      clearAccountAction();
+      invalidateAccounts();
+    }
   });
   const fundingMutation = useMutation({
     mutationFn: ({ account, amount, reason }: { account: Account; amount: number; reason: string }) =>
       syntheticFundAccount(account.id, amount, reason, createIdempotencyKey("synthetic-funding")),
-    onSuccess: invalidateAccounts
+    onSuccess: () => {
+      clearAccountAction();
+      invalidateAccounts();
+    }
   });
   const statusMutation = useMutation({
     mutationFn: ({ account, reason }: { account: Account; reason: string }) =>
@@ -86,6 +102,25 @@ export function AdminAccountsPage() {
       return;
     }
     statusMutation.mutate({ account: statusTarget, reason: statusReason.trim() });
+  };
+
+  const confirmAccountAction = () => {
+    if (!accountAction) return;
+    const reason = actionReason.trim();
+    if (!reason) {
+      setActionError("Action reason is required");
+      return;
+    }
+    if (accountAction.kind === "CLOSE") {
+      closeMutation.mutate({ account: accountAction.account, reason });
+      return;
+    }
+    const amount = Number(actionAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setActionError("Synthetic funding amount must be greater than zero");
+      return;
+    }
+    fundingMutation.mutate({ account: accountAction.account, amount, reason });
   };
 
   return (
@@ -159,6 +194,43 @@ export function AdminAccountsPage() {
           <p className="text-sm text-muted">Select Freeze or Unfreeze from the account table.</p>
         )}
       </Panel>
+      <Panel title={accountAction ? `${accountAction.kind === "FUND" ? "Synthetic fund" : "Close"} account #${accountAction.account.id}` : "Account action"}>
+        {accountAction ? (
+          <div className="grid gap-3">
+            <ErrorNotice message={actionError || (fundingMutation.error instanceof Error ? fundingMutation.error.message : undefined) || (closeMutation.error instanceof Error ? closeMutation.error.message : undefined)} />
+            <p className="text-sm text-muted">
+              {accountAction.kind === "FUND" ? "Funding is synthetic-only, ledger-posted, and idempotent." : "Closure requires a zero ledger-authoritative balance and retains account history."}
+            </p>
+            {accountAction.kind === "FUND" ? (
+              <Field label="Synthetic funding amount">
+                <Input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={actionAmount}
+                  onChange={(event) => { setActionAmount(event.target.value); setActionError(""); }}
+                />
+              </Field>
+            ) : null}
+            <Field label="Action reason">
+              <Input
+                value={actionReason}
+                onChange={(event) => { setActionReason(event.target.value); setActionError(""); }}
+              />
+            </Field>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant={accountAction.kind === "CLOSE" ? "danger" : "primary"} onClick={confirmAccountAction} disabled={fundingMutation.isPending || closeMutation.isPending}>
+                {accountAction.kind === "FUND" ? "Confirm synthetic funding" : "Confirm account closure"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={clearAccountAction} disabled={fundingMutation.isPending || closeMutation.isPending}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-muted">Select synthetic funding or closure from the account table.</p>
+        )}
+      </Panel>
       </div>
       <Panel
         title="Admin account oversight"
@@ -221,15 +293,18 @@ export function AdminAccountsPage() {
                         <Pencil className="h-4 w-4" />
                       </Button>
                       <Button type="button" variant="ghost" disabled={account.status === "CLOSED" || fundingMutation.isPending} onClick={() => {
-                        const amount = Number(window.prompt("Synthetic funding amount"));
-                        const reason = window.prompt("Synthetic funding reason")?.trim();
-                        if (amount > 0 && reason) fundingMutation.mutate({ account, amount, reason });
+                        setAccountAction({ kind: "FUND", account });
+                        setActionAmount("");
+                        setActionReason("");
+                        setActionError("");
                       }} aria-label={`Synthetic fund account ${account.id}`}>
                         <Banknote className="h-4 w-4" />
                       </Button>
                       <Button type="button" variant="ghost" disabled={account.status === "CLOSED" || closeMutation.isPending} onClick={() => {
-                        const reason = window.prompt("Account closure reason")?.trim();
-                        if (reason) closeMutation.mutate({ account, reason });
+                        setAccountAction({ kind: "CLOSE", account });
+                        setActionAmount("");
+                        setActionReason("");
+                        setActionError("");
                       }} aria-label={`Close account ${account.id}`}>
                         <CircleX className="h-4 w-4" />
                       </Button>                    </div>

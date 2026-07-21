@@ -1,0 +1,161 @@
+name: financial-synthetic-sandbox
+
+services:
+  redis:
+    image: redis:7.4.5-alpine3.21
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    volumes:
+      - sandbox_redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [data]
+
+  account-postgres:
+    image: postgres:15.13-alpine3.21
+    environment:
+      POSTGRES_DB: account_sandbox
+      POSTGRES_USER: account_app
+      POSTGRES_PASSWORD: ${ACCOUNT_DB_PASSWORD:?ACCOUNT_DB_PASSWORD is required}
+    volumes:
+      - sandbox_account_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U account_app -d account_sandbox"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [data]
+
+  transaction-postgres:
+    image: postgres:15.13-alpine3.21
+    environment:
+      POSTGRES_DB: transaction_sandbox
+      POSTGRES_USER: transaction_app
+      POSTGRES_PASSWORD: ${TRANSACTION_DB_PASSWORD:?TRANSACTION_DB_PASSWORD is required}
+    volumes:
+      - sandbox_transaction_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U transaction_app -d transaction_sandbox"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [data]
+
+  account-service:
+    image: financial-account-service:${SANDBOX_IMAGE_TAG:?SANDBOX_IMAGE_TAG is required}
+    build:
+      context: ./account-service
+      args:
+        BUILD_ENV: prod
+        APP_VERSION: ${SANDBOX_IMAGE_TAG:?SANDBOX_IMAGE_TAG is required}
+        SKIP_TESTS: "true"
+    environment:
+      SPRING_PROFILES_ACTIVE: synthetic-sandbox
+      SPRING_DATASOURCE_URL: jdbc:postgresql://account-postgres:5432/account_sandbox
+      SPRING_DATASOURCE_USERNAME: account_app
+      SPRING_DATASOURCE_PASSWORD: ${ACCOUNT_DB_PASSWORD:?ACCOUNT_DB_PASSWORD is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?INTERNAL_JWT_SECRET is required}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?MFA_ENCRYPTION_KEY is required}
+      SANDBOX_SYNTHETIC_ENABLED: "true"
+      SANDBOX_BOOTSTRAP_TOKEN: ${SANDBOX_BOOTSTRAP_TOKEN:?SANDBOX_BOOTSTRAP_TOKEN is required}
+      AUDIT_TRUSTED_PROXY_ENABLED: "false"
+      APP_TIME_ZONE: UTC
+      TZ: UTC
+      JAVA_OPTS: -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Duser.timezone=UTC
+    depends_on:
+      account-postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    read_only: true
+    tmpfs: [/tmp]
+    volumes:
+      - sandbox_account_logs:/app/logs
+    networks: [services, data]
+
+  transaction-service:
+    image: financial-transaction-service:${SANDBOX_IMAGE_TAG:?SANDBOX_IMAGE_TAG is required}
+    build:
+      context: ./transaction-service
+    environment:
+      SPRING_PROFILES_ACTIVE: synthetic-sandbox
+      SPRING_DATASOURCE_URL: jdbc:postgresql://transaction-postgres:5432/transaction_sandbox
+      SPRING_DATASOURCE_USERNAME: transaction_app
+      SPRING_DATASOURCE_PASSWORD: ${TRANSACTION_DB_PASSWORD:?TRANSACTION_DB_PASSWORD is required}
+      ACCOUNT_SERVICE_URL: http://account-service:8080
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?INTERNAL_JWT_SECRET is required}
+      SANDBOX_SYNTHETIC_ENABLED: "true"
+      SANDBOX_SEED_FUNDED_AMOUNT: "1000.00"
+      CONTROLLED_BETA_SYNTHETIC_FUNDING_ENABLED: "true"
+      SECURITY_STEP_UP_ENABLED: "true"
+      LEDGER_AUTHORITATIVE: "true"
+      LEDGER_BOOTSTRAP_STARTUP_ENABLED: "false"
+      APP_TIME_ZONE: UTC
+      TZ: UTC
+      JAVA_OPTS: -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Duser.timezone=UTC
+    depends_on:
+      transaction-postgres: { condition: service_healthy }
+      account-service: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    read_only: true
+    tmpfs: [/tmp]
+    volumes:
+      - sandbox_transaction_logs:/app/logs
+    networks: [services, data]
+
+  frontend:
+    image: financial-frontend:${SANDBOX_IMAGE_TAG:?SANDBOX_IMAGE_TAG is required}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.sandbox
+    depends_on:
+      account-service: { condition: service_healthy }
+      transaction-service: { condition: service_healthy }
+    networks: [edge]
+
+  gateway:
+    image: financial-sandbox-gateway:${SANDBOX_IMAGE_TAG:?SANDBOX_IMAGE_TAG is required}
+    build:
+      context: ./infrastructure/synthetic-sandbox/gateway
+    environment:
+      SANDBOX_HTTPS_PORT: ${SANDBOX_HTTPS_PORT:-8443}
+    ports:
+      - "127.0.0.1:${SANDBOX_HTTPS_PORT:-8443}:8443"
+    volumes:
+      - sandbox_tls:/etc/nginx/tls
+    depends_on:
+      frontend: { condition: service_healthy }
+      account-service: { condition: service_healthy }
+      transaction-service: { condition: service_healthy }
+    networks: [edge, services]
+
+volumes:
+  sandbox_account_db:
+  sandbox_transaction_db:
+  sandbox_redis:
+  sandbox_account_logs:
+  sandbox_transaction_logs:
+  sandbox_tls:
+
+networks:
+  edge: {}
+  services: { internal: true }
+  data: { internal: true }

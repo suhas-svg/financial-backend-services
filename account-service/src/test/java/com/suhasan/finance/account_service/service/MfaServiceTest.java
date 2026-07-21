@@ -5,6 +5,7 @@ import com.suhasan.finance.account_service.entity.MfaMethodStatus;
 import com.suhasan.finance.account_service.entity.MfaRecoveryCode;
 import com.suhasan.finance.account_service.entity.User;
 import com.suhasan.finance.account_service.exception.MfaVerificationException;
+import com.suhasan.finance.account_service.integration.MfaSecretManager;
 import com.suhasan.finance.account_service.repository.MfaMethodRepository;
 import com.suhasan.finance.account_service.repository.MfaRecoveryCodeRepository;
 import com.suhasan.finance.account_service.repository.UserRepository;
@@ -33,7 +34,7 @@ class MfaServiceTest {
     @Mock MfaRecoveryCodeRepository recoveryCodeRepository;
     @Mock UserRepository userRepository;
     @Mock PasswordEncoder passwordEncoder;
-    @Mock SecretEncryptionService encryptionService;
+    @Mock MfaSecretManager secretManager;
     @Mock TotpService totpService;
 
     private MfaService service;
@@ -41,7 +42,7 @@ class MfaServiceTest {
     @BeforeEach
     void setUp() {
         service = new MfaService(methodRepository, recoveryCodeRepository, userRepository,
-                passwordEncoder, encryptionService, totpService);
+                passwordEncoder, secretManager, totpService);
     }
 
     @Test
@@ -77,7 +78,8 @@ class MfaServiceTest {
         when(methodRepository.findByUserIdAndMethodType("alice", "TOTP"))
                 .thenReturn(Optional.of(pending));
         when(totpService.generateSecret()).thenReturn("NEWSECRET");
-        when(encryptionService.encrypt("NEWSECRET")).thenReturn("ciphertext");
+        when(secretManager.encrypt("NEWSECRET"))
+                .thenReturn(new MfaSecretManager.Ciphertext("ciphertext", "local-v1"));
         when(totpService.provisioningUri("alice", "NEWSECRET")).thenReturn("otpauth://totp/alice");
         when(methodRepository.save(any(MfaMethod.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -86,6 +88,7 @@ class MfaServiceTest {
         assertThat(response.secret()).isEqualTo("NEWSECRET");
         assertThat(response.otpauthUri()).isEqualTo("otpauth://totp/alice");
         assertThat(pending.getSecretCiphertext()).isEqualTo("ciphertext");
+        assertThat(pending.getSecretKeyId()).isEqualTo("local-v1");
         assertThat(pending.getStatus()).isEqualTo(MfaMethodStatus.PENDING);
         assertThat(pending.getVerifiedAt()).isNull();
         verify(recoveryCodeRepository).deleteByMfaMethodId(7L);
@@ -112,7 +115,7 @@ class MfaServiceTest {
         pending.setSecretCiphertext("ciphertext");
         when(methodRepository.findByUserIdAndMethodTypeAndStatus(
                 "alice", "TOTP", MfaMethodStatus.PENDING)).thenReturn(Optional.of(pending));
-        when(encryptionService.decrypt("ciphertext")).thenReturn("secret");
+        when(secretManager.decrypt("ciphertext", "legacy")).thenReturn("secret");
         when(totpService.verify(anyString(), anyString(), any())).thenReturn(true);
         when(passwordEncoder.encode(anyString())).thenReturn("recovery-hash");
         when(methodRepository.save(any(MfaMethod.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -140,7 +143,7 @@ class MfaServiceTest {
         MfaRecoveryCode recoveryCode = new MfaRecoveryCode();
         recoveryCode.setMfaMethodId(7L);
         recoveryCode.setCodeHash("recovery-hash");
-        when(encryptionService.decrypt("ciphertext")).thenReturn("secret");
+        when(secretManager.decrypt("ciphertext", "legacy")).thenReturn("secret");
         when(totpService.verify(anyString(), anyString(), any())).thenReturn(false);
         when(recoveryCodeRepository.findByMfaMethodIdAndUsedAtIsNull(7L))
                 .thenReturn(List.of(recoveryCode));
@@ -160,7 +163,7 @@ class MfaServiceTest {
         pending.setSecretCiphertext("ciphertext");
         when(methodRepository.findByUserIdAndMethodTypeAndStatus(
                 "alice", "TOTP", MfaMethodStatus.PENDING)).thenReturn(Optional.of(pending));
-        when(encryptionService.decrypt("ciphertext")).thenReturn("secret");
+        when(secretManager.decrypt("ciphertext", "legacy")).thenReturn("secret");
         when(totpService.verify(anyString(), anyString(), any())).thenReturn(false);
 
         assertThatThrownBy(() -> service.confirm("alice", "bad-code"))
