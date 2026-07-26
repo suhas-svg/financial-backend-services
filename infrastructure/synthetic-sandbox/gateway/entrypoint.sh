@@ -16,7 +16,7 @@ if [ "$origin_port" -lt 1 ] || [ "$origin_port" -gt 65535 ]; then
   exit 1
 fi
 sed "s/__SANDBOX_HTTPS_PORT__/$origin_port/g" \
-  /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+  /etc/nginx/nginx.conf.template > /tmp/nginx.conf
 
 if [ ! -s "$cert" ] || [ ! -s "$key" ]; then
   umask 077
@@ -26,4 +26,4 @@ if [ ! -s "$cert" ] || [ ! -s "$key" ]; then
     -keyout "$key" -out "$cert"
 fi
 
-exec nginx -g "daemon off;"
+exec nginx -c /tmp/nginx.conf -g "daemon off;"

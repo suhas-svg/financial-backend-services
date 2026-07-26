@@ -8,4 +8,5 @@ RUN chmod 0555 /sandbox-entrypoint.sh && mkdir -p /etc/nginx/tls && chown -R ngi
 EXPOSE 8443
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=6 \
   CMD wget --no-check-certificate -q -O /dev/null https://127.0.0.1:8443/healthz || exit 1
+USER nginx
 ENTRYPOINT ["/sandbox-entrypoint.sh"]
