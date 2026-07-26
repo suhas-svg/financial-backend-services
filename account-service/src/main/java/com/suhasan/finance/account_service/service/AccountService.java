@@ -220,6 +220,11 @@ public class AccountService {
         return page.map(accountMapper::toDto);
     }
 
+    @Transactional(readOnly = true)
+    public AccountResponse toResponse(final Account account) {
+        return accountMapper.toDto(account);
+    }
+
 
     public AccountResponse applyLedgerProjection(final Long accountId, final LedgerProjectionUpdateRequest request) {
         final Account account = accountRepository.findByIdForUpdate(accountId)

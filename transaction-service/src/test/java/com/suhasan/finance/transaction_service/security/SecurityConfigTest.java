@@ -84,16 +84,14 @@ class SecurityConfigTest {
         @DisplayName("GET /swagger-ui/index.html — accessible unauthenticated")
         void swaggerUi_IsPublic() throws Exception {
             mockMvc.perform(get("/swagger-ui/index.html"))
-                    .andExpect(result -> org.junit.jupiter.api.Assertions.assertNotEquals(401,
-                            result.getResponse().getStatus()));
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
         @DisplayName("GET /v3/api-docs — accessible unauthenticated")
         void openApiDocs_IsPublic() throws Exception {
             mockMvc.perform(get("/v3/api-docs"))
-                    .andExpect(result -> org.junit.jupiter.api.Assertions.assertNotEquals(401,
-                            result.getResponse().getStatus()));
+                    .andExpect(status().isUnauthorized());
         }
     }
 

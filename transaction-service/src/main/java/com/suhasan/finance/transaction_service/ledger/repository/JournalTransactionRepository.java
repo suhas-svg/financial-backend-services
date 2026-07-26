@@ -10,6 +10,7 @@ import java.util.UUID;
 
 public interface JournalTransactionRepository extends JpaRepository<JournalTransaction, UUID> {
     Optional<JournalTransaction> findByIdempotencyScopeAndIdempotencyKey(String scope, String key);
+    Optional<JournalTransaction> findByCorrelationId(String correlationId);
     Optional<JournalTransaction> findByReversalOfJournalId(UUID originalJournalId);
     List<JournalTransaction> findAllByEffectiveDateLessThanEqual(LocalDate businessDate);
     List<JournalTransaction> findAllByEffectiveDateLessThan(LocalDate exclusiveEndDate);

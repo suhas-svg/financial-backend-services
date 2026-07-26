@@ -21,7 +21,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
-import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -41,10 +41,17 @@ public class RedisConfig {
     public GenericJackson2JsonRedisSerializer redisValueSerializer(ObjectMapper objectMapper) {
         ObjectMapper cacheMapper = objectMapper.copy();
         cacheMapper.registerModule(new JavaTimeModule());
+        BasicPolymorphicTypeValidator cacheTypeValidator = BasicPolymorphicTypeValidator.builder()
+                .allowIfSubType("com.suhasan.finance.transaction_service.dto.")
+                .allowIfSubType("java.util.")
+                .allowIfSubType("java.time.")
+                .allowIfSubType("java.math.")
+                .allowIfSubType("org.springframework.data.domain.")
+                .build();
         cacheMapper.registerModule(pageImplDeserializerModule());
         cacheMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         cacheMapper.activateDefaultTyping(
-                LaissezFaireSubTypeValidator.instance,
+                cacheTypeValidator,
                 ObjectMapper.DefaultTyping.NON_FINAL,
                 JsonTypeInfo.As.PROPERTY
         );
@@ -76,26 +83,26 @@ public class RedisConfig {
         });
         return module;
     }
-    
+
     @Bean
     public RedisTemplate<String, Object> redisTemplate(
             RedisConnectionFactory connectionFactory,
             GenericJackson2JsonRedisSerializer redisValueSerializer) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
-        
+
         // Use String serializer for keys
         template.setKeySerializer(new StringRedisSerializer());
         template.setHashKeySerializer(new StringRedisSerializer());
-        
+
         // Use JSON serializer for values
         template.setValueSerializer(redisValueSerializer);
         template.setHashValueSerializer(redisValueSerializer);
-        
+
         template.afterPropertiesSet();
         return template;
     }
-    
+
     @Bean
     public CacheManager cacheManager(
             RedisConnectionFactory connectionFactory,
@@ -106,7 +113,7 @@ public class RedisConfig {
                         .fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair
                         .fromSerializer(redisValueSerializer));
-        
+
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(config)
                 .transactionAware()

@@ -1,4 +1,4 @@
-import type { Account, AccountStatus, AuditLogEntry, AuditSummary, Beneficiary, BeneficiaryStatus, ChallengeVerification, CustomerJournal, CustomerStatement, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, LedgerAccountProjection, Limits, MfaConfirmation, MfaEnrollment, MfaStatus, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, OutcomeDivergence, OutcomeGuardrail, OutcomeGuardrailControl, OutcomeGuardrailControlEvent, OutcomeGuardrailExecution, OutcomeGuardrailOperatorPolicy, OutcomeGuardrailPolicy, OutcomeGuardrailTerms, OutcomeScenario, OutcomeScenarioRequest, OutcomeScenarioSummary, Page, ReconciliationException, ReconciliationExceptionStatus, ReconciliationRun, ReconciliationSeverity, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, ScheduledTransfer, ScheduledTransferRun, ScheduledTransferStatus, Transaction, TransactionDispute, TransactionStats } from "../types";
+import type { Account, AccountStatus, AuditLogEntry, AuditSummary, Beneficiary, BeneficiaryStatus, ChallengeVerification, CustomerJournal, CustomerStatement, DisputeSummary, InvestigationSummary, InvestigationTimelineItem, LedgerAccountProjection, MfaConfirmation, MfaEnrollment, MfaStatus, Notification, NotificationSeverity, NotificationSourceType, NotificationStatus, NotificationSummary, NotificationType, OutcomeDivergence, OutcomeGuardrail, OutcomeGuardrailControl, OutcomeGuardrailControlEvent, OutcomeGuardrailExecution, OutcomeGuardrailOperatorPolicy, OutcomeGuardrailPolicy, OutcomeGuardrailTerms, OutcomeScenario, OutcomeScenarioRequest, OutcomeScenarioSummary, Page, ReconciliationException, ReconciliationExceptionStatus, ReconciliationRun, ReconciliationSeverity, RiskAlert, RiskCase, RiskCaseSummary, RiskSummary, ScheduledTransfer, ScheduledTransferRun, ScheduledTransferStatus, Transaction, TransactionDispute, TransactionStats } from "../types";
 import { apiRequest, toQuery } from "./api";
 import type { AccountValues, BeneficiaryValues, DisputeNoteValues, DisputeStatusValues, DisputeValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, ScheduledTransferValues, TransferValues } from "./schemas";
 import { getSession } from "./session";
@@ -113,10 +113,6 @@ export function getUserStats() {
 
 export function getAccountStats(accountId: number | string) {
   return apiRequest<TransactionStats>("transaction", `/api/transactions/account/${accountId}/stats`);
-}
-
-export function getLimits() {
-  return apiRequest<Limits>("transaction", "/api/transactions/limits");
 }
 
 export function deposit(values: MoneyMovementValues, idempotencyKey: string) {

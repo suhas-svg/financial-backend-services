@@ -45,7 +45,7 @@ EXPOSE 8082 9090
 
 # Health check
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8082/health || exit 1
+    CMD python -c "import socket; socket.create_connection(('127.0.0.1', 8082), 5).close()" || exit 1
 
 # Development command with reload
 CMD ["python", "src/main.py", "--reload"]
@@ -89,7 +89,7 @@ EXPOSE 8082 9090
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
-    CMD curl -f http://localhost:8082/health || exit 1
+    CMD python -c "import socket; socket.create_connection(('127.0.0.1', 8082), 5).close()" || exit 1
 
 # Run the application
 CMD ["python", "src/main.py"]

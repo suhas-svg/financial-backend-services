@@ -342,7 +342,7 @@ describe("auth screens", () => {
     renderApp("/register");
 
     await user.type(screen.getByLabelText("Username"), "new_customer");
-    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.type(screen.getByLabelText("Password"), "password1234");
     await user.click(screen.getByRole("button", { name: "Create account" }));
     expect(await screen.findByText("Username already exists")).toBeInTheDocument();
 
@@ -985,8 +985,8 @@ describe("customer security", () => {
     mockFetch((url, init) => {
       calls.push({ url, init });
       if (url.endsWith("/api/security/mfa")) return jsonResponse({ enrolled: true, status: "ACTIVE", recoveryCodesRemaining: 8 });
-      if (url.endsWith("/api/security/spending-limits") && init?.method !== "PUT") return jsonResponse([{ accountId: 101, transferDailyLimit: 5000, withdrawalDailyLimit: 1000, transferUsedToday: 750, withdrawalUsedToday: 100 }]);
-      if (url.endsWith("/api/security/spending-limits/101") && init?.method === "PUT") return jsonResponse({ accountId: 101, transferDailyLimit: 4000, withdrawalDailyLimit: 900, transferUsedToday: 750, withdrawalUsedToday: 100 });
+      if (url.endsWith("/api/security/spending-limits") && init?.method !== "PUT") return jsonResponse([{ accountId: 101, currency: "USD", transferDailyLimit: 5000, withdrawalDailyLimit: 1000, transferUsedToday: 750, withdrawalUsedToday: 100 }]);
+      if (url.endsWith("/api/security/spending-limits/101") && init?.method === "PUT") return jsonResponse({ accountId: 101, currency: "USD", transferDailyLimit: 4000, withdrawalDailyLimit: 900, transferUsedToday: 750, withdrawalUsedToday: 100 });
       return undefined;
     });
     renderApp("/security", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));

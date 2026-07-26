@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   mcp-financial-server:
     build: .
@@ -8,8 +6,8 @@ services:
       - "8082:8082"  # MCP server port
       - "9090:9090"  # Metrics port
     environment:
-      - MCP_HOST=0.0.0.0
-      - MCP_PORT=8082
+      - HOST=0.0.0.0
+      - PORT=8082
       - ACCOUNT_SERVICE_URL=http://account-service:8080
       - TRANSACTION_SERVICE_URL=http://transaction-service:8081
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
@@ -23,7 +21,7 @@ services:
       - financial-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8082), 5).close()"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -31,7 +29,7 @@ services:
 
   # Account Service (external reference)
   account-service:
-    image: account-service:latest
+    image: ${ACCOUNT_SERVICE_IMAGE:?ACCOUNT_SERVICE_IMAGE must be an immutable image reference}
     container_name: account-service
     ports:
       - "8080:8080"
@@ -39,8 +37,8 @@ services:
       - SPRING_PROFILES_ACTIVE=docker
       - DB_HOST=postgres
       - DB_NAME=myfirstdb
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
+      - DB_USER=${POSTGRES_USER:?POSTGRES_USER is required}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
     depends_on:
       - postgres
@@ -50,7 +48,7 @@ services:
 
   # Transaction Service (external reference)
   transaction-service:
-    image: transaction-service:latest
+    image: ${TRANSACTION_SERVICE_IMAGE:?TRANSACTION_SERVICE_IMAGE must be an immutable image reference}
     container_name: transaction-service
     ports:
       - "8081:8081"
@@ -58,8 +56,8 @@ services:
       - SPRING_PROFILES_ACTIVE=docker
       - DB_HOST=postgres
       - DB_NAME=transactiondb
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
+      - DB_USER=${POSTGRES_USER:?POSTGRES_USER is required}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - ACCOUNT_SERVICE_URL=http://account-service:8080
     depends_on:
@@ -70,11 +68,11 @@ services:
 
   # PostgreSQL Database
   postgres:
-    image: postgres:15-alpine
+    image: ${POSTGRES_IMAGE:?POSTGRES_IMAGE must be an immutable image reference}
     container_name: postgres-financial
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=${POSTGRES_USER:?POSTGRES_USER is required}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       - POSTGRES_DB=postgres
     ports:
       - "5432:5432"
@@ -87,7 +85,7 @@ services:
 
   # Redis (optional for caching)
   redis:
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE:?REDIS_IMAGE must be an immutable image reference}
     container_name: redis-financial
     ports:
       - "6379:6379"
@@ -100,7 +98,7 @@ services:
 
   # Prometheus for metrics collection
   prometheus:
-    image: prom/prometheus:latest
+    image: ${PROMETHEUS_IMAGE:?PROMETHEUS_IMAGE must be an immutable image reference}
     container_name: prometheus-financial
     ports:
       - "9091:9090"
@@ -119,12 +117,12 @@ services:
 
   # Grafana for metrics visualization
   grafana:
-    image: grafana/grafana:latest
+    image: ${GRAFANA_IMAGE:?GRAFANA_IMAGE must be an immutable image reference}
     container_name: grafana-financial
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards

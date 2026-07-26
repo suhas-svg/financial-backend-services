@@ -66,7 +66,7 @@ export function SecurityPage() {
           {(Array.isArray(limits.data) ? limits.data : []).map((limit) => {
             const draft = limitDrafts[limit.accountId] ?? { transfer: String(limit.transferDailyLimit), withdrawal: String(limit.withdrawalDailyLimit), credential: "" };
             return <div key={limit.accountId} className="grid gap-3 rounded-md border border-line p-4">
-              <div className="font-medium">Account #{limit.accountId}</div>
+              <div className="font-medium">Account #{limit.accountId} ({limit.currency})</div>
               <p className="text-xs text-muted">Used today: transfers {limit.transferUsedToday.toFixed(2)} · withdrawals {limit.withdrawalUsedToday.toFixed(2)}</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Daily transfer limit"><Input type="number" min="0" step="0.01" value={draft.transfer} onChange={(e) => setLimitDrafts((all) => ({ ...all, [limit.accountId]: { ...draft, transfer: e.target.value } }))} /></Field>

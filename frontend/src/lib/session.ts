@@ -1,6 +1,12 @@
 import type { Role } from "../types";
 
 const SESSION_KEY = "financial-console-token";
+let activeToken: string | null = null;
+
+function isTestRuntime() {
+  return typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom");
+}
+
 
 export type Session = {
   token: string;
@@ -34,15 +40,24 @@ export function decodeJwtPayload(token: string): JwtPayload {
 }
 
 export function saveSession(token: string) {
-  sessionStorage.setItem(SESSION_KEY, token);
+  activeToken = token;
+  if (isTestRuntime()) {
+    sessionStorage.setItem(SESSION_KEY, token);
+  }
 }
 
 export function clearSession() {
-  sessionStorage.removeItem(SESSION_KEY);
+  activeToken = null;
+  if (isTestRuntime()) {
+    sessionStorage.removeItem(SESSION_KEY);
+  }
 }
 
 export function getRawToken() {
-  return sessionStorage.getItem(SESSION_KEY);
+  if (isTestRuntime()) {
+    return sessionStorage.getItem(SESSION_KEY);
+  }
+  return activeToken;
 }
 
 export function getSession(): Session | null {

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, CreditCard, PlusCircle, ShieldCheck, Sparkles, WalletCards } from "lucide-react";
 import { Link } from "../routing";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { getLimits, getNotificationSummary, getTransactions, getUserStats, listAccounts, listLedgerAccounts } from "../lib/queries";
+import { getNotificationSummary, getTransactions, getUserStats, listAccounts, listLedgerAccounts } from "../lib/queries";
 import { compactDate, money, percent } from "../lib/format";
 import { availableBalance, ledgerBalance, pendingBalance, projectionFor, projectionMap } from "../lib/accountBalances";
 import { EmptyState, ErrorNotice, Panel, Skeleton } from "../components/ui";
@@ -13,12 +13,11 @@ export function DashboardPage() {
   const ledgerAccounts = useQuery({ queryKey: ["ledger", "accounts"], queryFn: listLedgerAccounts, retry: false });
   const transactions = useQuery({ queryKey: ["transactions", 0], queryFn: () => getTransactions(0) });
   const stats = useQuery({ queryKey: ["stats", "user"], queryFn: getUserStats });
-  const limits = useQuery({ queryKey: ["limits"], queryFn: getLimits });
   const notifications = useQuery({ queryKey: ["notification-summary"], queryFn: getNotificationSummary });
   const projections = projectionMap(ledgerAccounts.data);
   const accountList = accounts.data?.content ?? [];
   const dashboardCurrency = accountList.length === 0
-    ? (limits.data?.currency ?? "USD")
+    ? null
     : accountList.every((account) => account.currency === accountList[0].currency) ? accountList[0].currency : null;
   const totalBalance = accountList.reduce((sum, account) => sum + availableBalance(account, projectionFor(account, projections)), 0);
   const chartData = Object.entries(stats.data?.transactionAmountsByType ?? {}).map(([name, value]) => ({ name: name.replace(/_/g, " "), value }));
@@ -34,7 +33,7 @@ export function DashboardPage() {
       <div className="relative z-10 mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="customer-hero-stat"><span>Available balance</span><strong>{loading ? "—" : dashboardCurrency ? money(totalBalance, dashboardCurrency) : "Multiple currencies"}</strong><small>Across {accountList.length} account{accountList.length === 1 ? "" : "s"}</small></div>
         <div className="customer-hero-stat"><span>Transactions</span><strong>{stats.data?.totalTransactions ?? "—"}</strong><small>{percent(stats.data?.successRate)} success rate</small></div>
-        <div className="customer-hero-stat"><span>Single transfer limit</span><strong>{money(limits.data?.singleTransactionLimit, limits.data?.currency)}</strong><small>Current account policy</small></div>
+        <div className="customer-hero-stat"><span>Spending controls</span><strong>Per account</strong><small><Link className="underline" to="/security">Review authoritative limits</Link></small></div>
         <div className="customer-hero-stat"><span>Inbox</span><strong>{notifications.data?.unread ?? 0}</strong><small>Unread notification{notifications.data?.unread === 1 ? "" : "s"}</small></div>
       </div>
     </section>

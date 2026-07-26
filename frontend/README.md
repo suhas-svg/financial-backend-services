@@ -21,7 +21,7 @@ Run the backend services first, then open the Vite URL printed by `npm run dev`.
 ## Implemented Areas
 
 - Customer app:
-  - Register and use the modern customer login portal with JWT session persistence in `sessionStorage`
+  - Register and use the modern customer login portal with an in-memory JWT session; page reload intentionally requires reauthentication
   - Account list, create, type filter, and delete
   - Deposit, withdrawal, and transfer with generated `Idempotency-Key` headers
   - Transaction history, search filters, detail view, limits, and user stats

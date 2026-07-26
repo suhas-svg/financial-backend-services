@@ -98,4 +98,7 @@ Validate required values at render time.
 {{- if not .Values.image.repository -}}
   {{- fail "image.repository is required" -}}
 {{- end -}}
+{{- if or (not .Values.image.tag) (eq .Values.image.tag "latest") -}}
+  {{- fail "image.tag must be an explicit immutable version" -}}
+{{- end -}}
 {{- end -}}

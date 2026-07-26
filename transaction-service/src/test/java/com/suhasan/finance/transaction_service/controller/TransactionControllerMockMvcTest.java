@@ -93,11 +93,12 @@ class TransactionControllerMockMvcTest {
     @WithMockUser(username = "user123")
     void processTransfer_InsufficientFunds_ReturnsBadRequest() throws Exception {
         // Arrange
-        when(transferAuthorizationService.submit(any(TransferRequest.class), eq("user123"), isNull()))
+        when(transferAuthorizationService.submit(any(TransferRequest.class), eq("user123"), eq("test-idempotency-key")))
                 .thenThrow(new InsufficientFundsException("Insufficient funds for transaction"));
 
         // Act & Assert
         mockMvc.perform(post("/api/transactions/transfer")
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(transferRequest)))
@@ -106,18 +107,19 @@ class TransactionControllerMockMvcTest {
                 .andExpect(jsonPath("$.message").value("Insufficient funds for transaction"))
                 .andExpect(jsonPath("$.status").value(400));
 
-        verify(transferAuthorizationService).submit(any(TransferRequest.class), eq("user123"), isNull());
+        verify(transferAuthorizationService).submit(any(TransferRequest.class), eq("user123"), eq("test-idempotency-key"));
     }
 
     @Test
     @WithMockUser(username = "user123")
     void processTransfer_TransactionLimitExceeded_ReturnsBadRequest() throws Exception {
         // Arrange
-        when(transferAuthorizationService.submit(any(TransferRequest.class), eq("user123"), isNull()))
+        when(transferAuthorizationService.submit(any(TransferRequest.class), eq("user123"), eq("test-idempotency-key")))
                 .thenThrow(new TransactionLimitExceededException("Daily transaction limit exceeded"));
 
         // Act & Assert
         mockMvc.perform(post("/api/transactions/transfer")
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(transferRequest)))
@@ -126,7 +128,7 @@ class TransactionControllerMockMvcTest {
                 .andExpect(jsonPath("$.message").value("Daily transaction limit exceeded"))
                 .andExpect(jsonPath("$.status").value(400));
 
-        verify(transferAuthorizationService).submit(any(TransferRequest.class), eq("user123"), isNull());
+        verify(transferAuthorizationService).submit(any(TransferRequest.class), eq("user123"), eq("test-idempotency-key"));
     }
 
     @Test
@@ -142,6 +144,7 @@ class TransactionControllerMockMvcTest {
 
         // Act & Assert
         mockMvc.perform(post("/api/transactions/transfer")
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(invalidRequest)))
@@ -158,12 +161,13 @@ class TransactionControllerMockMvcTest {
     @WithMockUser(username = "user123")
     void processWithdrawal_InsufficientFunds_ReturnsBadRequest() throws Exception {
         // Arrange
-        when(transactionService.processWithdrawal(eq("acc1"), eq(BigDecimal.valueOf(150)), 
-                eq("Test withdrawal"), eq("WDR-REF"), eq("user123"), isNull()))
+        when(transactionService.processWithdrawal(eq("acc1"), eq(BigDecimal.valueOf(150)),
+                eq("Test withdrawal"), eq("WDR-REF"), eq("user123"), eq("test-idempotency-key")))
                 .thenThrow(new InsufficientFundsException("Insufficient funds for withdrawal"));
 
         // Act & Assert
         mockMvc.perform(post("/api/transactions/withdraw")
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(withdrawalRequest)))
@@ -171,8 +175,8 @@ class TransactionControllerMockMvcTest {
                 .andExpect(jsonPath("$.error").value("Insufficient Funds"))
                 .andExpect(jsonPath("$.message").value("Insufficient funds for withdrawal"));
 
-        verify(transactionService).processWithdrawal(eq("acc1"), eq(BigDecimal.valueOf(150)), 
-                eq("Test withdrawal"), eq("WDR-REF"), eq("user123"), isNull());
+        verify(transactionService).processWithdrawal(eq("acc1"), eq(BigDecimal.valueOf(150)),
+                eq("Test withdrawal"), eq("WDR-REF"), eq("user123"), eq("test-idempotency-key"));
     }
 
     @Test
@@ -183,12 +187,13 @@ class TransactionControllerMockMvcTest {
         ReversalRequest reversalRequest = ReversalRequest.builder()
                 .reason("Customer request")
                 .build();
-        
-        when(transactionService.reverseTransaction(eq(transactionId), eq("Customer request"), eq("user123")))
+
+        when(transactionService.reverseTransaction(eq(transactionId), eq("Customer request"), eq("user123"), eq("test-idempotency-key")))
                 .thenThrow(new TransactionAlreadyReversedException(transactionId, "Transaction already reversed"));
 
         // Act & Assert
         mockMvc.perform(post("/api/transactions/{transactionId}/reverse", transactionId)
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(reversalRequest)))
@@ -198,7 +203,7 @@ class TransactionControllerMockMvcTest {
                 .andExpect(jsonPath("$.transactionId").value(transactionId))
                 .andExpect(jsonPath("$.status").value(409));
 
-        verify(transactionService).reverseTransaction(eq(transactionId), eq("Customer request"), eq("user123"));
+        verify(transactionService).reverseTransaction(eq(transactionId), eq("Customer request"), eq("user123"), eq("test-idempotency-key"));
     }
 
     @Test
@@ -207,7 +212,7 @@ class TransactionControllerMockMvcTest {
         // Arrange
         List<TransactionResponse> transactions = Arrays.asList(transactionResponse);
         Page<TransactionResponse> page = new PageImpl<>(transactions, PageRequest.of(0, 20), 1);
-        
+
         when(transactionService.searchTransactions(any(TransactionFilterRequest.class), any()))
                 .thenReturn(page);
 
@@ -277,7 +282,7 @@ class TransactionControllerMockMvcTest {
                 .totalAmount(BigDecimal.valueOf(1000))
                 .successRate(80.0)
                 .build();
-        
+
         when(transactionService.getAccountTransactionStats(eq(accountId), any(), any()))
                 .thenReturn(statsResponse);
 
@@ -304,7 +309,7 @@ class TransactionControllerMockMvcTest {
         String accountId = "acc1";
         List<TransactionResponse> transactions = Arrays.asList(transactionResponse);
         Page<TransactionResponse> page = new PageImpl<>(transactions, PageRequest.of(1, 5), 10);
-        
+
         when(transactionService.getAccountTransactions(eq(accountId), any()))
                 .thenReturn(page);
 
@@ -329,6 +334,7 @@ class TransactionControllerMockMvcTest {
     void processTransfer_MalformedJson_ReturnsBadRequest() throws Exception {
         // Act & Assert
         mockMvc.perform(post("/api/transactions/transfer")
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{invalid json}"))
@@ -342,6 +348,7 @@ class TransactionControllerMockMvcTest {
     void processTransfer_MissingContentType_ReturnsUnsupportedMediaType() throws Exception {
         // Act & Assert
         mockMvc.perform(post("/api/transactions/transfer")
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .content(objectMapper.writeValueAsString(transferRequest)))
                 .andExpect(status().isUnsupportedMediaType());
