@@ -33,9 +33,9 @@ public class StepUpChallengeService {
     @Value("${security.step-up.max-attempts:5}")
     private int maxAttempts;
 
-    public StepUpInternalDtos.CreateChallengeResponse create(StepUpInternalDtos.CreateChallengeRequest request) {
+    public StepUpInternalDtos.CreateChallengeResponse create(final StepUpInternalDtos.CreateChallengeRequest request) {
         mfaService.activeMethod(request.userId());
-        Instant now = Instant.now();
+        final Instant now = Instant.now();
         StepUpChallenge challenge = new StepUpChallenge();
         challenge.setUserId(request.userId());
         challenge.setActionType(request.actionType());
@@ -46,8 +46,8 @@ public class StepUpChallengeService {
         return new StepUpInternalDtos.CreateChallengeResponse(challenge.getChallengeId(), challenge.getExpiresAt());
     }
 
-    public MfaResponses.ChallengeVerificationResponse verify(String challengeId, String username, String credential) {
-        StepUpChallenge challenge = locked(challengeId);
+    public MfaResponses.ChallengeVerificationResponse verify(final String challengeId, final String username, final String credential) {
+        final StepUpChallenge challenge = locked(challengeId);
         assertOwner(challenge, username);
         expireIfNecessary(challenge);
         if (challenge.getStatus() == StepUpChallengeStatus.LOCKED) {
@@ -56,7 +56,7 @@ public class StepUpChallengeService {
         if (challenge.getStatus() != StepUpChallengeStatus.PENDING) {
             throw new IllegalStateException("Challenge cannot be verified in its current state");
         }
-        MfaMethod method = mfaService.activeMethod(username);
+        final MfaMethod method = mfaService.activeMethod(username);
         if (!mfaService.verifyCredential(method, credential)) {
             challenge.setAttempts(challenge.getAttempts() + 1);
             if (challenge.getAttempts() >= maxAttempts) {
@@ -65,8 +65,8 @@ public class StepUpChallengeService {
             challengeRepository.save(challenge);
             throw new MfaVerificationException("Invalid verification credential");
         }
-        String proof = randomProof();
-        Instant now = Instant.now();
+        final String proof = randomProof();
+        final Instant now = Instant.now();
         challenge.setStatus(StepUpChallengeStatus.VERIFIED);
         challenge.setProofHash(sha256(proof));
         challenge.setVerifiedAt(now);
@@ -76,8 +76,8 @@ public class StepUpChallengeService {
     }
 
     public StepUpInternalDtos.ConsumeChallengeResponse consume(
-            String challengeId, StepUpInternalDtos.ConsumeChallengeRequest request) {
-        StepUpChallenge challenge = locked(challengeId);
+            final String challengeId, final StepUpInternalDtos.ConsumeChallengeRequest request) {
+        final StepUpChallenge challenge = locked(challengeId);
         assertOwner(challenge, request.userId());
         if (!MessageDigest.isEqual(challenge.getActionFingerprint().getBytes(StandardCharsets.UTF_8),
                 request.actionFingerprint().getBytes(StandardCharsets.UTF_8))) {
@@ -108,18 +108,18 @@ public class StepUpChallengeService {
         return new StepUpInternalDtos.ConsumeChallengeResponse(true, challenge.getConsumedAt());
     }
 
-    private StepUpChallenge locked(String challengeId) {
+    private StepUpChallenge locked(final String challengeId) {
         return challengeRepository.findForUpdateByChallengeId(challengeId)
                 .orElseThrow(() -> new IllegalArgumentException("Challenge not found"));
     }
 
-    private void assertOwner(StepUpChallenge challenge, String username) {
+    private void assertOwner(final StepUpChallenge challenge, final String username) {
         if (!challenge.getUserId().equals(username)) {
             throw new IllegalArgumentException("Challenge not found");
         }
     }
 
-    private void expireIfNecessary(StepUpChallenge challenge) {
+    private void expireIfNecessary(final StepUpChallenge challenge) {
         if (challenge.getStatus() == StepUpChallengeStatus.PENDING && !challenge.getExpiresAt().isAfter(Instant.now())) {
             challenge.setStatus(StepUpChallengeStatus.EXPIRED);
             challengeRepository.save(challenge);
@@ -128,12 +128,12 @@ public class StepUpChallengeService {
     }
 
     private String randomProof() {
-        byte[] bytes = new byte[32];
+        final byte[] bytes = new byte[32];
         secureRandom.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
-    private String sha256(String value) {
+    private String sha256(final String value) {
         try {
             return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(value.getBytes(StandardCharsets.UTF_8)));

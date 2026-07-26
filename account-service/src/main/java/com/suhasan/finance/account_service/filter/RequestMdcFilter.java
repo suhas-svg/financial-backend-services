@@ -16,11 +16,11 @@ import java.util.UUID;
 public class RequestMdcFilter extends OncePerRequestFilter {
 
   @Override
-  protected void doFilterInternal(@NonNull HttpServletRequest req,
-                                  @NonNull HttpServletResponse res,
-                                  @NonNull FilterChain chain)
+  protected void doFilterInternal(@NonNull final HttpServletRequest req,
+                                  @NonNull final HttpServletResponse res,
+                                  @NonNull final FilterChain chain)
       throws ServletException, IOException {
-    String requestId = UUID.randomUUID().toString();
+    final String requestId = UUID.randomUUID().toString();
     MDC.put("requestId", requestId);
     MDC.put("method", req.getMethod());
     MDC.put("path", req.getRequestURI());

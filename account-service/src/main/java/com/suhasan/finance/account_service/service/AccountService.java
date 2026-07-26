@@ -40,10 +40,12 @@ import lombok.extern.slf4j.Slf4j;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @Transactional
 @Slf4j
+@SuppressWarnings("PMD.AvoidDuplicateLiterals") // Consistent not-found text is part of the API error contract.
 public class AccountService {
 
     private final AccountRepository accountRepository;
@@ -56,11 +58,11 @@ public class AccountService {
     private Counter createdCounter;
     private Timer creationTimer;
 
-    public AccountService(AccountRepository accountRepository,
-                          AccountBalanceOperationRepository balanceOperationRepository,
-                          AccountDebitHoldRepository debitHoldRepository,
-                          AccountMapper accountMapper,
-                          MeterRegistry meterRegistry) {
+    public AccountService(final AccountRepository accountRepository,
+                          final AccountBalanceOperationRepository balanceOperationRepository,
+                          final AccountDebitHoldRepository debitHoldRepository,
+                          final AccountMapper accountMapper,
+                          final MeterRegistry meterRegistry) {
         this.accountRepository = accountRepository;
         this.balanceOperationRepository = balanceOperationRepository;
         this.debitHoldRepository = debitHoldRepository;
@@ -70,7 +72,7 @@ public class AccountService {
     }
 
     @Autowired
-    void setNotificationService(NotificationService notificationService) {
+    void setNotificationService(final NotificationService notificationService) {
         this.notificationService = notificationService;
     }
 
@@ -82,7 +84,7 @@ public class AccountService {
                 .register(meterRegistry);
     }
 
-    public Account create(Account account) {
+    public Account create(final Account account) {
         account.setBalance(BigDecimal.ZERO);
         account.setLedgerBalance(BigDecimal.ZERO);
         account.setAvailableBalance(BigDecimal.ZERO);
@@ -95,17 +97,17 @@ public class AccountService {
             account.setCurrency("USD");
         }
         return creationTimer.record(() -> {
-            Account saved = accountRepository.save(account);
+            final Account saved = accountRepository.save(account);
             createdCounter.increment();
             return saved;
         });
     }
 
-    public Account create(AccountCreateRequest request, String ownerId) {
-        Account account = switch (request.accountType().trim().toUpperCase()) {
+    public Account create(final AccountCreateRequest request, final String ownerId) {
+        final Account account = switch (request.accountType().trim().toUpperCase(Locale.ROOT)) {
             case "CHECKING" -> new CheckingAccount();
             case "SAVINGS" -> {
-                SavingsAccount savings = new SavingsAccount();
+                final SavingsAccount savings = new SavingsAccount();
                 savings.setInterestRate(request.interestRate() == null ? 0D : request.interestRate());
                 yield savings;
             }
@@ -113,7 +115,7 @@ public class AccountService {
                 if (request.creditLimit() == null || request.dueDate() == null) {
                     throw new IllegalArgumentException("Credit limit and due date are required");
                 }
-                CreditCardAccount credit = new CreditCardAccount();
+                final CreditCardAccount credit = new CreditCardAccount();
                 credit.setCreditLimit(request.creditLimit());
                 credit.setDueDate(request.dueDate());
                 yield credit;
@@ -125,7 +127,7 @@ public class AccountService {
         return create(account);
     }
     @Transactional(readOnly = true)
-    public Account findById(Long id) {
+    public Account findById(final Long id) {
         return accountRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Account not found: " + id));
     }
@@ -135,8 +137,8 @@ public class AccountService {
         return accountRepository.findAll();
     }
 
-    public Account updateMetadata(Long id, AccountMetadataUpdateRequest updated) {
-        Account existing = findById(id);
+    public Account updateMetadata(final Long id, final AccountMetadataUpdateRequest updated) {
+        final Account existing = findById(id);
         if (existing.getStatus() == AccountStatus.CLOSED) {
             throw new IllegalStateException("Closed accounts cannot be updated");
         }
@@ -151,17 +153,17 @@ public class AccountService {
     }
 
     /** Compatibility API which is deliberately metadata-only. */
-    public Account update(Long id, Account updated) {
-        Double interestRate = updated instanceof SavingsAccount savings ? savings.getInterestRate() : null;
-        BigDecimal creditLimit = updated instanceof CreditCardAccount credit ? credit.getCreditLimit() : null;
-        java.time.LocalDate dueDate = updated instanceof CreditCardAccount credit ? credit.getDueDate() : null;
+    public Account update(final Long id, final Account updated) {
+        final Double interestRate = updated instanceof SavingsAccount savings ? savings.getInterestRate() : null;
+        final BigDecimal creditLimit = updated instanceof CreditCardAccount credit ? credit.getCreditLimit() : null;
+        final java.time.LocalDate dueDate = updated instanceof CreditCardAccount credit ? credit.getDueDate() : null;
         return updateMetadata(id, new AccountMetadataUpdateRequest(interestRate, creditLimit, dueDate));
     }
-    public Account updateStatus(Long id, AccountStatus status, String reason, String actor) {
+    public Account updateStatus(final Long id, final AccountStatus status, final String reason, final String actor) {
         if (reason == null || reason.isBlank()) {
             throw new IllegalArgumentException("Status reason is required");
         }
-        Account existing = findById(id);
+        final Account existing = findById(id);
         if (status == AccountStatus.CLOSED || existing.getStatus() == AccountStatus.CLOSED) {
             throw new IllegalStateException("Closed lifecycle transitions require the closure coordinator");
         }
@@ -169,16 +171,16 @@ public class AccountService {
         existing.setStatusReason(reason.trim());
         existing.setStatusUpdatedAt(LocalDateTime.now());
         existing.setStatusUpdatedBy(actor);
-        Account saved = accountRepository.save(existing);
+        final Account saved = accountRepository.save(existing);
         emitAccountStatusNotification(saved);
         return saved;
     }
 
-    public Account close(Long id, String reason, String actor) {
+    public Account close(final Long id, final String reason, final String actor) {
         if (reason == null || reason.isBlank()) {
             throw new IllegalArgumentException("Closure reason is required");
         }
-        Account account = accountRepository.findByIdForUpdate(id)
+        final Account account = accountRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new IllegalArgumentException("Account not found: " + id));
         normalizeBalances(account);
         if (account.getLedgerBalance().signum() != 0
@@ -196,8 +198,8 @@ public class AccountService {
         return accountRepository.save(account);
     }
     @Transactional(readOnly = true)
-    public Page<AccountResponse> listAccounts(String ownerId, String accountType, AccountStatus status, Pageable pageable) {
-        Page<Account> page;
+    public Page<AccountResponse> listAccounts(final String ownerId, final String accountType, final AccountStatus status, final Pageable pageable) {
+        final Page<Account> page;
         if (ownerId != null && accountType != null && status != null) {
             page = accountRepository.findByOwnerIdAndAccountTypeAndStatus(ownerId, accountType, status, pageable);
         } else if (ownerId != null && accountType != null) {
@@ -219,8 +221,8 @@ public class AccountService {
     }
 
 
-    public AccountResponse applyLedgerProjection(Long accountId, LedgerProjectionUpdateRequest request) {
-        Account account = accountRepository.findByIdForUpdate(accountId)
+    public AccountResponse applyLedgerProjection(final Long accountId, final LedgerProjectionUpdateRequest request) {
+        final Account account = accountRepository.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new IllegalArgumentException("Account not found: " + accountId));
         normalizeBalances(account);
         if (!account.getCurrency().equals(request.currency())) {
@@ -228,7 +230,7 @@ public class AccountService {
                     + " does not match account currency " + account.getCurrency());
         }
 
-        long currentVersion = account.getLedgerProjectionVersion();
+        final long currentVersion = account.getLedgerProjectionVersion();
         if (request.version() < currentVersion) {
             return accountMapper.toDto(account);
         }
@@ -250,8 +252,8 @@ public class AccountService {
         return accountMapper.toDto(accountRepository.save(account));
     }
 
-    private void requireExactProjectionReplay(Account account, LedgerProjectionUpdateRequest request) {
-        boolean exact = account.getLedgerBalance().compareTo(request.postedBalance()) == 0
+    private void requireExactProjectionReplay(final Account account, final LedgerProjectionUpdateRequest request) {
+        final boolean exact = account.getLedgerBalance().compareTo(request.postedBalance()) == 0
                 && account.getPendingBalance().compareTo(request.pendingBalance()) == 0
                 && account.getAvailableBalance().compareTo(request.availableBalance()) == 0
                 && java.util.Objects.equals(account.getLedgerProjectionSourceEventId(), request.sourceEventId());
@@ -261,11 +263,11 @@ public class AccountService {
         }
     }
 
-    public BalanceOperationResponse applyBalanceOperation(Long accountId, BalanceOperationRequest request) {
-        AccountBalanceOperationId operationId = new AccountBalanceOperationId(request.getOperationId(), accountId);
-        AccountBalanceOperation existingOperation = balanceOperationRepository.findById(operationId).orElse(null);
+    public BalanceOperationResponse applyBalanceOperation(final Long accountId, final BalanceOperationRequest request) {
+        final AccountBalanceOperationId operationId = new AccountBalanceOperationId(request.getOperationId(), accountId);
+        final AccountBalanceOperation existingOperation = balanceOperationRepository.findById(operationId).orElse(null);
         if (existingOperation != null) {
-            Account account = findById(accountId);
+            final Account account = findById(accountId);
             normalizeBalances(account);
             return BalanceOperationResponse.builder()
                     .accountId(accountId)
@@ -277,20 +279,20 @@ public class AccountService {
                     .build();
         }
 
-        Account account = accountRepository.findByIdForUpdate(accountId)
+        final Account account = accountRepository.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new IllegalArgumentException("Account not found: " + accountId));
 
         normalizeBalances(account);
-        BigDecimal currentBalance = account.getLedgerBalance();
-        BigDecimal newBalance = currentBalance.add(request.getDelta());
-        BigDecimal newAvailableBalance = account.getAvailableBalance().add(request.getDelta());
-        boolean allowNegative = Boolean.TRUE.equals(request.getAllowNegative());
+        final BigDecimal currentBalance = account.getLedgerBalance();
+        final BigDecimal newBalance = currentBalance.add(request.getDelta());
+        final BigDecimal newAvailableBalance = account.getAvailableBalance().add(request.getDelta());
+        final boolean allowNegative = Boolean.TRUE.equals(request.getAllowNegative());
 
         if (account.getStatus() == AccountStatus.CLOSED) {
             throw new IllegalStateException("Closed accounts cannot receive balance operations");
         }
         if (account.getStatus() == AccountStatus.FROZEN && request.getDelta().compareTo(BigDecimal.ZERO) < 0) {
-            AccountBalanceOperation rejectedOperation = AccountBalanceOperation.builder()
+            final AccountBalanceOperation rejectedOperation = AccountBalanceOperation.builder()
                     .id(operationId)
                     .transactionId(request.getTransactionId())
                     .delta(request.getDelta())
@@ -314,7 +316,7 @@ public class AccountService {
         }
 
         if (!allowNegative && newAvailableBalance.compareTo(BigDecimal.ZERO) < 0) {
-            AccountBalanceOperation rejectedOperation = AccountBalanceOperation.builder()
+            final AccountBalanceOperation rejectedOperation = AccountBalanceOperation.builder()
                     .id(operationId)
                     .transactionId(request.getTransactionId())
                     .delta(request.getDelta())
@@ -339,8 +341,8 @@ public class AccountService {
         account.setLedgerBalance(newBalance);
         account.setAvailableBalance(newAvailableBalance);
         account.setBalance(newBalance);
-        Account savedAccount = accountRepository.save(account);
-        AccountBalanceOperation appliedOperation = AccountBalanceOperation.builder()
+        final Account savedAccount = accountRepository.save(account);
+        final AccountBalanceOperation appliedOperation = AccountBalanceOperation.builder()
                 .id(operationId)
                 .transactionId(request.getTransactionId())
                 .delta(request.getDelta())
@@ -362,16 +364,16 @@ public class AccountService {
                 .build();
     }
 
-    public DebitHoldResponse placeDebitHold(Long accountId, DebitHoldRequest request) {
-        AccountDebitHold existing = debitHoldRepository.findById(request.getHoldId()).orElse(null);
+    public DebitHoldResponse placeDebitHold(final Long accountId, final DebitHoldRequest request) {
+        final AccountDebitHold existing = debitHoldRepository.findById(request.getHoldId()).orElse(null);
         if (existing != null) {
             validateReplayMatchesRequest(accountId, request, existing);
-            Account account = findById(accountId);
+            final Account account = findById(accountId);
             normalizeBalances(account);
             return holdResponse(existing, account, existing.getStatus() == DebitHoldStatus.PLACED);
         }
 
-        Account account = accountRepository.findByIdForUpdate(accountId)
+        final Account account = accountRepository.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new IllegalArgumentException("Account not found: " + accountId));
         normalizeBalances(account);
 
@@ -383,8 +385,8 @@ public class AccountService {
         }
 
         account.setAvailableBalance(account.getAvailableBalance().subtract(request.getAmount()));
-        Account savedAccount = accountRepository.save(account);
-        AccountDebitHold hold = AccountDebitHold.builder()
+        final Account savedAccount = accountRepository.save(account);
+        final AccountDebitHold hold = AccountDebitHold.builder()
                 .holdId(request.getHoldId())
                 .accountId(accountId)
                 .transactionId(request.getTransactionId())
@@ -396,11 +398,11 @@ public class AccountService {
         return holdResponse(hold, savedAccount, true);
     }
 
-    public DebitHoldResponse captureDebitHold(Long accountId, String holdId, String transactionId, String reason) {
-        Account account = accountRepository.findByIdForUpdate(accountId)
+    public DebitHoldResponse captureDebitHold(final Long accountId, final String holdId, final String transactionId, final String reason) {
+        final Account account = accountRepository.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new IllegalArgumentException("Account not found: " + accountId));
         normalizeBalances(account);
-        AccountDebitHold hold = debitHoldRepository.findById(holdId)
+        final AccountDebitHold hold = debitHoldRepository.findById(holdId)
                 .orElseThrow(() -> new IllegalArgumentException("Debit hold not found: " + holdId));
         validateHoldAccount(accountId, hold);
         if (hold.getStatus() == DebitHoldStatus.CAPTURED) {
@@ -412,7 +414,7 @@ public class AccountService {
 
         account.setLedgerBalance(account.getLedgerBalance().subtract(hold.getAmount()));
         account.setBalance(account.getLedgerBalance());
-        Account savedAccount = accountRepository.save(account);
+        final Account savedAccount = accountRepository.save(account);
         hold.setStatus(DebitHoldStatus.CAPTURED);
         hold.setCapturedAt(LocalDateTime.now());
         hold.setCapturedByTransactionId(transactionId);
@@ -421,11 +423,11 @@ public class AccountService {
         return holdResponse(hold, savedAccount, true);
     }
 
-    public DebitHoldResponse releaseDebitHold(Long accountId, String holdId, String transactionId, String reason) {
-        Account account = accountRepository.findByIdForUpdate(accountId)
+    public DebitHoldResponse releaseDebitHold(final Long accountId, final String holdId, final String transactionId, final String reason) {
+        final Account account = accountRepository.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new IllegalArgumentException("Account not found: " + accountId));
         normalizeBalances(account);
-        AccountDebitHold hold = debitHoldRepository.findById(holdId)
+        final AccountDebitHold hold = debitHoldRepository.findById(holdId)
                 .orElseThrow(() -> new IllegalArgumentException("Debit hold not found: " + holdId));
         validateHoldAccount(accountId, hold);
         if (hold.getStatus() == DebitHoldStatus.RELEASED) {
@@ -436,7 +438,7 @@ public class AccountService {
         }
 
         account.setAvailableBalance(account.getAvailableBalance().add(hold.getAmount()));
-        Account savedAccount = accountRepository.save(account);
+        final Account savedAccount = accountRepository.save(account);
         hold.setStatus(DebitHoldStatus.RELEASED);
         hold.setReleasedAt(LocalDateTime.now());
         hold.setReleasedByTransactionId(transactionId);
@@ -445,13 +447,13 @@ public class AccountService {
         return holdResponse(hold, savedAccount, true);
     }
 
-    private void validateHoldAccount(Long accountId, AccountDebitHold hold) {
+    private void validateHoldAccount(final Long accountId, final AccountDebitHold hold) {
         if (!accountId.equals(hold.getAccountId())) {
             throw new IllegalArgumentException("Debit hold does not belong to account: " + accountId);
         }
     }
 
-    private DebitHoldResponse rejectedHoldResponse(String holdId, Account account, String message) {
+    private DebitHoldResponse rejectedHoldResponse(final String holdId, final Account account, final String message) {
         return DebitHoldResponse.builder()
                 .holdId(holdId)
                 .accountId(account.getId())
@@ -464,11 +466,11 @@ public class AccountService {
                 .build();
     }
 
-    private DebitHoldResponse holdResponse(AccountDebitHold hold, Account account, boolean applied) {
+    private DebitHoldResponse holdResponse(final AccountDebitHold hold, final Account account, final boolean applied) {
         return holdResponse(hold, account, applied, null);
     }
 
-    private DebitHoldResponse holdResponse(AccountDebitHold hold, Account account, boolean applied, String message) {
+    private DebitHoldResponse holdResponse(final AccountDebitHold hold, final Account account, final boolean applied, final String message) {
         return DebitHoldResponse.builder()
                 .holdId(hold.getHoldId())
                 .accountId(account.getId())
@@ -481,7 +483,7 @@ public class AccountService {
                 .build();
     }
 
-    private void normalizeBalances(Account account) {
+    private void normalizeBalances(final Account account) {
         if (account.getLedgerBalance() == null) {
             account.setLedgerBalance(account.getBalance());
         }
@@ -491,7 +493,7 @@ public class AccountService {
         account.setBalance(account.getLedgerBalance());
     }
 
-    private void validateReplayMatchesRequest(Long accountId, DebitHoldRequest request, AccountDebitHold existing) {
+    private void validateReplayMatchesRequest(final Long accountId, final DebitHoldRequest request, final AccountDebitHold existing) {
         if (!accountId.equals(existing.getAccountId())
                 || !request.getTransactionId().equals(existing.getTransactionId())
                 || request.getAmount().compareTo(existing.getAmount()) != 0) {
@@ -499,13 +501,13 @@ public class AccountService {
         }
     }
 
-    private void emitAccountStatusNotification(Account account) {
+    private void emitAccountStatusNotification(final Account account) {
         if (notificationService == null || account.getStatus() == null) {
             return;
         }
-        NotificationType type;
-        NotificationSeverity severity;
-        String title;
+        final NotificationType type;
+        final NotificationSeverity severity;
+        final String title;
         if (account.getStatus() == AccountStatus.FROZEN) {
             type = NotificationType.ACCOUNT_FROZEN;
             severity = NotificationSeverity.CRITICAL;
@@ -529,7 +531,9 @@ public class AccountService {
                     .dedupeKey("account-status:%s:%s:%s".formatted(account.getId(), account.getStatus(), account.getStatusUpdatedAt()))
                     .build());
         } catch (RuntimeException e) {
-            log.warn("Failed to create account status notification for account {}: {}", account.getId(), e.getMessage());
+            if (log.isWarnEnabled()) {
+                log.warn("Failed to create account status notification for account {}: {}", account.getId(), e.getMessage());
+            }
         }
     }
 }

@@ -38,7 +38,7 @@ module "kubernetes" {
   namespace             = var.namespace
   enable_network_policy = var.enable_network_policy
   enable_resource_quota = var.enable_resource_quota
-  
+
   resource_quota = {
     requests_cpu    = "1"
     requests_memory = "2Gi"
@@ -61,7 +61,7 @@ module "database" {
   db_name            = var.db_name
   db_username        = var.db_username
   postgres_version   = var.postgres_version
-  db_storage_size    = "5Gi"  # Smaller storage for dev
+  db_storage_size    = "5Gi" # Smaller storage for dev
   storage_class_name = var.storage_class_name
 
   db_resources = {
@@ -82,15 +82,15 @@ module "database" {
 module "monitoring" {
   source = "../../modules/monitoring"
 
-  app_name                = var.app_name
-  environment             = var.environment
-  monitoring_namespace    = var.monitoring_namespace
+  app_name               = var.app_name
+  environment            = var.environment
+  monitoring_namespace   = var.monitoring_namespace
   app_namespace          = module.kubernetes.namespace_name
   enable_grafana         = var.enable_grafana
   enable_alertmanager    = var.enable_alertmanager
   grafana_admin_password = var.grafana_admin_password
   storage_class_name     = var.storage_class_name
-  
+
   # Smaller resources for development
   prometheus_storage_size = "10Gi"
   prometheus_resources = {
@@ -104,7 +104,7 @@ module "monitoring" {
     }
   }
 
-  grafana_storage_size = "2Gi"
+  grafana_storage_size      = "2Gi"
   alertmanager_storage_size = "2Gi"
 
   depends_on = [module.kubernetes]

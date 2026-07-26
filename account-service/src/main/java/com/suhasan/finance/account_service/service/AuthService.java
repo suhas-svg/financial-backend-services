@@ -25,10 +25,10 @@ public class AuthService {
     private final Counter registrationFailedCounter;
     private final Timer registrationTimer;
 
-    public AuthService(UserRepository userRepo,
-                      RoleRepository roleRepo,
-                      PasswordEncoder passwordEncoder,
-                      MeterRegistry registry) {
+    public AuthService(final UserRepository userRepo,
+                      final RoleRepository roleRepo,
+                      final PasswordEncoder passwordEncoder,
+                      final MeterRegistry registry) {
         this.userRepo = userRepo;
         this.roleRepo = roleRepo;
         this.passwordEncoder = passwordEncoder;
@@ -40,7 +40,7 @@ public class AuthService {
     }
 
     @Transactional
-    public RegisterResponse register(RegisterRequest req) {
+    public RegisterResponse register(final RegisterRequest req) {
         return registrationTimer.record(() -> {
             try {
                 // 1) Check uniqueness
@@ -48,21 +48,21 @@ public class AuthService {
                     throw new IllegalArgumentException("Username already taken");
                 }
                 // 2) Load or create ROLE_USER
-                Role userRole = roleRepo.findByName("ROLE_USER")
+                final Role userRole = roleRepo.findByName("ROLE_USER")
                     .orElseGet(() -> {
-                        Role r = new Role();
+                        final Role r = new Role();
                         r.setName("ROLE_USER");
                         return roleRepo.save(r);
                     });
                 // 3) Build & save User
-                User user = new User();
+                final User user = new User();
                 user.setUsername(req.getUsername());
                 user.setPassword(passwordEncoder.encode(req.getPassword()));
                 user.setRoles(Set.of(userRole));
-                User saved = userRepo.save(user);
+                final User saved = userRepo.save(user);
 
                 // 4) Return safe DTO
-                Set<String> roles = saved.getRoles()
+                final Set<String> roles = saved.getRoles()
                                          .stream()
                                          .map(Role::getName)
                                          .collect(Collectors.toSet());

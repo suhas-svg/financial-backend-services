@@ -2,6 +2,7 @@ package com.suhasan.finance.account_service.dto;
 
 import jakarta.validation.constraints.NotBlank;
 
+@SuppressWarnings("PMD.MissingStaticMethodInNonInstantiatableClass") // Namespace for nested request records.
 public final class MfaRequests {
     private MfaRequests() {}
 

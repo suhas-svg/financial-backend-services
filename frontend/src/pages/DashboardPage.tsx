@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, CreditCard, PlusCircle, ShieldCheck, Sparkles, WalletCards } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "../routing";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { getLimits, getNotificationSummary, getTransactions, getUserStats, listAccounts, listLedgerAccounts } from "../lib/queries";
 import { compactDate, money, percent } from "../lib/format";

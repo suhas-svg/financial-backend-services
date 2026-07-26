@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { ArrowRight, BadgeCheck, Building2, Eye, EyeOff, Landmark, LockKeyhole, ShieldCheck, Sparkles, UserRound } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "../routing";
 import { Button, ErrorNotice, Input } from "../components/ui";
 import { login } from "../lib/queries";
 import { loginSchema, type LoginValues } from "../lib/schemas";

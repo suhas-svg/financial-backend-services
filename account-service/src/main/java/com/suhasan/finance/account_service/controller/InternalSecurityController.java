@@ -13,13 +13,13 @@ public class InternalSecurityController {
     private final StepUpChallengeService challengeService;
 
     @PostMapping
-    public StepUpInternalDtos.CreateChallengeResponse create(@Valid @RequestBody StepUpInternalDtos.CreateChallengeRequest request) {
+    public StepUpInternalDtos.CreateChallengeResponse create(@Valid @RequestBody final StepUpInternalDtos.CreateChallengeRequest request) {
         return challengeService.create(request);
     }
 
     @PostMapping("/{challengeId}/consume")
-    public StepUpInternalDtos.ConsumeChallengeResponse consume(@PathVariable String challengeId,
-                                                                @Valid @RequestBody StepUpInternalDtos.ConsumeChallengeRequest request) {
+    public StepUpInternalDtos.ConsumeChallengeResponse consume(@PathVariable final String challengeId,
+                                                                @Valid @RequestBody final StepUpInternalDtos.ConsumeChallengeRequest request) {
         return challengeService.consume(challengeId, request);
     }
 }

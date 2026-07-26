@@ -35,46 +35,46 @@ public class BeneficiaryController {
 
     @PostMapping
     public ResponseEntity<BeneficiaryResponse> create(
-            @Valid @RequestBody BeneficiaryCreateRequest request,
-            Authentication authentication) {
+            @Valid @RequestBody final BeneficiaryCreateRequest request,
+            final Authentication authentication) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(beneficiaryService.create(authentication.getName(), request));
     }
 
     @GetMapping
     public ResponseEntity<Page<BeneficiaryResponse>> list(
-            @RequestParam(required = false) BeneficiaryStatus status,
-            @PageableDefault(size = 20, sort = "displayName") Pageable pageable,
-            Authentication authentication) {
+            @RequestParam(required = false) final BeneficiaryStatus status,
+            @PageableDefault(size = 20, sort = "displayName") final Pageable pageable,
+            final Authentication authentication) {
         return ResponseEntity.ok(beneficiaryService.list(authentication.getName(), status, pageable));
     }
 
     @GetMapping("/{beneficiaryId}")
     public ResponseEntity<BeneficiaryResponse> get(
-            @PathVariable String beneficiaryId,
-            Authentication authentication) {
+            @PathVariable final String beneficiaryId,
+            final Authentication authentication) {
         return ResponseEntity.ok(beneficiaryService.get(beneficiaryId, authentication.getName()));
     }
 
     @PutMapping("/{beneficiaryId}")
     public ResponseEntity<BeneficiaryResponse> update(
-            @PathVariable String beneficiaryId,
-            @Valid @RequestBody BeneficiaryUpdateRequest request,
-            Authentication authentication) {
+            @PathVariable final String beneficiaryId,
+            @Valid @RequestBody final BeneficiaryUpdateRequest request,
+            final Authentication authentication) {
         return ResponseEntity.ok(beneficiaryService.update(beneficiaryId, authentication.getName(), request));
     }
 
     @DeleteMapping("/{beneficiaryId}")
     public ResponseEntity<BeneficiaryResponse> disable(
-            @PathVariable String beneficiaryId,
-            Authentication authentication) {
+            @PathVariable final String beneficiaryId,
+            final Authentication authentication) {
         return ResponseEntity.ok(beneficiaryService.disable(beneficiaryId, authentication.getName()));
     }
 
     @PatchMapping("/{beneficiaryId}/disable")
     public ResponseEntity<BeneficiaryResponse> disablePatch(
-            @PathVariable String beneficiaryId,
-            Authentication authentication) {
+            @PathVariable final String beneficiaryId,
+            final Authentication authentication) {
         return disable(beneficiaryId, authentication);
     }
 }

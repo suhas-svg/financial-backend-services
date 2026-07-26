@@ -27,10 +27,10 @@ public class SyntheticSandboxBootstrapService {
     private final PasswordEncoder passwordEncoder;
     private final String bootstrapToken;
 
-    public SyntheticSandboxBootstrapService(SyntheticSandboxGuard guard,
-            SyntheticSandboxBootstrapRepository bootstrapRepository, UserRepository userRepository,
-            RoleRepository roleRepository, PasswordEncoder passwordEncoder,
-            @Value("${sandbox.bootstrap.token:}") String bootstrapToken) {
+    public SyntheticSandboxBootstrapService(final SyntheticSandboxGuard guard,
+            final SyntheticSandboxBootstrapRepository bootstrapRepository, final UserRepository userRepository,
+            final RoleRepository roleRepository, final PasswordEncoder passwordEncoder,
+            @Value("${sandbox.bootstrap.token:}") final String bootstrapToken) {
         this.guard = guard;
         this.bootstrapRepository = bootstrapRepository;
         this.userRepository = userRepository;
@@ -47,7 +47,7 @@ public class SyntheticSandboxBootstrapService {
     }
 
     @Transactional(isolation = Isolation.SERIALIZABLE)
-    public BootstrapStatus bootstrap(String suppliedToken, String username, String password) {
+    public BootstrapStatus bootstrap(final String suppliedToken, final String username, final String password) {
         guard.requireSynthetic();
         requireToken(suppliedToken);
         if (bootstrapRepository.existsById(SINGLETON_ID)) {
@@ -62,15 +62,15 @@ public class SyntheticSandboxBootstrapService {
         if (userRepository.existsByUsername(username)) {
             throw new IllegalStateException("Requested operator username already exists");
         }
-        Role admin = roleRepository.findByName("ROLE_ADMIN").orElseGet(() -> saveRole("ROLE_ADMIN"));
-        Role userRole = roleRepository.findByName("ROLE_USER").orElseGet(() -> saveRole("ROLE_USER"));
-        User operator = new User();
+        final Role admin = roleRepository.findByName("ROLE_ADMIN").orElseGet(() -> saveRole("ROLE_ADMIN"));
+        final Role userRole = roleRepository.findByName("ROLE_USER").orElseGet(() -> saveRole("ROLE_USER"));
+        final User operator = new User();
         operator.setUsername(username);
         operator.setPassword(passwordEncoder.encode(password));
         operator.setRoles(Set.of(admin, userRole));
         userRepository.save(operator);
 
-        SyntheticSandboxBootstrap state = new SyntheticSandboxBootstrap();
+        final SyntheticSandboxBootstrap state = new SyntheticSandboxBootstrap();
         state.setSingletonId(SINGLETON_ID);
         state.setOperatorUsername(username);
         state.setCompletedAt(Instant.now());
@@ -78,13 +78,13 @@ public class SyntheticSandboxBootstrapService {
         return new BootstrapStatus(false, true, username);
     }
 
-    private Role saveRole(String name) {
-        Role role = new Role();
+    private Role saveRole(final String name) {
+        final Role role = new Role();
         role.setName(name);
         return roleRepository.save(role);
     }
 
-    private void requireToken(String suppliedToken) {
+    private void requireToken(final String suppliedToken) {
         if (bootstrapToken.isBlank() || suppliedToken == null || suppliedToken.isBlank()
                 || !MessageDigest.isEqual(bootstrapToken.getBytes(StandardCharsets.UTF_8),
                 suppliedToken.getBytes(StandardCharsets.UTF_8))) {

@@ -24,6 +24,7 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@SuppressWarnings("PMD.AvoidLiteralsInIfCondition") // Retry-state threshold is part of the entity contract.
 public class Notification {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

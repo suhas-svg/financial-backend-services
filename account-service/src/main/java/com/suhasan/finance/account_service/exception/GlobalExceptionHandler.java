@@ -147,8 +147,8 @@ public class GlobalExceptionHandler {
     // 0) Handle malformed JSON (missing subtype or syntax errors)
     @ExceptionHandler(HttpMessageNotReadableException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse handleJsonParse(HttpMessageNotReadableException ex,
-                                         HttpServletRequest req) {
+    public ErrorResponse handleJsonParse(final HttpMessageNotReadableException ex,
+                                         final HttpServletRequest req) {
         String msg = ex.getMostSpecificCause().getMessage();
         if (msg == null || msg.isBlank()) {
             msg = ex.getMessage();
@@ -164,10 +164,10 @@ public class GlobalExceptionHandler {
     // 1) Handle bean-validation failures
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse handleValidation(MethodArgumentNotValidException ex,
-                                          HttpServletRequest req) {
-        FieldError fe = ex.getBindingResult().getFieldErrors().get(0);
-        String msg = fe.getField() + ": " + fe.getDefaultMessage();
+    public ErrorResponse handleValidation(final MethodArgumentNotValidException ex,
+                                          final HttpServletRequest req) {
+        final FieldError fe = ex.getBindingResult().getFieldErrors().get(0);
+        final String msg = fe.getField() + ": " + fe.getDefaultMessage();
         return new ErrorResponse(
             "Validation Failed",
             msg,
@@ -178,9 +178,9 @@ public class GlobalExceptionHandler {
 
     // 2) Handle not-found or illegal-arg exceptions
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ErrorResponse> handleNotFound(IllegalArgumentException ex,
-                                                        HttpServletRequest req) {
-        ErrorResponse err = new ErrorResponse(
+    public ResponseEntity<ErrorResponse> handleNotFound(final IllegalArgumentException ex,
+                                                        final HttpServletRequest req) {
+        final ErrorResponse err = new ErrorResponse(
             "Not Found",
             ex.getMessage(),
             req.getRequestURI(),
@@ -191,8 +191,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex,
-                                                                  HttpServletRequest req) {
-        ErrorResponse err = new ErrorResponse(
+                                                                  final HttpServletRequest req) {
+        final ErrorResponse err = new ErrorResponse(
             "Method Not Allowed",
             "HTTP method is not supported for this resource",
             req.getRequestURI(),
@@ -202,9 +202,9 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
-    public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException ex,
-                                                               HttpServletRequest req) {
-        ErrorResponse err = new ErrorResponse(
+    public ResponseEntity<ErrorResponse> handleNoResourceFound(final NoResourceFoundException ex,
+                                                               final HttpServletRequest req) {
+        final ErrorResponse err = new ErrorResponse(
             "Not Found",
             ex.getMessage(),
             req.getRequestURI(),
@@ -214,9 +214,9 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(MfaVerificationException.class)
-    public ResponseEntity<ErrorResponse> handleMfaVerification(MfaVerificationException ex,
-                                                                HttpServletRequest req) {
-        ErrorResponse err = new ErrorResponse(
+    public ResponseEntity<ErrorResponse> handleMfaVerification(final MfaVerificationException ex,
+                                                                final HttpServletRequest req) {
+        final ErrorResponse err = new ErrorResponse(
             "Verification Failed",
             ex.getMessage(),
             req.getRequestURI(),
@@ -226,9 +226,9 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex,
-                                                             HttpServletRequest req) {
-        ErrorResponse err = new ErrorResponse(
+    public ResponseEntity<ErrorResponse> handleAccessDenied(final AccessDeniedException ex,
+                                                             final HttpServletRequest req) {
+        final ErrorResponse err = new ErrorResponse(
             "Forbidden",
             ex.getMessage(),
             req.getRequestURI(),
@@ -238,9 +238,9 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<ErrorResponse> handleConflict(IllegalStateException ex,
-                                                         HttpServletRequest req) {
-        ErrorResponse err = new ErrorResponse(
+    public ResponseEntity<ErrorResponse> handleConflict(final IllegalStateException ex,
+                                                         final HttpServletRequest req) {
+        final ErrorResponse err = new ErrorResponse(
             "Conflict",
             ex.getMessage(),
             req.getRequestURI(),
@@ -250,9 +250,9 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(AuthenticationException.class)
-    public ResponseEntity<ErrorResponse> handleAuthenticationException(AuthenticationException ex,
-                                                                       HttpServletRequest req) {
-        ErrorResponse err = new ErrorResponse(
+    public ResponseEntity<ErrorResponse> handleAuthenticationException(final AuthenticationException ex,
+                                                                       final HttpServletRequest req) {
+        final ErrorResponse err = new ErrorResponse(
             "Unauthorized",
             ex.getMessage(),
             req.getRequestURI(),
@@ -264,8 +264,8 @@ public class GlobalExceptionHandler {
     // 3) Catch-all for any uncaught exceptions
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public ErrorResponse handleAll(Exception ex,
-                                   HttpServletRequest req) {
+    public ErrorResponse handleAll(final Exception ex,
+                                   final HttpServletRequest req) {
         return new ErrorResponse(
             "Internal Server Error",
             ex.getMessage(),

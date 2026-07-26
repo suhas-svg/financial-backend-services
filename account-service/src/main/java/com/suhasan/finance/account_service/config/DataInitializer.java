@@ -21,7 +21,7 @@ public class DataInitializer implements CommandLineRunner {
     
     private void initializeRoles() {
         if (roleRepository.findByName("ROLE_USER").isEmpty()) {
-            Role userRole = new Role();
+            final Role userRole = new Role();
             userRole.setName("ROLE_USER");
             roleRepository.save(userRole);
             log.info("Created default ROLE_USER");
@@ -30,7 +30,7 @@ public class DataInitializer implements CommandLineRunner {
         }
         
         if (roleRepository.findByName("ROLE_ADMIN").isEmpty()) {
-            Role adminRole = new Role();
+            final Role adminRole = new Role();
             adminRole.setName("ROLE_ADMIN");
             roleRepository.save(adminRole);
             log.info("Created default ROLE_ADMIN");
@@ -39,7 +39,7 @@ public class DataInitializer implements CommandLineRunner {
         }
 
         if (roleRepository.findByName("ROLE_INTERNAL_SERVICE").isEmpty()) {
-            Role internalRole = new Role();
+            final Role internalRole = new Role();
             internalRole.setName("ROLE_INTERNAL_SERVICE");
             roleRepository.save(internalRole);
             log.info("Created default ROLE_INTERNAL_SERVICE");

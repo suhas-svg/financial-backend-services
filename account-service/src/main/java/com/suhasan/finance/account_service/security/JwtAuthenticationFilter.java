@@ -24,27 +24,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   private final CustomUserDetailsService userDetailsService;
 
   @Override
-  protected void doFilterInternal(@NonNull HttpServletRequest req,
-                                  @NonNull HttpServletResponse res,
-                                  @NonNull FilterChain chain)
+  protected void doFilterInternal(@NonNull final HttpServletRequest req,
+                                  @NonNull final HttpServletResponse res,
+                                  @NonNull final FilterChain chain)
       throws ServletException, IOException {
-    String token = resolveToken(req);
+    final String token = resolveToken(req);
 
     if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
       if (tokenProvider.validateInternalServiceToken(token)) {
-        String subject = tokenProvider.getInternalSubject(token);
-        var authorities = tokenProvider.getInternalRoles(token).stream()
+        final String subject = tokenProvider.getInternalSubject(token);
+        final var authorities = tokenProvider.getInternalRoles(token).stream()
             .map(SimpleGrantedAuthority::new)
             .toList();
-        UsernamePasswordAuthenticationToken authentication =
+        final UsernamePasswordAuthenticationToken authentication =
             new UsernamePasswordAuthenticationToken(subject, token, authorities);
         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(req));
         SecurityContextHolder.getContext().setAuthentication(authentication);
       } else if (tokenProvider.validateToken(token)) {
-        String username = tokenProvider.getUsernameFromJWT(token);
-        UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+        final String username = tokenProvider.getUsernameFromJWT(token);
+        final UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
-        UsernamePasswordAuthenticationToken authentication =
+        final UsernamePasswordAuthenticationToken authentication =
             new UsernamePasswordAuthenticationToken(
                 userDetails, token, userDetails.getAuthorities());
         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(req));
@@ -55,13 +55,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     chain.doFilter(req, res);
   }
 
-  private String resolveToken(HttpServletRequest req) {
-    String authHeader = req.getHeader("Authorization");
+  private String resolveToken(final HttpServletRequest req) {
+    final String authHeader = req.getHeader("Authorization");
     if (authHeader == null || !authHeader.startsWith("Bearer ")) {
       return null;
     }
 
-    String token = authHeader.substring(7);
+    final String token = authHeader.substring(7);
     return token.isBlank() ? null : token;
   }
 }

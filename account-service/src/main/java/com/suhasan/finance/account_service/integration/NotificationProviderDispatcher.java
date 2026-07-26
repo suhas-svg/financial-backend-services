@@ -12,6 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 
 @Component
+@SuppressWarnings({
+        "PMD.AvoidInstantiatingObjectsInLoops", // Each claimed notification requires an independent receipt.
+        "PMD.AvoidLiteralsInIfCondition" // Receipt classification is a provider protocol value.
+})
 public class NotificationProviderDispatcher {
     private final NotificationRepository notifications;
     private final NotificationProviderReceiptRepository receipts;
@@ -23,10 +27,10 @@ public class NotificationProviderDispatcher {
     private int batchSize;
 
     public NotificationProviderDispatcher(
-            NotificationRepository notifications,
-            NotificationProviderReceiptRepository receipts,
-            NotificationProvider provider,
-            MeterRegistry meterRegistry) {
+            final NotificationRepository notifications,
+            final NotificationProviderReceiptRepository receipts,
+            final NotificationProvider provider,
+            final MeterRegistry meterRegistry) {
         this.notifications = notifications;
         this.receipts = receipts;
         this.provider = provider;
@@ -39,7 +43,7 @@ public class NotificationProviderDispatcher {
                         repository -> repository.countByReconciliationStatus("TERMINAL_UNRECONCILED"))
                 .register(meterRegistry);
         Gauge.builder("notification.provider.oldest.age.seconds", notifications, repository -> {
-                    LocalDateTime oldest = repository.oldestUnreceipted(provider.health().provider());
+                    final LocalDateTime oldest = repository.oldestUnreceipted(provider.health().provider());
                     return oldest == null ? 0D
                             : java.time.Duration.between(oldest, LocalDateTime.now()).toSeconds();
                 }).register(meterRegistry);
@@ -49,11 +53,11 @@ public class NotificationProviderDispatcher {
             initialDelayString = "${integration.notification.dispatch-initial-delay-ms:10000}")
     @Transactional
     public void dispatchUnreceipted() {
-        String providerName = provider.health().provider();
-        for (var notification : notifications.claimUnreceipted(providerName, Math.max(1, batchSize))) {
+        final String providerName = provider.health().provider();
+        for (final var notification : notifications.claimUnreceipted(providerName, Math.max(1, batchSize))) {
             try {
-                var result = provider.deliver(notification);
-                NotificationProviderReceipt receipt = new NotificationProviderReceipt();
+                final var result = provider.deliver(notification);
+                final NotificationProviderReceipt receipt = new NotificationProviderReceipt();
                 receipt.setNotificationId(notification.getNotificationId());
                 receipt.setDeliveryId(notification.getDeliveryId());
                 receipt.setProvider(result.provider());
@@ -67,7 +71,7 @@ public class NotificationProviderDispatcher {
             } catch (RuntimeException failure) {
                 // One provider failure cannot starve later notifications in the claimed batch.
                 itemFailures.increment();
-                NotificationProviderReceipt receipt = new NotificationProviderReceipt();
+                final NotificationProviderReceipt receipt = new NotificationProviderReceipt();
                 receipt.setNotificationId(notification.getNotificationId());
                 receipt.setDeliveryId(notification.getDeliveryId());
                 receipt.setProvider(providerName);
@@ -85,8 +89,8 @@ public class NotificationProviderDispatcher {
     }
 
     @Transactional
-    public void replay(long receiptId) {
-        NotificationProviderReceipt receipt = receipts.findById(receiptId)
+    public void replay(final long receiptId) {
+        final NotificationProviderReceipt receipt = receipts.findById(receiptId)
                 .orElseThrow(() -> new IllegalArgumentException("Provider receipt not found"));
         if (!"TERMINAL_UNRECONCILED".equals(receipt.getReconciliationStatus())) {
             throw new IllegalStateException("Only terminal failures may be replayed");
@@ -94,9 +98,9 @@ public class NotificationProviderDispatcher {
         receipts.delete(receipt);
     }
 
-    private String sanitize(String value) {
+    private String sanitize(final String value) {
         if (value == null) return null;
-        String safe = value.replace('\r', ' ').replace('\n', ' ').trim();
+        final String safe = value.replace('\r', ' ').replace('\n', ' ').trim();
         return safe.length() <= 500 ? safe : safe.substring(0, 500);
     }
 }

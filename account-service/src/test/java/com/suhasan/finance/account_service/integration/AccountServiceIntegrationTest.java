@@ -64,7 +64,7 @@ public class AccountServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("Should create and persist checking account")
+    @DisplayName("Should create checking account at ledger-authoritative zero")
     void shouldCreateAndPersistCheckingAccount() {
         // When
         Account savedAccount = accountService.create(checkingAccount);
@@ -73,7 +73,7 @@ public class AccountServiceIntegrationTest {
         assertThat(savedAccount).isNotNull();
         assertThat(savedAccount.getId()).isNotNull();
         assertThat(savedAccount.getOwnerId()).isEqualTo("user123");
-        assertThat(savedAccount.getBalance()).isEqualTo(BigDecimal.valueOf(1000.00));
+        assertThat(savedAccount.getBalance()).isEqualByComparingTo(BigDecimal.ZERO);
 
         // Verify persistence
         Account foundAccount = accountService.findById(savedAccount.getId());
@@ -82,7 +82,7 @@ public class AccountServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("Should create and persist savings account with interest rate")
+    @DisplayName("Should create savings account with interest rate at ledger-authoritative zero")
     void shouldCreateAndPersistSavingsAccountWithInterestRate() {
         // When
         Account savedAccount = accountService.create(savingsAccount);
@@ -94,7 +94,7 @@ public class AccountServiceIntegrationTest {
         
         SavingsAccount savedSavingsAccount = (SavingsAccount) savedAccount;
         assertThat(savedSavingsAccount.getInterestRate()).isEqualTo(0.025);
-        assertThat(savedSavingsAccount.getBalance()).isEqualTo(BigDecimal.valueOf(5000.00));
+        assertThat(savedSavingsAccount.getBalance()).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     @Test
@@ -161,7 +161,7 @@ public class AccountServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("Should maintain data integrity across transactions")
+    @DisplayName("Metadata updates preserve ledger-authoritative balance")
     void shouldMaintainDataIntegrityAcrossTransactions() {
         // Given
         Account account = accountService.create(checkingAccount);
@@ -174,7 +174,7 @@ public class AccountServiceIntegrationTest {
 
         // Then - Verify data consistency
         Account retrievedAccount = accountService.findById(accountId);
-        assertThat(retrievedAccount.getBalance()).isEqualTo(BigDecimal.valueOf(1500.00));
+        assertThat(retrievedAccount.getBalance()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(retrievedAccount.getOwnerId()).isEqualTo("user123"); // Original data preserved
     }
 }

@@ -57,10 +57,10 @@ resource "kubernetes_config_map" "db_config" {
   }
 
   data = {
-    POSTGRES_DB                = var.db_name
-    POSTGRES_USER              = var.db_username
-    POSTGRES_MAX_CONNECTIONS   = var.db_max_connections
-    POSTGRES_SHARED_BUFFERS    = var.db_shared_buffers
+    POSTGRES_DB                   = var.db_name
+    POSTGRES_USER                 = var.db_username
+    POSTGRES_MAX_CONNECTIONS      = var.db_max_connections
+    POSTGRES_SHARED_BUFFERS       = var.db_shared_buffers
     POSTGRES_EFFECTIVE_CACHE_SIZE = var.db_effective_cache_size
   }
 }
@@ -79,7 +79,7 @@ resource "kubernetes_persistent_volume_claim" "db_storage" {
 
   spec {
     access_modes = ["ReadWriteOnce"]
-    
+
     resources {
       requests = {
         storage = var.db_storage_size
@@ -105,7 +105,7 @@ resource "kubernetes_deployment" "postgres" {
 
   spec {
     replicas = 1
-    
+
     selector {
       match_labels = {
         app = "${var.app_name}-postgres"
@@ -129,7 +129,7 @@ resource "kubernetes_deployment" "postgres" {
 
           port {
             container_port = 5432
-            name          = "postgres"
+            name           = "postgres"
           }
 
           env_from {

@@ -22,24 +22,24 @@ public class SyntheticAccountSeedService {
     private final AccountService accountService;
 
     @Transactional
-    public SeededAccounts seed(String owner) {
+    public SeededAccounts seed(final String owner) {
         guard.requireSynthetic();
         if (owner == null || owner.isBlank()) throw new IllegalArgumentException("Seed owner is required");
-        Account zero = account("phase2-zero-v1", owner);
-        Account funded = account("phase2-funded-v1", owner);
+        final Account zero = account("phase2-zero-v1", owner);
+        final Account funded = account("phase2-funded-v1", owner);
         return new SeededAccounts("controlled-beta-phase2-v1", zero.getId().toString(), funded.getId().toString(),
                 List.of(zero.getId().toString(), funded.getId().toString()));
     }
 
-    private Account account(String seedKey, String owner) {
+    private Account account(final String seedKey, final String owner) {
         return seedRepository.findById(seedKey)
                 .flatMap(entry -> accountRepository.findById(entry.getAccountId()))
                 .orElseGet(() -> {
-                    CheckingAccount requested = new CheckingAccount();
+                    final CheckingAccount requested = new CheckingAccount();
                     requested.setOwnerId(owner);
                     requested.setCurrency("USD");
-                    Account created = accountService.create(requested);
-                    SyntheticSandboxSeedAccount entry = new SyntheticSandboxSeedAccount();
+                    final Account created = accountService.create(requested);
+                    final SyntheticSandboxSeedAccount entry = new SyntheticSandboxSeedAccount();
                     entry.setSeedKey(seedKey);
                     entry.setAccountId(created.getId());
                     entry.setCreatedAt(Instant.now());
@@ -49,5 +49,9 @@ public class SyntheticAccountSeedService {
     }
 
     public record SeededAccounts(String seedVersion, String zeroAccountId, String fundedAccountId,
-                                 List<String> accountIds) {}
+                                 List<String> accountIds) {
+        public SeededAccounts {
+            accountIds = List.copyOf(accountIds);
+        }
+    }
 }

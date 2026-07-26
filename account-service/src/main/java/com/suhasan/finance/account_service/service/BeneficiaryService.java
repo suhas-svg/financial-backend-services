@@ -27,10 +27,10 @@ public class BeneficiaryService {
     private final BeneficiaryRepository beneficiaryRepository;
     private final AccountRepository accountRepository;
 
-    public BeneficiaryResponse create(String userId, BeneficiaryCreateRequest request) {
-        String destinationAccountId = requiredText(request.getDestinationAccountId(), "Destination account is required");
-        String currency = requiredText(request.getCurrency(), "Currency is required").toUpperCase(Locale.ROOT);
-        Account destination = accountRepository.findById(parseAccountId(destinationAccountId))
+    public BeneficiaryResponse create(final String userId, final BeneficiaryCreateRequest request) {
+        final String destinationAccountId = requiredText(request.getDestinationAccountId(), "Destination account is required");
+        final String currency = requiredText(request.getCurrency(), "Currency is required").toUpperCase(Locale.ROOT);
+        final Account destination = accountRepository.findById(parseAccountId(destinationAccountId))
                 .orElseThrow(() -> new IllegalArgumentException("Destination account not found"));
         if (userId.equals(destination.getOwnerId())) {
             throw new IllegalArgumentException("Beneficiary destination cannot be one of your own accounts");
@@ -43,7 +43,7 @@ public class BeneficiaryService {
             throw new IllegalArgumentException("Active beneficiary already exists for this destination");
         }
 
-        Beneficiary beneficiary = Beneficiary.builder()
+        final Beneficiary beneficiary = Beneficiary.builder()
                 .beneficiaryId(UUID.randomUUID().toString())
                 .userId(userId)
                 .displayName(requiredText(request.getDisplayName(), "Display name is required"))
@@ -57,20 +57,20 @@ public class BeneficiaryService {
     }
 
     @Transactional(readOnly = true)
-    public Page<BeneficiaryResponse> list(String userId, BeneficiaryStatus status, Pageable pageable) {
-        Page<Beneficiary> page = status == null
+    public Page<BeneficiaryResponse> list(final String userId, final BeneficiaryStatus status, final Pageable pageable) {
+        final Page<Beneficiary> page = status == null
                 ? beneficiaryRepository.findByUserId(userId, pageable)
                 : beneficiaryRepository.findByUserIdAndStatus(userId, status, pageable);
         return page.map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
-    public BeneficiaryResponse get(String beneficiaryId, String userId) {
+    public BeneficiaryResponse get(final String beneficiaryId, final String userId) {
         return toResponse(findOwned(beneficiaryId, userId));
     }
 
-    public BeneficiaryResponse update(String beneficiaryId, String userId, BeneficiaryUpdateRequest request) {
-        Beneficiary beneficiary = findOwned(beneficiaryId, userId);
+    public BeneficiaryResponse update(final String beneficiaryId, final String userId, final BeneficiaryUpdateRequest request) {
+        final Beneficiary beneficiary = findOwned(beneficiaryId, userId);
         if (beneficiary.getStatus() != BeneficiaryStatus.ACTIVE) {
             throw new IllegalStateException("Only active beneficiaries can be updated");
         }
@@ -80,7 +80,7 @@ public class BeneficiaryService {
         return toResponse(beneficiaryRepository.save(beneficiary));
     }
 
-    public BeneficiaryResponse disable(String beneficiaryId, String userId) {
+    public BeneficiaryResponse disable(final String beneficiaryId, final String userId) {
         Beneficiary beneficiary = findOwned(beneficiaryId, userId);
         if (beneficiary.getStatus() != BeneficiaryStatus.DISABLED) {
             beneficiary.setStatus(BeneficiaryStatus.DISABLED);
@@ -90,35 +90,35 @@ public class BeneficiaryService {
         return toResponse(beneficiary);
     }
 
-    private Beneficiary findOwned(String beneficiaryId, String userId) {
+    private Beneficiary findOwned(final String beneficiaryId, final String userId) {
         return beneficiaryRepository.findByBeneficiaryIdAndUserId(beneficiaryId, userId)
                 .orElseThrow(() -> new AccessDeniedException("Beneficiary not found"));
     }
 
-    private Long parseAccountId(String accountId) {
+    private Long parseAccountId(final String accountId) {
         try {
             return Long.parseLong(accountId);
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Destination account ID must be numeric");
+            throw new IllegalArgumentException("Destination account ID must be numeric", e);
         }
     }
 
-    private String requiredText(String value, String message) {
-        String text = optionalText(value);
+    private String requiredText(final String value, final String message) {
+        final String text = optionalText(value);
         if (text == null) {
             throw new IllegalArgumentException(message);
         }
         return text;
     }
 
-    private String optionalText(String value) {
+    private String optionalText(final String value) {
         if (value == null || value.isBlank()) {
             return null;
         }
         return value.trim();
     }
 
-    private BeneficiaryResponse toResponse(Beneficiary beneficiary) {
+    private BeneficiaryResponse toResponse(final Beneficiary beneficiary) {
         return BeneficiaryResponse.builder()
                 .beneficiaryId(beneficiary.getBeneficiaryId())
                 .userId(beneficiary.getUserId())

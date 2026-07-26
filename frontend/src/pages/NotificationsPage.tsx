@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link } from "../routing";
 import { useState } from "react";
 import { Bell, Check, CheckCheck } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Panel, Select } from "../components/ui";

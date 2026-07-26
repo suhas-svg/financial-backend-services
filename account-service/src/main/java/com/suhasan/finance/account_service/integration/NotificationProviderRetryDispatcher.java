@@ -30,8 +30,8 @@ public class NotificationProviderRetryDispatcher {
             initialDelayString = "${integration.notification.retry-initial-delay-ms:15000}")
     @Transactional
     public void retryDue() {
-        Instant now = Instant.now();
-        var due = jdbc.queryForList("""
+        final Instant now = Instant.now();
+        final var due = jdbc.queryForList("""
                 SELECT receipt_id,notification_id,classification,attempt_count
                   FROM notification_provider_receipts
                  WHERE terminal_at IS NULL
@@ -39,23 +39,23 @@ public class NotificationProviderRetryDispatcher {
                    AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
                  ORDER BY receipt_id FOR UPDATE SKIP LOCKED LIMIT 50
                 """, Timestamp.from(now));
-        for (var row : due) {
+        for (final var row : due) {
             retryOne(row, now);
         }
     }
 
-    private void retryOne(java.util.Map<String, Object> row, Instant now) {
-        long receiptId = ((Number) row.get("receipt_id")).longValue();
-        long notificationId = ((Number) row.get("notification_id")).longValue();
-        int attempts = ((Number) row.get("attempt_count")).intValue() + 1;
+    private void retryOne(final java.util.Map<String, Object> row, final Instant now) {
+        final long receiptId = ((Number) row.get("receipt_id")).longValue();
+        final long notificationId = ((Number) row.get("notification_id")).longValue();
+        final int attempts = ((Number) row.get("attempt_count")).intValue() + 1;
         try {
-            var notification = notifications.findById(notificationId).orElse(null);
+            final var notification = notifications.findById(notificationId).orElse(null);
             if (notification == null) {
                 terminal(receiptId, attempts, now, "Notification row is missing");
                 return;
             }
-            var result = provider.deliver(notification);
-            String classification = result.classification().name();
+            final var result = provider.deliver(notification);
+            final String classification = result.classification().name();
             if (classification.equals("ACCEPTED")) {
                 jdbc.update("""
                         UPDATE notification_provider_receipts
@@ -78,10 +78,10 @@ public class NotificationProviderRetryDispatcher {
         }
     }
 
-    private void scheduleRetry(long receiptId, int attempts, Instant now, String classification,
-                               Instant attemptedAt, String detail) {
-        long multiplier = 1L << Math.min(20, attempts - 1);
-        long delay = Math.min(Math.max(1, maxBackoffSeconds),
+    private void scheduleRetry(final long receiptId, final int attempts, final Instant now, final String classification,
+                               final Instant attemptedAt, final String detail) {
+        final long multiplier = 1L << Math.min(20, attempts - 1);
+        final long delay = Math.min(Math.max(1, maxBackoffSeconds),
                 Math.max(1, initialBackoffSeconds) * multiplier);
         jdbc.update("""
                 UPDATE notification_provider_receipts
@@ -92,7 +92,7 @@ public class NotificationProviderRetryDispatcher {
                 utc(now.plusSeconds(delay)), sanitize(detail), receiptId);
     }
 
-    private void terminal(long receiptId, int attempts, Instant now, String detail) {
+    private void terminal(final long receiptId, final int attempts, final Instant now, final String detail) {
         jdbc.update("""
                 UPDATE notification_provider_receipts
                    SET classification='REJECTED',reconciliation_status='TERMINAL_UNRECONCILED',
@@ -100,10 +100,10 @@ public class NotificationProviderRetryDispatcher {
                  WHERE receipt_id=?
                 """, attempts, utc(now), detail, receiptId);
     }
-    private LocalDateTime utc(Instant value) { return LocalDateTime.ofInstant(value, ZoneOffset.UTC); }
-    private String sanitize(String value) {
+    private LocalDateTime utc(final Instant value) { return LocalDateTime.ofInstant(value, ZoneOffset.UTC); }
+    private String sanitize(final String value) {
         if (value == null) return null;
-        String safe = value.replace('\r', ' ').replace('\n', ' ').trim();
+        final String safe = value.replace('\r', ' ').replace('\n', ' ').trim();
         return safe.length() <= 500 ? safe : safe.substring(0, 500);
     }
 }

@@ -5,4 +5,19 @@
     <Class name="~com\.suhasan\.finance\.account_service\.mapper\.AccountMapperImpl"/>
     <Bug pattern="CT_CONSTRUCTOR_THROW"/>
   </Match>
+  <!-- Spring keeps injected singleton collaborators by design; these are container-owned dependencies. -->
+  <Match>
+    <Class name="~com[.]suhasan[.]finance[.]account_service[.](controller[.](InternalAccountController|SecurityController)|integration[.](InternalNotificationReceiptController|MfaEnrollmentKeyVersionAspect|MfaKeyLifecycleService|NotificationProviderRetryDispatcher)|sandbox[.]SyntheticAccountSeedService|service[.](AccountService|MfaService|SpendingLimitService|StepUpChallengeService))"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <!-- The embedded JPA identifier has only immutable String/Long fields and must remain bean-compatible. -->
+  <Match>
+    <Class name="~com[.]suhasan[.]finance[.]account_service[.]entity[.]AccountBalanceOperation([$]AccountBalanceOperationBuilder)?"/>
+    <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+  </Match>
+  <!-- These fail-closed components have no finalizer; rejecting invalid configuration is intentional. -->
+  <Match>
+    <Class name="~com[.]suhasan[.]finance[.]account_service[.](integration[.](HttpNotificationProvider|LocalVersionedMfaSecretManager)|service[.]SecretEncryptionService)"/>
+    <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+  </Match>
 </FindBugsFilter>

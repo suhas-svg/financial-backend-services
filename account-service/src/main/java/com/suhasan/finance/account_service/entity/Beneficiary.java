@@ -79,7 +79,7 @@ public class Beneficiary {
         if (status == null) {
             status = BeneficiaryStatus.ACTIVE;
         }
-        LocalDateTime now = LocalDateTime.now();
+        final LocalDateTime now = LocalDateTime.now();
         if (createdAt == null) {
             createdAt = now;
         }

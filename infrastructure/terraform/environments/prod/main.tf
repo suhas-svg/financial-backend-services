@@ -26,11 +26,11 @@ terraform {
   #     --key-schema AttributeName=LockID,KeyType=HASH \
   #     --billing-mode PAY_PER_REQUEST
   backend "s3" {
-    bucket         = var.tf_state_bucket          # e.g. "my-company-tf-state-prod"
+    bucket         = var.tf_state_bucket # e.g. "my-company-tf-state-prod"
     key            = "financial-services/prod/terraform.tfstate"
     region         = var.aws_region
     encrypt        = true
-    dynamodb_table = var.tf_lock_table            # e.g. "terraform-lock-prod"
+    dynamodb_table = var.tf_lock_table # e.g. "terraform-lock-prod"
   }
 }
 
@@ -57,7 +57,7 @@ module "kubernetes" {
   namespace             = var.namespace
   enable_network_policy = var.enable_network_policy
   enable_resource_quota = var.enable_resource_quota
-  
+
   resource_quota = {
     requests_cpu    = "4"
     requests_memory = "8Gi"
@@ -80,7 +80,7 @@ module "database" {
   db_name            = var.db_name
   db_username        = var.db_username
   postgres_version   = var.postgres_version
-  db_storage_size    = "100Gi"  # Large storage for production
+  db_storage_size    = "100Gi" # Large storage for production
   storage_class_name = var.storage_class_name
 
   db_resources = {
@@ -95,9 +95,9 @@ module "database" {
   }
 
   # Production database configuration
-  db_max_connections        = "500"
-  db_shared_buffers        = "1GB"
-  db_effective_cache_size  = "4GB"
+  db_max_connections      = "500"
+  db_shared_buffers       = "1GB"
+  db_effective_cache_size = "4GB"
 
   depends_on = [module.kubernetes]
 }
@@ -106,18 +106,18 @@ module "database" {
 module "monitoring" {
   source = "../../modules/monitoring"
 
-  app_name                = var.app_name
-  environment             = var.environment
-  monitoring_namespace    = var.monitoring_namespace
+  app_name               = var.app_name
+  environment            = var.environment
+  monitoring_namespace   = var.monitoring_namespace
   app_namespace          = module.kubernetes.namespace_name
   enable_grafana         = var.enable_grafana
   enable_alertmanager    = var.enable_alertmanager
   grafana_admin_password = var.grafana_admin_password
   storage_class_name     = var.storage_class_name
-  
+
   # Production monitoring resources
   prometheus_storage_size = "200Gi"
-  prometheus_retention   = "90d"
+  prometheus_retention    = "90d"
   prometheus_resources = {
     requests = {
       cpu    = "1"
@@ -154,9 +154,9 @@ module "monitoring" {
   }
 
   # Enable all monitoring features for production
-  create_service_monitor = true
-  create_alerting_rules  = true
-  enable_node_exporter   = true
+  create_service_monitor    = true
+  create_alerting_rules     = true
+  enable_node_exporter      = true
   enable_kube_state_metrics = true
 
   depends_on = [module.kubernetes]

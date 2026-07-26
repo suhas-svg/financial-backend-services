@@ -62,10 +62,10 @@ import com.suhasan.finance.account_service.dto.AccountResponse;
 public interface AccountMapper {
 
     // 1) Default factory method for abstract base
-    default Account toEntity(AccountRequest dto) {
+    default Account toEntity(final AccountRequest dto) {
         switch (dto.getAccountType()) {
             case "SAVINGS":
-                SavingsAccount sa = new SavingsAccount();
+                final SavingsAccount sa = new SavingsAccount();
                 sa.setOwnerId(dto.getOwnerId());
                 sa.setBalance(dto.getBalance());
                 sa.setCurrency(dto.getCurrency() == null ? "USD" : dto.getCurrency());
@@ -73,7 +73,7 @@ public interface AccountMapper {
                     ? dto.getInterestRate() : 0.0);
                 return sa;
             case "CREDIT":
-                CreditCardAccount ca = new CreditCardAccount();
+                final CreditCardAccount ca = new CreditCardAccount();
                 ca.setOwnerId(dto.getOwnerId());
                 ca.setBalance(dto.getBalance());
                 ca.setCurrency(dto.getCurrency() == null ? "USD" : dto.getCurrency());

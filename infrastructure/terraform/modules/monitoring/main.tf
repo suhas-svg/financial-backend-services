@@ -52,20 +52,20 @@ resource "helm_release" "prometheus" {
               }
             }
           }
-          resources = var.prometheus_resources
+          resources                               = var.prometheus_resources
           serviceMonitorSelectorNilUsesHelmValues = false
           podMonitorSelectorNilUsesHelmValues     = false
           ruleSelectorNilUsesHelmValues           = false
         }
       }
-      
+
       grafana = {
-        enabled = var.enable_grafana
+        enabled       = var.enable_grafana
         adminPassword = var.grafana_admin_password
         persistence = {
-          enabled = true
+          enabled          = true
           storageClassName = var.storage_class_name
-          size = var.grafana_storage_size
+          size             = var.grafana_storage_size
         }
         resources = var.grafana_resources
         dashboardProviders = {
@@ -73,12 +73,12 @@ resource "helm_release" "prometheus" {
             apiVersion = 1
             providers = [
               {
-                name = "default"
-                orgId = 1
-                folder = ""
-                type = "file"
+                name            = "default"
+                orgId           = 1
+                folder          = ""
+                type            = "file"
                 disableDeletion = false
-                editable = true
+                editable        = true
                 options = {
                   path = "/var/lib/grafana/dashboards/default"
                 }
@@ -89,24 +89,24 @@ resource "helm_release" "prometheus" {
         dashboards = {
           default = {
             "spring-boot-dashboard" = {
-              gnetId = 12900
-              revision = 1
+              gnetId     = 12900
+              revision   = 1
               datasource = "Prometheus"
             }
             "jvm-dashboard" = {
-              gnetId = 4701
-              revision = 1
+              gnetId     = 4701
+              revision   = 1
               datasource = "Prometheus"
             }
             "kubernetes-cluster-dashboard" = {
-              gnetId = 7249
-              revision = 1
+              gnetId     = 7249
+              revision   = 1
               datasource = "Prometheus"
             }
           }
         }
       }
-      
+
       alertmanager = {
         enabled = var.enable_alertmanager
         alertmanagerSpec = {
@@ -126,11 +126,11 @@ resource "helm_release" "prometheus" {
           resources = var.alertmanager_resources
         }
       }
-      
+
       nodeExporter = {
         enabled = var.enable_node_exporter
       }
-      
+
       kubeStateMetrics = {
         enabled = var.enable_kube_state_metrics
       }
@@ -143,7 +143,7 @@ resource "helm_release" "prometheus" {
 # Create ServiceMonitor for the account service
 resource "kubernetes_manifest" "account_service_monitor" {
   count = var.create_service_monitor ? 1 : 0
-  
+
   manifest = {
     apiVersion = "monitoring.coreos.com/v1"
     kind       = "ServiceMonitor"
@@ -167,9 +167,9 @@ resource "kubernetes_manifest" "account_service_monitor" {
       }
       endpoints = [
         {
-          port = "actuator"
-          path = "/actuator/prometheus"
-          interval = "30s"
+          port          = "actuator"
+          path          = "/actuator/prometheus"
+          interval      = "30s"
           scrapeTimeout = "10s"
         }
       ]
@@ -182,7 +182,7 @@ resource "kubernetes_manifest" "account_service_monitor" {
 # Create PrometheusRule for alerting
 resource "kubernetes_manifest" "account_service_alerts" {
   count = var.create_alerting_rules ? 1 : 0
-  
+
   manifest = {
     apiVersion = "monitoring.coreos.com/v1"
     kind       = "PrometheusRule"

@@ -39,13 +39,13 @@ variable "storage_class_name" {
 variable "enable_network_policy" {
   description = "Enable network policy for security"
   type        = bool
-  default     = true  # Enabled for staging
+  default     = true # Enabled for staging
 }
 
 variable "enable_resource_quota" {
   description = "Enable resource quota for the namespace"
   type        = bool
-  default     = true  # Enabled for staging
+  default     = true # Enabled for staging
 }
 
 variable "db_name" {
@@ -75,7 +75,7 @@ variable "enable_grafana" {
 variable "enable_alertmanager" {
   description = "Enable Alertmanager deployment"
   type        = bool
-  default     = true  # Enabled for staging
+  default     = true # Enabled for staging
 }
 
 variable "grafana_admin_password" {

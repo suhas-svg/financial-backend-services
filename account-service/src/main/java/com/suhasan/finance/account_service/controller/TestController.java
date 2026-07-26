@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @Profile("dev")
 @RequestMapping("/api/test")
+@SuppressWarnings("PMD.TestClassWithoutTestCases") // Runtime diagnostic controller, not a JUnit test class.
 public class TestController {
 
     @GetMapping("/ping")

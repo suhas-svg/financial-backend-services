@@ -35,14 +35,14 @@ public class InternalAccountController {
 
     @PostMapping("/{id}/spending-limit-reservations")
     public ResponseEntity<com.suhasan.finance.account_service.dto.SpendingLimitDtos.ReserveResponse> reserveLimit(
-            @PathVariable Long id,
-            @Valid @RequestBody com.suhasan.finance.account_service.dto.SpendingLimitDtos.ReserveRequest request) {
+            @PathVariable final Long id,
+            @Valid @RequestBody final com.suhasan.finance.account_service.dto.SpendingLimitDtos.ReserveRequest request) {
         return ResponseEntity.ok(spendingLimitService.reserve(id, request));
     }
 
     @DeleteMapping("/{id}/spending-limit-reservations/{operationType}/{idempotencyKey}")
-    public ResponseEntity<Void> releaseLimit(@PathVariable Long id, @PathVariable String operationType,
-            @PathVariable String idempotencyKey, @RequestParam String userId) {
+    public ResponseEntity<Void> releaseLimit(@PathVariable final Long id, @PathVariable final String operationType,
+            @PathVariable final String idempotencyKey, @RequestParam final String userId) {
         spendingLimitService.release(id, operationType, idempotencyKey, userId);
         return ResponseEntity.noContent().build();
     }
@@ -53,45 +53,45 @@ public class InternalAccountController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Account> get(@PathVariable Long id) {
+    public ResponseEntity<Account> get(@PathVariable final Long id) {
         return ResponseEntity.ok(accountService.findById(id));
     }
 
     @PostMapping("/{id}/close")
-    public ResponseEntity<Account> close(@PathVariable Long id, @RequestParam String reason) {
+    public ResponseEntity<Account> close(@PathVariable final Long id, @RequestParam final String reason) {
         return ResponseEntity.ok(accountService.close(id, reason, "transaction-service"));
     }
 
     @PostMapping("/{id}/balance-ops")
     public ResponseEntity<BalanceOperationResponse> applyBalanceOperation(
-            @PathVariable Long id, @Valid @RequestBody BalanceOperationRequest request) {
+            @PathVariable final Long id, @Valid @RequestBody final BalanceOperationRequest request) {
         return ResponseEntity.ok(accountService.applyBalanceOperation(id, request));
     }
 
     @PutMapping("/{id}/ledger-projection")
     public ResponseEntity<AccountResponse> updateLedgerProjection(
-            @PathVariable Long id, @Valid @RequestBody LedgerProjectionUpdateRequest request) {
+            @PathVariable final Long id, @Valid @RequestBody final LedgerProjectionUpdateRequest request) {
         return ResponseEntity.ok(accountService.applyLedgerProjection(id, request));
     }
 
     @PostMapping("/{id}/holds")
     public ResponseEntity<DebitHoldResponse> placeDebitHold(
-            @PathVariable Long id, @Valid @RequestBody DebitHoldRequest request) {
+            @PathVariable final Long id, @Valid @RequestBody final DebitHoldRequest request) {
         return ResponseEntity.ok(accountService.placeDebitHold(id, request));
     }
 
     @PostMapping("/{id}/holds/{holdId}/capture")
     public ResponseEntity<DebitHoldResponse> captureDebitHold(
-            @PathVariable Long id, @PathVariable String holdId,
-            @Valid @RequestBody HoldTransitionRequest request) {
+            @PathVariable final Long id, @PathVariable final String holdId,
+            @Valid @RequestBody final HoldTransitionRequest request) {
         return ResponseEntity.ok(accountService.captureDebitHold(
                 id, holdId, request.getTransactionId(), request.getReason()));
     }
 
     @PostMapping("/{id}/holds/{holdId}/release")
     public ResponseEntity<DebitHoldResponse> releaseDebitHold(
-            @PathVariable Long id, @PathVariable String holdId,
-            @Valid @RequestBody HoldTransitionRequest request) {
+            @PathVariable final Long id, @PathVariable final String holdId,
+            @Valid @RequestBody final HoldTransitionRequest request) {
         return ResponseEntity.ok(accountService.releaseDebitHold(
                 id, holdId, request.getTransactionId(), request.getReason()));
     }

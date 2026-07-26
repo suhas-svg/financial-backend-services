@@ -15,7 +15,7 @@ public class ProductionIntegrationValidator {
 
     @PostConstruct
     void validate() {
-        boolean production = Arrays.asList(environment.getActiveProfiles()).contains("production");
+        final boolean production = Arrays.asList(environment.getActiveProfiles()).contains("production");
         if (!production) return;
         require("integration.notification.contract-id");
         require("integration.iam.issuer");
@@ -26,14 +26,14 @@ public class ProductionIntegrationValidator {
         require("integration.mfa.kms.provider");
         require("integration.mfa.kms.active-key-id");
         require("integration.mfa.kms.health-reference");
-        var health = notificationProvider.health();
+        final var health = notificationProvider.health();
         if (!health.configured() || !health.healthy() || health.provider().startsWith("local")) {
             throw new IllegalStateException("Production notification provider must be externally configured and healthy");
         }
     }
 
-    private void require(String key) {
-        String value = environment.getProperty(key);
+    private void require(final String key) {
+        final String value = environment.getProperty(key);
         if (value == null || value.isBlank() || value.startsWith("${")) {
             throw new IllegalStateException("Production integration configuration is required: " + key);
         }

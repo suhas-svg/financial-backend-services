@@ -7,16 +7,16 @@ public class RegisterResponse {
     private String username;
     private Set<String> roles;
 
-    public RegisterResponse(String username, Set<String> roles) {
+    public RegisterResponse(final String username, final Set<String> roles) {
         this.username = username;
-        setRoles(roles);
+        this.roles = roles == null ? new HashSet<>() : new HashSet<>(roles);
     }
 
     public String getUsername() {
         return username;
     }
 
-    public void setUsername(String username) {
+    public void setUsername(final String username) {
         this.username = username;
     }
 
@@ -24,7 +24,7 @@ public class RegisterResponse {
         return new HashSet<>(roles);
     }
 
-    public void setRoles(Set<String> roles) {
+    public void setRoles(final Set<String> roles) {
         this.roles = roles == null ? new HashSet<>() : new HashSet<>(roles);
     }
 }

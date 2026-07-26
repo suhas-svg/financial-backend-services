@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.5.3</version>
+		<version>3.5.14</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.suhasan.finance</groupId>
@@ -28,10 +28,14 @@
 	</scm>
 	<properties>
 		<java.version>21</java.version>
-		<spring-cloud.version>2024.0.0</spring-cloud.version>
+		<spring-cloud.version>2025.0.2</spring-cloud.version>
 		<mapstruct.version>1.6.3</mapstruct.version>
 		<lombok.version>1.18.36</lombok.version>
 		<testcontainers.version>1.21.4</testcontainers.version>
+		<tomcat.version>10.1.55</tomcat.version>
+		<jackson-bom.version>2.21.4</jackson-bom.version>
+		<netty.version>4.1.136.Final</netty.version>
+		<postgresql.version>42.7.12</postgresql.version>
 	</properties>
 	<dependencies>
 		<!-- Spring Boot Starters -->
@@ -117,6 +121,12 @@
 		<dependency>
 			<groupId>org.springframework.cloud</groupId>
 			<artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
+		</dependency>
+		<!-- Override the transitive Spring Cloud provider to the first current fixed release. -->
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcprov-jdk18on</artifactId>
+			<version>1.84</version>
 		</dependency>
 		<dependency>
 			<groupId>io.github.resilience4j</groupId>
