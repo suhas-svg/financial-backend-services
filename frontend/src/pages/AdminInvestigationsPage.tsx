@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link } from "../routing";
 import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
 import { Badge, Button, EmptyState, Input, PageHeader, Panel, Stat } from "../components/ui";

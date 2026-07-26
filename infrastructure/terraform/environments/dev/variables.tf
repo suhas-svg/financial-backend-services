@@ -39,13 +39,13 @@ variable "storage_class_name" {
 variable "enable_network_policy" {
   description = "Enable network policy for security"
   type        = bool
-  default     = false  # Disabled for local development
+  default     = false # Disabled for local development
 }
 
 variable "enable_resource_quota" {
   description = "Enable resource quota for the namespace"
   type        = bool
-  default     = false  # Disabled for local development
+  default     = false # Disabled for local development
 }
 
 variable "db_name" {
@@ -75,7 +75,7 @@ variable "enable_grafana" {
 variable "enable_alertmanager" {
   description = "Enable Alertmanager deployment"
   type        = bool
-  default     = false  # Disabled for development
+  default     = false # Disabled for development
 }
 
 variable "grafana_admin_password" {

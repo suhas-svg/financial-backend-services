@@ -35,7 +35,7 @@ RUN if [ "$SKIP_TESTS" = "true" ]; then \
 RUN java -Djarmode=layertools -jar target/*.jar extract
 
 # ----- RUNTIME STAGE -----
-FROM eclipse-temurin:22-jre-alpine AS runtime
+FROM eclipse-temurin:21-jre-alpine-3.23@sha256:3f08b13888f595cc49edabea7250ba69499ba25602b267da591720769400e08c AS runtime
 
 # Build arguments for runtime configuration
 ARG BUILD_ENV=prod

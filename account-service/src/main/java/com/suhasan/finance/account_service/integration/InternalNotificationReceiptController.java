@@ -16,7 +16,7 @@ public class InternalNotificationReceiptController {
     private final JdbcTemplate jdbc;
 
     @GetMapping("/{deliveryId}")
-    public Map<String, Object> receipt(@PathVariable String deliveryId) {
+    public Map<String, Object> receipt(@PathVariable final String deliveryId) {
         return jdbc.queryForMap("""
                 SELECT delivery_id,provider,provider_receipt_id,classification,
                        reconciliation_status,attempt_count,next_attempt_at,

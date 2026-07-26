@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "../routing";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeftRight, Banknote, Bell, CalendarClock, ChevronLeft, ChevronRight, CircleHelp, Command, FileText, Gauge, Landmark, LockKeyhole, LogOut, Menu, Moon, Plus, Search, ShieldCheck, Sun, Users, WalletCards, X } from "lucide-react";
 import clsx from "clsx";
@@ -30,7 +30,7 @@ function NavigationLink({ item, collapsed, unread, onNavigate }: { item: typeof 
   </NavLink>;
 }
 
-export function CustomerLayout() {
+export function CustomerLayout({ children }: { children: ReactNode }) {
   const { session, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -92,7 +92,7 @@ export function CustomerLayout() {
         <div className="hidden items-center gap-3 border-l border-line pl-4 md:flex dark:border-slate-700"><span className="grid h-9 w-9 place-items-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100">{initials}</span><span><span className="block max-w-32 truncate text-sm font-semibold">{session?.username}</span><span className="block text-xs text-muted">Customer</span><span className="sr-only">{session?.roles.join(", ") || "ROLE_USER"}</span></span></div>
         <Button variant="ghost" onClick={logout} aria-label="Logout"><LogOut className="h-4 w-4" /><span className="hidden xl:inline">Logout</span></Button>
       </header>
-      <main className="customer-page mx-auto max-w-[1500px] p-4 sm:p-6 lg:p-8"><Outlet /></main>
+      <main className="customer-page mx-auto max-w-[1500px] p-4 sm:p-6 lg:p-8">{children}</main>
     </div>
   </div>;
 }

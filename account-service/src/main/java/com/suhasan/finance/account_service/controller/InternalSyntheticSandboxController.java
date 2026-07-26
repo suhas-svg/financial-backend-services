@@ -11,7 +11,7 @@ public class InternalSyntheticSandboxController {
     private final SyntheticAccountSeedService seedService;
 
     @PostMapping("/seed-accounts")
-    public SyntheticAccountSeedService.SeededAccounts seedAccounts(@RequestParam String owner) {
+    public SyntheticAccountSeedService.SeededAccounts seedAccounts(@RequestParam final String owner) {
         return seedService.seed(owner);
     }
 }

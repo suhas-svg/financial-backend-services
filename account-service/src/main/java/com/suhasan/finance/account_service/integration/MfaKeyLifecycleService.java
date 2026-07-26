@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
 
@@ -16,14 +17,15 @@ public class MfaKeyLifecycleService {
     private final MfaSecretManager secrets;
 
     @Transactional
-    public Map<String, Object> rotate(String requestedBy, String requestId) {
+    public Map<String, Object> rotate(final String requestedBy, final String requestId) {
         if (requestId == null || requestId.isBlank()) throw new IllegalArgumentException("X-Operator-Request-Id is required");
-        String target = secrets.health().activeKeyId();
-        String runId = UUID.nameUUIDFromBytes(("mfa-rotation:" + requestId.trim()).getBytes()).toString();
-        var existing = jdbc.queryForList("SELECT * FROM mfa_key_rotation_runs WHERE run_id=?", runId);
+        final String target = secrets.health().activeKeyId();
+        final String runId = UUID.nameUUIDFromBytes(("mfa-rotation:" + requestId.trim())
+                .getBytes(StandardCharsets.UTF_8)).toString();
+        final var existing = jdbc.queryForList("SELECT * FROM mfa_key_rotation_runs WHERE run_id=?", runId);
         if (!existing.isEmpty()) return existing.getFirst();
 
-        Instant started = Instant.now();
+        final Instant started = Instant.now();
         int examined = 0;
         int rotated = 0;
         int failed = 0;
@@ -34,16 +36,16 @@ public class MfaKeyLifecycleService {
                 VALUES (?,?,?,?,?,?,?,?,?)
                 """, runId, requestedBy, "mixed", target, "RUNNING", 0, 0, 0, started);
         try {
-            var rows = jdbc.queryForList("""
+            final var rows = jdbc.queryForList("""
                     SELECT id, secret_ciphertext, secret_key_id FROM user_mfa_methods
                     WHERE secret_key_id <> ? FOR UPDATE
                     """, target);
             examined = rows.size();
-            for (var row : rows) {
+            for (final var row : rows) {
                 try {
-                    String plaintext = secrets.decrypt(String.valueOf(row.get("secret_ciphertext")),
+                    final String plaintext = secrets.decrypt(String.valueOf(row.get("secret_ciphertext")),
                             String.valueOf(row.get("secret_key_id")));
-                    var encrypted = secrets.encrypt(plaintext);
+                    final var encrypted = secrets.encrypt(plaintext);
                     jdbc.update("UPDATE user_mfa_methods SET secret_ciphertext=?, secret_key_id=? WHERE id=?",
                             encrypted.value(), encrypted.keyId(), row.get("id"));
                     rotated++;
@@ -56,7 +58,7 @@ public class MfaKeyLifecycleService {
             failureReason = "Rotation failed closed; inspect KMS health and database evidence";
             throw failure;
         } finally {
-            String status = failed == 0 ? "COMPLETED" : "PARTIAL_FAILED";
+            final String status = failed == 0 ? "COMPLETED" : "PARTIAL_FAILED";
             jdbc.update("""
                     UPDATE mfa_key_rotation_runs SET status=?,examined_count=?,rotated_count=?,failed_count=?,
                     completed_at=?,failure_reason=? WHERE run_id=?

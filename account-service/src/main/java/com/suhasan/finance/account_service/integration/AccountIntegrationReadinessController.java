@@ -20,9 +20,9 @@ public class AccountIntegrationReadinessController {
     private final Environment environment;
 
     @GetMapping
-    public Map<String, Object> readiness(Authentication authentication) {
+    public Map<String, Object> readiness(final Authentication authentication) {
         requireAdmin(authentication);
-        var health = notificationProvider.health();
+        final var health = notificationProvider.health();
         return Map.of(
                 "checkedAt", Instant.now(),
                 "notificationProvider", health,
@@ -41,12 +41,12 @@ public class AccountIntegrationReadinessController {
                         "secretMaterialExposed", false));
     }
 
-    private boolean present(String key) {
-        String value = environment.getProperty(key);
+    private boolean present(final String key) {
+        final String value = environment.getProperty(key);
         return value != null && !value.isBlank() && !value.startsWith("${");
     }
 
-    private void requireAdmin(Authentication authentication) {
+    private void requireAdmin(final Authentication authentication) {
         if (authentication == null || authentication.getAuthorities().stream()
                 .noneMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()))) {
             throw new AccessDeniedException("ROLE_ADMIN is required");

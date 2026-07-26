@@ -15,7 +15,7 @@ public class NotificationProviderOperationsController {
     private final NotificationProviderDispatcher dispatcher;
 
     @PostMapping("/receipts/{receiptId}/replay")
-    public ResponseEntity<Void> replay(@PathVariable long receiptId) {
+    public ResponseEntity<Void> replay(@PathVariable final long receiptId) {
         dispatcher.replay(receiptId);
         return ResponseEntity.accepted().build();
     }

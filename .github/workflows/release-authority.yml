@@ -1,0 +1,357 @@
+name: Controlled Beta Release Authority
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-authority-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  authority-policy:
+    name: Acceptance Authority Policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify the single acceptance authority
+        shell: pwsh
+        run: ./scripts/verify-release-authority.ps1
+
+  frontend:
+    name: Frontend Lint, Tests, Build, Accessibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci --ignore-scripts
+      - working-directory: frontend
+        run: npm run lint
+      - working-directory: frontend
+        run: npm test
+      - working-directory: frontend
+        run: npm run build -- --config vite.sandbox.config.ts
+      - name: Install the accessibility browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run WCAG accessibility checks against the production build
+        working-directory: frontend
+        run: npm run test:a11y
+
+  service-verification:
+    name: ${{ matrix.service }} Verify (Java ${{ matrix.java }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [account-service, transaction-service]
+        java: ['21', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: temurin
+          cache: maven
+      - name: Run the complete Maven verification lifecycle
+        working-directory: ${{ matrix.service }}
+        run: ./mvnw -q clean verify
+
+  fresh-migrations:
+    name: Fresh PostgreSQL Migrations (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: transaction_migrations
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d transaction_migrations"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      FRESH_TRANSACTION_POSTGRES_URL: jdbc:postgresql://localhost:5432/transaction_migrations
+      FRESH_POSTGRES_USER: postgres
+      FRESH_POSTGRES_PASSWORD: postgres
+      LEDGER_TEST_JDBC_URL: jdbc:postgresql://localhost:5432/transaction_migrations
+      LEDGER_TEST_DB_USER: postgres
+      LEDGER_TEST_DB_PASSWORD: postgres
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: account-service
+            command: >-
+              ./mvnw -q -Dtest=FreshPostgresIntegrationReadinessMigrationTest test &&
+              ./mvnw -q initialize
+              -Dit.test=NotificationDeliveryMigrationIntegrationTest
+              failsafe:integration-test failsafe:verify
+          - service: transaction-service
+            command: >-
+              ./mvnw -q
+              -Dtest=FreshPostgresIntegrationReadinessMigrationTest,FreshPostgresProviderActivationMigrationTest,OutcomeProtectionMigrationSmokeTest,LedgerMigrationIntegrationTest
+              test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+      - name: Apply every migration to a disposable fresh PostgreSQL database
+        working-directory: ${{ matrix.service }}
+        run: ${{ matrix.command }}
+
+  duplicate-concurrency-recovery:
+    name: Duplicate, Concurrency, Worker Recovery (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: account-service
+            tests: NotificationProviderRetryDispatcherTest,NotificationServiceTest
+          - service: transaction-service
+            tests: LedgerPostingConcurrencyIntegrationTest,ScheduledTransferServiceTest,LedgerProjectionOutboxDispatcherTest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+      - name: Run financial replay and recovery regressions
+        working-directory: ${{ matrix.service }}
+        run: ./mvnw -q -Dtest=${{ matrix.tests }} test
+
+  infrastructure:
+    name: Helm and Terraform Policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Lint and render both Helm charts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for chart in account-service transaction-service; do
+            helm lint "infrastructure/helm/${chart}"
+            helm template "${chart}" "infrastructure/helm/${chart}" > "/tmp/${chart}.yaml"
+            helm template "${chart}" "infrastructure/helm/${chart}" \
+              --values "infrastructure/helm/${chart}/values-prod.yaml" > "/tmp/${chart}-prod.yaml"
+          done
+      - name: Check Terraform formatting
+        run: terraform -chdir=infrastructure/terraform fmt -check -recursive
+      - name: Initialize and validate every Terraform root without a backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          for root in infrastructure/terraform \
+            infrastructure/terraform/environments/dev \
+            infrastructure/terraform/environments/staging \
+            infrastructure/terraform/environments/prod; do
+            terraform -chdir="$root" init -backend=false -input=false
+            terraform -chdir="$root" validate
+          done
+      - name: Scan Terraform and Kubernetes policy
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: infrastructure
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          format: table
+
+  synthetic-api-browser-e2e:
+    name: Canonical Synthetic API and Browser E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      COMPOSE_PROJECT_NAME: financial-synthetic-sandbox-ci-${{ github.run_id }}
+      SANDBOX_IMAGE_TAG: ci-${{ github.sha }}
+      SANDBOX_BASE_URL: https://127.0.0.1:8443
+      SANDBOX_OPERATOR_USERNAME: release_operator
+      SANDBOX_OPERATOR_PASSWORD: ci-${{ github.run_id }}-operator-password
+      ACCOUNT_DB_PASSWORD: ci-${{ github.run_id }}-account-db
+      TRANSACTION_DB_PASSWORD: ci-${{ github.run_id }}-transaction-db
+      REDIS_PASSWORD: ci-${{ github.run_id }}-redis
+      JWT_SECRET: ci-${{ github.run_id }}-jwt-signing-material-at-least-32-bytes
+      INTERNAL_JWT_SECRET: ci-${{ github.run_id }}-internal-signing-material-at-least-32-bytes
+      MFA_ENCRYPTION_KEY: ci-${{ github.run_id }}-mfa-encryption-material-at-least-32-bytes
+      SANDBOX_BOOTSTRAP_TOKEN: ci-${{ github.run_id }}-bootstrap-token-at-least-32-bytes
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Validate the isolated seven-service synthetic topology
+        shell: pwsh
+        run: ./scripts/validate-synthetic-sandbox.ps1
+      - name: Build and start a fresh synthetic sandbox
+        run: docker compose -f docker-compose.synthetic-sandbox.yml up --build --detach --wait
+      - name: Install browser dependencies
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+      - name: Run the canonical API and browser contract
+        working-directory: frontend
+        run: npx playwright test --config playwright.sandbox.config.ts
+      - name: Capture bounded failure diagnostics
+        if: failure()
+        run: docker compose -f docker-compose.synthetic-sandbox.yml ps
+      - name: Remove the disposable sandbox and its volumes
+        if: always()
+        run: docker compose -f docker-compose.synthetic-sandbox.yml down --volumes --remove-orphans
+
+  container-supply-chain:
+    name: Container Scan and SBOM (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: account-service
+            context: account-service
+            dockerfile: account-service/Dockerfile
+          - image: transaction-service
+            context: transaction-service
+            dockerfile: transaction-service/Dockerfile
+          - image: frontend
+            context: frontend
+            dockerfile: frontend/Dockerfile.sandbox
+          - image: gateway
+            context: infrastructure/synthetic-sandbox/gateway
+            dockerfile: infrastructure/synthetic-sandbox/gateway/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the exact checkout image
+        run: >-
+          docker build
+          --file "${{ matrix.dockerfile }}"
+          --tag "financial-${{ matrix.image }}:${{ github.sha }}"
+          "${{ matrix.context }}"
+      - name: Fail on high or critical container vulnerabilities
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: financial-${{ matrix.image }}:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+      - name: Generate an SPDX JSON SBOM
+        uses: anchore/sbom-action@df80a981bc6edbc4e220a492d3cbe9f5547a6e75 # v0.17.9
+        with:
+          image: financial-${{ matrix.image }}:${{ github.sha }}
+          format: spdx-json
+          output-file: ${{ matrix.image }}.spdx.json
+          upload-artifact: false
+      - name: Upload the bounded SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.image }}
+          path: ${{ matrix.image }}.spdx.json
+          retention-days: 14
+
+  dependency-scan:
+    name: Backend Dependency Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+      - name: Cache OWASP dependency data
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/owasp/dependency-check-data
+          key: dependency-check-data-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: dependency-check-data-${{ runner.os }}-
+      - name: Update dependency data
+        working-directory: account-service
+        shell: bash
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          set -euo pipefail
+          args=(
+            "-DdataDirectory=${HOME}/.m2/repository/org/owasp/dependency-check-data"
+            "-DnvdMaxRetryCount=20"
+            "-DnvdApiDelay=8000"
+          )
+          if [ -n "${NVD_API_KEY:-}" ]; then
+            args+=("-DnvdApiKey=${NVD_API_KEY}" "-DnvdApiDelay=3500")
+          fi
+          ./mvnw org.owasp:dependency-check-maven:update-only "${args[@]}"
+      - name: Scan account-service dependencies
+        working-directory: account-service
+        run: >-
+          ./mvnw -q org.owasp:dependency-check-maven:check -DskipTests
+          -DautoUpdate=false
+          -DdataDirectory="${HOME}/.m2/repository/org/owasp/dependency-check-data"
+      - name: Scan transaction-service dependencies
+        working-directory: transaction-service
+        run: >-
+          ./mvnw -q org.owasp:dependency-check-maven:check -DskipTests
+          -DautoUpdate=false
+          -DdataDirectory="${HOME}/.m2/repository/org/owasp/dependency-check-data"
+
+  secret-scan:
+    name: Full-History Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+
+  release-authority:
+    name: Required Acceptance
+    if: always()
+    needs:
+      - authority-policy
+      - frontend
+      - service-verification
+      - fresh-migrations
+      - duplicate-concurrency-recovery
+      - infrastructure
+      - synthetic-api-browser-e2e
+      - container-supply-chain
+      - dependency-scan
+      - secret-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every controlled-beta acceptance gate
+        env:
+          NEEDS_JSON: ${{ toJson(needs) }}
+        shell: python
+        run: |
+          import json, os, sys
+          results = {name: data["result"] for name, data in json.loads(os.environ["NEEDS_JSON"]).items()}
+          failed = {name: result for name, result in results.items() if result != "success"}
+          print(json.dumps(results, indent=2, sort_keys=True))
+          sys.exit(1 if failed else 0)

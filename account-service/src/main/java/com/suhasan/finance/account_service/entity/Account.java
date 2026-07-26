@@ -108,9 +108,6 @@ public abstract class Account {
         if (ledgerBalance == null) {
             ledgerBalance = balance;
         }
-        if (balance == null) {
-            balance = ledgerBalance;
-        }
         if (availableBalance == null) {
             availableBalance = ledgerBalance;
         }
@@ -130,7 +127,7 @@ public abstract class Account {
         return ledgerBalance != null ? ledgerBalance : balance;
     }
 
-    public void setBalance(BigDecimal balance) {
+    public void setBalance(final BigDecimal balance) {
         this.balance = balance;
         this.ledgerBalance = balance;
         if (this.availableBalance == null) {

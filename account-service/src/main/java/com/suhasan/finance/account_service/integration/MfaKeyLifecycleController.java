@@ -14,19 +14,19 @@ public class MfaKeyLifecycleController {
     private final MfaKeyLifecycleService lifecycle;
 
     @GetMapping
-    public Map<String, Object> health(Authentication authentication) {
+    public Map<String, Object> health(final Authentication authentication) {
         requireAdmin(authentication);
         return lifecycle.health();
     }
 
     @PostMapping("/rotate")
-    public Map<String, Object> rotate(@RequestHeader("X-Operator-Request-Id") String requestId,
-                                      Authentication authentication) {
+    public Map<String, Object> rotate(@RequestHeader("X-Operator-Request-Id") final String requestId,
+                                      final Authentication authentication) {
         requireAdmin(authentication);
         return lifecycle.rotate(authentication.getName(), requestId);
     }
 
-    private void requireAdmin(Authentication authentication) {
+    private void requireAdmin(final Authentication authentication) {
         if (authentication == null || authentication.getAuthorities().stream()
                 .noneMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()))) {
             throw new AccessDeniedException("ROLE_ADMIN is required");

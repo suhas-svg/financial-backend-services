@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Component
@@ -28,10 +29,10 @@ public class JwtTokenProvider {
     @Value("${security.jwt.expiration-in-ms}")
     private long jwtExpirationInMs;
 
-    public String generateToken(Authentication auth) {
-        Instant now = Instant.now();
-        Instant exp = now.plusMillis(jwtExpirationInMs);
-        List<String> roles = auth.getAuthorities().stream()
+    public String generateToken(final Authentication auth) {
+        final Instant now = Instant.now();
+        final Instant exp = now.plusMillis(jwtExpirationInMs);
+        final List<String> roles = auth.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.toList());
 
@@ -44,48 +45,49 @@ public class JwtTokenProvider {
                 .compact();
     }
 
-    public String getUsernameFromJWT(String token) {
+    public String getUsernameFromJWT(final String token) {
         return parseUserClaims(token).getSubject();
     }
 
-    public boolean validateToken(String token) {
-        return parseUserClaimsOrNull(token) != null;
+    public boolean validateToken(final String token) {
+        return parseUserClaimsIfValid(token).isPresent();
     }
 
-    public boolean validateInternalServiceToken(String token) {
-        Claims claims = parseInternalClaimsOrNull(token);
-        if (claims == null) {
+    public boolean validateInternalServiceToken(final String token) {
+        final Optional<Claims> parsedClaims = parseInternalClaimsIfValid(token);
+        if (parsedClaims.isEmpty()) {
             return false;
         }
+        final Claims claims = parsedClaims.orElseThrow();
 
-        Object tokenType = claims.get("token_type");
+        final Object tokenType = claims.get("token_type");
         if (!"service".equals(tokenType)) {
             return false;
         }
 
-        String audience = claims.getAudience();
+        final String audience = claims.getAudience();
         if (!"account-service".equals(audience)) {
             return false;
         }
 
-        List<String> roles = getInternalRoles(token);
+        final List<String> roles = getInternalRoles(token);
         return roles.contains("ROLE_INTERNAL_SERVICE");
     }
 
-    public String getInternalSubject(String token) {
+    public String getInternalSubject(final String token) {
         return parseInternalClaims(token).getSubject();
     }
 
-    public List<String> getInternalRoles(String token) {
-        Claims claims = parseInternalClaims(token);
-        Object roleClaim = claims.get("roles");
+    public List<String> getInternalRoles(final String token) {
+        final Claims claims = parseInternalClaims(token);
+        final Object roleClaim = claims.get("roles");
         if (roleClaim instanceof List<?>) {
             return ((List<?>) roleClaim).stream().map(String::valueOf).collect(Collectors.toList());
         }
         return List.of();
     }
 
-    private Claims parseUserClaims(String token) {
+    private Claims parseUserClaims(final String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8)))
                 .build()
@@ -93,7 +95,7 @@ public class JwtTokenProvider {
                 .getBody();
     }
 
-    private Claims parseInternalClaims(String token) {
+    private Claims parseInternalClaims(final String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(Keys.hmacShaKeyFor(internalJwtSecret.getBytes(StandardCharsets.UTF_8)))
                 .build()
@@ -101,19 +103,19 @@ public class JwtTokenProvider {
                 .getBody();
     }
 
-    private Claims parseUserClaimsOrNull(String token) {
+    private Optional<Claims> parseUserClaimsIfValid(final String token) {
         try {
-            return parseUserClaims(token);
+            return Optional.of(parseUserClaims(token));
         } catch (JwtException | IllegalArgumentException ex) {
-            return null;
+            return Optional.empty();
         }
     }
 
-    private Claims parseInternalClaimsOrNull(String token) {
+    private Optional<Claims> parseInternalClaimsIfValid(final String token) {
         try {
-            return parseInternalClaims(token);
+            return Optional.of(parseInternalClaims(token));
         } catch (JwtException | IllegalArgumentException ex) {
-            return null;
+            return Optional.empty();
         }
     }
 }

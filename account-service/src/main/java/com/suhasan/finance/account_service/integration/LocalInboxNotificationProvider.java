@@ -8,9 +8,10 @@ import java.time.Instant;
 
 @Component
 @ConditionalOnProperty(name = "integration.notification.provider", havingValue = "local-inbox", matchIfMissing = true)
+@SuppressWarnings("PMD.AvoidDuplicateLiterals") // Provider identifier is intentionally repeated in evidence records.
 public class LocalInboxNotificationProvider implements NotificationProvider {
     @Override
-    public ProviderReceipt deliver(Notification notification) {
+    public ProviderReceipt deliver(final Notification notification) {
         return new ProviderReceipt("local-inbox", "local-" + notification.getNotificationId(),
                 Classification.ACCEPTED, "MATCHED", Instant.now(),
                 "Non-production in-app adapter; no external delivery claimed");

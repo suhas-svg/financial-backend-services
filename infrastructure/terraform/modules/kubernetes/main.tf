@@ -123,7 +123,7 @@ resource "kubernetes_network_policy" "app_network_policy" {
           }
         }
       }
-      
+
       ports {
         port     = "8080"
         protocol = "TCP"

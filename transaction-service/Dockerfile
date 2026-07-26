@@ -22,7 +22,10 @@ RUN ./mvnw clean compile -Dmaven.test.skip=true
 RUN ./mvnw package -Dmaven.test.skip=true -Dmaven.compile.skip=true
 
 # Production stage
-FROM eclipse-temurin:22-jre-alpine
+FROM eclipse-temurin:21-jre-alpine-3.23@sha256:3f08b13888f595cc49edabea7250ba69499ba25602b267da591720769400e08c
+
+# Apply published Alpine security fixes while preserving the pinned base image.
+RUN apk upgrade --no-cache
 
 # Create app user
 RUN addgroup -g 1001 -S appgroup && \

@@ -12,7 +12,7 @@ public class InternalBeneficiaryController {
     private final BeneficiaryService beneficiaryService;
 
     @GetMapping("/{beneficiaryId}")
-    public BeneficiaryResponse get(@PathVariable String beneficiaryId, @RequestParam String userId) {
+    public BeneficiaryResponse get(@PathVariable final String beneficiaryId, @RequestParam final String userId) {
         return beneficiaryService.get(beneficiaryId, userId);
     }
 }

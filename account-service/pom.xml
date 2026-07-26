@@ -8,7 +8,7 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>3.5.3</version>
+    <version>3.5.14</version>
     <relativePath/>
   </parent>
 
@@ -21,6 +21,9 @@
   <properties>
     <java.version>21</java.version>
     <testcontainers.version>1.21.4</testcontainers.version>
+    <tomcat.version>10.1.55</tomcat.version>
+    <jackson-bom.version>2.21.4</jackson-bom.version>
+    <postgresql.version>42.7.12</postgresql.version>
     <maven.compiler.source>21</maven.compiler.source>
     <maven.compiler.target>21</maven.compiler.target>
     
@@ -28,7 +31,7 @@
     <jacoco.version>0.8.12</jacoco.version>
     <sonar.java.coveragePlugin>jacoco</sonar.java.coveragePlugin>
     <sonar.dynamicAnalysis>reuseReports</sonar.dynamicAnalysis>
-    <sonar.coverage.jacoco.xmlReportPaths>${project.basedir}/target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+    <sonar.coverage.jacoco.xmlReportPaths>${project.basedir}/target/site/jacoco-aggregate/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
     <sonar.language>java</sonar.language>
     <sonar.exclusions>
       **/target/**,
@@ -312,6 +315,7 @@
               <goal>check</goal>
             </goals>
             <configuration>
+              <dataFile>${project.build.directory}/aggregate.exec</dataFile>
               <rules>
                 <rule>
                   <element>BUNDLE</element>
@@ -478,12 +482,7 @@
         <version>3.25.0</version>
         <configuration>
           <rulesets>
-            <ruleset>/category/java/bestpractices.xml</ruleset>
-            <ruleset>/category/java/codestyle.xml</ruleset>
-            <ruleset>/category/java/design.xml</ruleset>
-            <ruleset>/category/java/errorprone.xml</ruleset>
-            <ruleset>/category/java/performance.xml</ruleset>
-            <ruleset>/category/java/security.xml</ruleset>
+            <ruleset>pmd-ruleset.xml</ruleset>
           </rulesets>
           <printFailingErrors>true</printFailingErrors>
         </configuration>

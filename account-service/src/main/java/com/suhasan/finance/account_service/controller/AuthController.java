@@ -28,17 +28,17 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody AuthRequest req) {
-        Authentication auth = authManager.authenticate(
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody final AuthRequest req) {
+        final Authentication auth = authManager.authenticate(
                 new UsernamePasswordAuthenticationToken(req.getUsername(), req.getPassword())
         );
-        String token = tokenProvider.generateToken(auth);
+        final String token = tokenProvider.generateToken(auth);
         return ResponseEntity.ok(new AuthResponse(token));
     }
 
     @PostMapping("/register")
-    public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterRequest req) {
-        RegisterResponse response = authService.register(req);
+    public ResponseEntity<RegisterResponse> register(@Valid @RequestBody final RegisterRequest req) {
+        final RegisterResponse response = authService.register(req);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }

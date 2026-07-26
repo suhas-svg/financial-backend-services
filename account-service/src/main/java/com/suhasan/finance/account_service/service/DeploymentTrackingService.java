@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import javax.sql.DataSource;
 import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -29,6 +30,12 @@ import java.util.concurrent.atomic.AtomicLong;
 @Service
 @Slf4j
 @SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "Dependencies are injected and managed by Spring")
+@SuppressWarnings({
+        "PMD.AvoidDuplicateLiterals", // Deployment evidence schema keys intentionally repeat.
+        "PMD.AvoidLiteralsInIfCondition", // Health thresholds are explicit operational policy.
+        "PMD.CloseResource", // java.net.http.HttpClient is not an AutoCloseable resource.
+        "PMD.UnusedAssignment" // Volatile health score is consumed asynchronously by metrics readers.
+})
 public class DeploymentTrackingService {
 
     private final MeterRegistry meterRegistry;
@@ -63,7 +70,7 @@ public class DeploymentTrackingService {
     private final AtomicLong lastHealthCheckTime = new AtomicLong();
     private volatile double currentHealthScore = 100.0;
 
-    public DeploymentTrackingService(MeterRegistry meterRegistry, DataSource dataSource) {
+    public DeploymentTrackingService(final MeterRegistry meterRegistry, final DataSource dataSource) {
         this.meterRegistry = meterRegistry;
         this.dataSource = dataSource;
     }
@@ -154,7 +161,7 @@ public class DeploymentTrackingService {
     /**
      * Record a failed deployment
      */
-    public void recordDeploymentFailure(String reason) {
+    public void recordDeploymentFailure(final String reason) {
         recordDeployment();
         deploymentFailureCounter.increment();
         log.error("Failed deployment recorded for version: {} - Reason: {}", applicationVersion, reason);
@@ -163,7 +170,7 @@ public class DeploymentTrackingService {
     /**
      * Record deployment duration
      */
-    public void recordDeploymentDuration(long durationMillis) {
+    public void recordDeploymentDuration(final long durationMillis) {
         deploymentDurationTimer.record(durationMillis, java.util.concurrent.TimeUnit.MILLISECONDS);
         log.info("Deployment duration recorded: {}ms", durationMillis);
     }
@@ -178,17 +185,17 @@ public class DeploymentTrackingService {
 
             try {
                 // Perform comprehensive health checks
-                boolean databaseHealthy = checkDatabaseHealth();
-                boolean memoryHealthy = checkMemoryHealth();
-                boolean diskHealthy = checkDiskHealth();
-                boolean externalServicesHealthy = checkExternalServicesHealth();
+                final boolean databaseHealthy = checkDatabaseHealth();
+                final boolean memoryHealthy = checkMemoryHealth();
+                final boolean diskHealthy = checkDiskHealth();
+                final boolean externalServicesHealthy = checkExternalServicesHealth();
 
                 // Calculate health score
-                double healthScore = calculateHealthScore(databaseHealthy, memoryHealthy, diskHealthy,
+                final double healthScore = calculateHealthScore(databaseHealthy, memoryHealthy, diskHealthy,
                         externalServicesHealthy);
                 currentHealthScore = healthScore;
 
-                boolean overallHealthy = healthScore >= 80.0;
+                final boolean overallHealthy = healthScore >= 80.0;
 
                 if (!overallHealthy) {
                     healthCheckFailureCounter.increment();
@@ -239,7 +246,7 @@ public class DeploymentTrackingService {
     }
 
     private String getEnvironment() {
-        String activeProfile = System.getProperty("spring.profiles.active");
+        final String activeProfile = System.getProperty("spring.profiles.active");
         return activeProfile == null || activeProfile.isBlank() ? "dev" : activeProfile;
     }
 
@@ -247,70 +254,80 @@ public class DeploymentTrackingService {
 
     private boolean checkDatabaseHealth() {
         try (Connection conn = dataSource.getConnection()) {
-            boolean valid = conn.isValid(2); // 2-second validity probe
+            final boolean valid = conn.isValid(2); // 2-second validity probe
             if (!valid) {
                 log.warn("Database health check: connection invalid");
             }
             return valid;
         } catch (Exception e) {
-            log.error("Database health check failed: {}", e.getMessage());
+            if (log.isErrorEnabled()) {
+                log.error("Database health check failed: {}", e.getMessage());
+            }
             return false;
         }
     }
 
     private boolean checkMemoryHealth() {
-        Runtime runtime = Runtime.getRuntime();
-        long maxMemory = runtime.maxMemory();
-        long totalMemory = runtime.totalMemory();
-        long freeMemory = runtime.freeMemory();
-        long usedMemory = totalMemory - freeMemory;
-        double memoryUsagePercent = (double) usedMemory / maxMemory * 100;
+        final Runtime runtime = Runtime.getRuntime();
+        final long maxMemory = runtime.maxMemory();
+        final long totalMemory = runtime.totalMemory();
+        final long freeMemory = runtime.freeMemory();
+        final long usedMemory = totalMemory - freeMemory;
+        final double memoryUsagePercent = (double) usedMemory / maxMemory * 100;
         return memoryUsagePercent < 85.0;
     }
 
     private boolean checkDiskHealth() {
         try {
-            File workDir = new File("/app");
-            long usableSpace = workDir.getUsableSpace();
-            long totalSpace = workDir.getTotalSpace();
+            final File workDir = new File(System.getProperty("user.dir"));
+            final long usableSpace = workDir.getUsableSpace();
+            final long totalSpace = workDir.getTotalSpace();
             if (totalSpace == 0)
                 return true; // cannot determine, assume healthy
-            double usedPercent = 100.0 - (100.0 * usableSpace / totalSpace);
+            final double usedPercent = 100.0 - (100.0 * usableSpace / totalSpace);
             if (usedPercent > 90.0) {
                 log.warn("Disk health check: disk is {:.1f}% full", usedPercent);
                 return false;
             }
             return true;
-        } catch (Exception e) {
-            log.warn("Disk health check failed: {}", e.getMessage());
+        } catch (SecurityException e) {
+            if (log.isWarnEnabled()) {
+                log.warn("Disk health check failed: {}", e.getMessage());
+            }
             return true; // non-fatal — disk check not available on all platforms
         }
     }
 
     private boolean checkExternalServicesHealth() {
         try {
-            HttpClient client = HttpClient.newBuilder()
+            final HttpClient client = HttpClient.newBuilder()
                     .connectTimeout(java.time.Duration.ofSeconds(3))
                     .build();
-            HttpRequest request = HttpRequest.newBuilder()
+            final HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(accountServiceBaseUrl + "/actuator/health"))
                     .timeout(java.time.Duration.ofSeconds(3))
                     .GET()
                     .build();
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            boolean healthy = response.statusCode() == 200 && response.body().contains("UP");
-            if (!healthy) {
+            final HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            final boolean healthy = response.statusCode() == 200 && response.body().contains("UP");
+            if (!healthy && log.isWarnEnabled()) {
                 log.warn("External services health check: account-service returned status {} body={}",
                         response.statusCode(), response.body());
             }
             return healthy;
-        } catch (Exception e) {
-            log.warn("External services health check failed — account-service unreachable: {}", e.getMessage());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("External services health check interrupted");
+            return false;
+        } catch (IOException | IllegalArgumentException e) {
+            if (log.isWarnEnabled()) {
+                log.warn("External services health check failed — account-service unreachable: {}", e.getMessage());
+            }
             return false;
         }
     }
 
-    private double calculateHealthScore(boolean database, boolean memory, boolean disk, boolean externalServices) {
+    private double calculateHealthScore(final boolean database, final boolean memory, final boolean disk, final boolean externalServices) {
         double score = 0.0;
 
         if (database)

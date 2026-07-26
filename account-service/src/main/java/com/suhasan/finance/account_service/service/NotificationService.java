@@ -30,14 +30,14 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
 
-    public Notification createInternal(NotificationCreateRequest request) {
+    public Notification createInternal(final NotificationCreateRequest request) {
         validateCreate(request);
-        String dedupeKey = request.getDedupeKey().trim();
-        var existing = notificationRepository.findByDedupeKey(dedupeKey);
+        final String dedupeKey = request.getDedupeKey().trim();
+        final var existing = notificationRepository.findByDedupeKey(dedupeKey);
         if (existing.isPresent()) return recordReceipt(existing.get(), request);
 
-        LocalDateTime receivedAt = LocalDateTime.now();
-        Notification candidate = Notification.builder()
+        final LocalDateTime receivedAt = LocalDateTime.now();
+        final Notification candidate = Notification.builder()
                 .userId(request.getUserId().trim())
                 .type(request.getType())
                 .severity(request.getSeverity())
@@ -56,20 +56,20 @@ public class NotificationService {
         try {
             return notificationRepository.saveAndFlush(candidate);
         } catch (DataIntegrityViolationException concurrentReplay) {
-            Notification winner = notificationRepository.findByDedupeKey(dedupeKey)
+            final Notification winner = notificationRepository.findByDedupeKey(dedupeKey)
                     .orElseThrow(() -> concurrentReplay);
             return recordReceipt(winner, request);
         }
     }
 
-    private Notification recordReceipt(Notification existing, NotificationCreateRequest request) {
+    private Notification recordReceipt(final Notification existing, final NotificationCreateRequest request) {
         if (!existing.getUserId().equals(request.getUserId().trim())
                 || existing.getType() != request.getType()
                 || existing.getSourceType() != request.getSourceType()
                 || !existing.getSourceId().equals(request.getSourceId().trim())) {
             throw new IllegalStateException("Notification dedupe key was reused with conflicting ownership or source");
         }
-        String deliveryId = trimToNull(request.getDeliveryId());
+        final String deliveryId = trimToNull(request.getDeliveryId());
         if (deliveryId != null && existing.getDeliveryId() != null && !deliveryId.equals(existing.getDeliveryId())) {
             throw new IllegalStateException("Notification dedupe key was reused with a conflicting delivery identifier");
         }
@@ -79,35 +79,35 @@ public class NotificationService {
         return notificationRepository.save(existing);
     }
 
-    private String trimToNull(String value) {
+    private String trimToNull(final String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
     @Transactional(readOnly = true)
-    public Page<Notification> listForUser(String userId, NotificationFilter filter, Pageable pageable) {
+    public Page<Notification> listForUser(final String userId, final NotificationFilter filter, final Pageable pageable) {
         return notificationRepository.findAll(forUser(userId, filter), pageable);
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> summaryForUser(String userId) {
-        Map<String, Object> summary = new LinkedHashMap<>();
+    public Map<String, Object> summaryForUser(final String userId) {
+        final Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("total", notificationRepository.countByUserId(userId));
         summary.put("unread", notificationRepository.countByUserIdAndStatus(userId, NotificationStatus.UNREAD));
 
-        Map<NotificationSeverity, Long> bySeverity = new EnumMap<>(NotificationSeverity.class);
-        for (NotificationSeverity severity : NotificationSeverity.values()) {
+        final Map<NotificationSeverity, Long> bySeverity = new EnumMap<>(NotificationSeverity.class);
+        for (final NotificationSeverity severity : NotificationSeverity.values()) {
             bySeverity.put(severity, notificationRepository.countByUserIdAndSeverity(userId, severity));
         }
         summary.put("bySeverity", bySeverity);
 
-        Map<NotificationType, Long> byType = new EnumMap<>(NotificationType.class);
-        for (NotificationType type : NotificationType.values()) {
+        final Map<NotificationType, Long> byType = new EnumMap<>(NotificationType.class);
+        for (final NotificationType type : NotificationType.values()) {
             byType.put(type, notificationRepository.countByUserIdAndType(userId, type));
         }
         summary.put("byType", byType);
 
-        Map<NotificationSourceType, Long> bySourceType = new EnumMap<>(NotificationSourceType.class);
-        for (NotificationSourceType sourceType : NotificationSourceType.values()) {
+        final Map<NotificationSourceType, Long> bySourceType = new EnumMap<>(NotificationSourceType.class);
+        for (final NotificationSourceType sourceType : NotificationSourceType.values()) {
             bySourceType.put(sourceType, notificationRepository.countByUserIdAndSourceType(userId, sourceType));
         }
         summary.put("bySourceType", bySourceType);
@@ -115,8 +115,8 @@ public class NotificationService {
     }
 
     @Transactional
-    public Notification markRead(Long notificationId, String userId) {
-        Notification notification = notificationRepository.findByNotificationIdAndUserId(notificationId, userId)
+    public Notification markRead(final Long notificationId, final String userId) {
+        final Notification notification = notificationRepository.findByNotificationIdAndUserId(notificationId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Notification not found: " + notificationId));
         if (notification.getStatus() != NotificationStatus.READ) {
             notification.setStatus(NotificationStatus.READ);
@@ -127,9 +127,9 @@ public class NotificationService {
     }
 
     @Transactional
-    public int markAllRead(String userId) {
-        List<Notification> unread = notificationRepository.findByUserIdAndStatus(userId, NotificationStatus.UNREAD);
-        LocalDateTime readAt = LocalDateTime.now();
+    public int markAllRead(final String userId) {
+        final List<Notification> unread = notificationRepository.findByUserIdAndStatus(userId, NotificationStatus.UNREAD);
+        final LocalDateTime readAt = LocalDateTime.now();
         unread.forEach(notification -> {
             notification.setStatus(NotificationStatus.READ);
             notification.setReadAt(readAt);
@@ -138,9 +138,9 @@ public class NotificationService {
         return unread.size();
     }
 
-    private Specification<Notification> forUser(String userId, NotificationFilter filter) {
+    private Specification<Notification> forUser(final String userId, final NotificationFilter filter) {
         return (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
+            final List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("userId"), userId));
             if (filter != null) {
                 if (filter.getStatus() != null) {
@@ -166,7 +166,7 @@ public class NotificationService {
         };
     }
 
-    private void validateCreate(NotificationCreateRequest request) {
+    private void validateCreate(final NotificationCreateRequest request) {
         if (request == null
                 || !hasText(request.getUserId())
                 || request.getType() == null
@@ -180,7 +180,7 @@ public class NotificationService {
         }
     }
 
-    private boolean hasText(String value) {
+    private boolean hasText(final String value) {
         return value != null && !value.isBlank();
     }
 }

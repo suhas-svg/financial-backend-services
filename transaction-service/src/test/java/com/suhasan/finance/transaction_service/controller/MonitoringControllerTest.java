@@ -45,9 +45,11 @@ class MonitoringControllerTest {
         when(metricsService.getDailyTransactionAmount()).thenReturn(new BigDecimal("3456.78"));
         when(metricsService.getActiveTransactionsCount()).thenReturn(3L);
         when(alertingService.getAlertStatistics()).thenReturn(Map.of("criticalAlerts", 0.0d));
-        Gauge.builder("jvm.memory.used", new AtomicInteger(512), AtomicInteger::doubleValue)
+        AtomicInteger memoryUsed = new AtomicInteger(512);
+        AtomicInteger memoryMax = new AtomicInteger(1024);
+        Gauge.builder("jvm.memory.used", memoryUsed, AtomicInteger::doubleValue)
                 .register(meterRegistry);
-        Gauge.builder("jvm.memory.max", new AtomicInteger(1024), AtomicInteger::doubleValue)
+        Gauge.builder("jvm.memory.max", memoryMax, AtomicInteger::doubleValue)
                 .register(meterRegistry);
 
         var response = controller.getDetailedHealth();
@@ -109,9 +111,11 @@ class MonitoringControllerTest {
 
     @Test
     void systemStatsReturnZerosForMissingMetersAndValuesForRegisteredGauges() {
-        Gauge.builder("jvm.memory.used", new AtomicInteger(256), AtomicInteger::doubleValue)
+        AtomicInteger memoryUsed = new AtomicInteger(256);
+        AtomicInteger memoryMax = new AtomicInteger(1024);
+        Gauge.builder("jvm.memory.used", memoryUsed, AtomicInteger::doubleValue)
                 .register(meterRegistry);
-        Gauge.builder("jvm.memory.max", new AtomicInteger(1024), AtomicInteger::doubleValue)
+        Gauge.builder("jvm.memory.max", memoryMax, AtomicInteger::doubleValue)
                 .register(meterRegistry);
         Gauge.builder("system.cpu.usage", new AtomicInteger(1), value -> 0.25d)
                 .register(meterRegistry);

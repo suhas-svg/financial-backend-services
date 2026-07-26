@@ -1,5 +1,7 @@
-FROM nginx:1.28.0-alpine3.21
-RUN apk add --no-cache openssl
+FROM nginx:1.28.3-alpine3.23@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236
+RUN apk del --no-cache nginx-module-acme nginx-module-geoip nginx-module-image-filter nginx-module-njs nginx-module-xslt \
+    && apk upgrade --no-cache \
+    && apk add --no-cache --upgrade nginx openssl
 COPY nginx.conf /etc/nginx/nginx.conf.template
 COPY entrypoint.sh /sandbox-entrypoint.sh
 RUN chmod 0555 /sandbox-entrypoint.sh && mkdir -p /etc/nginx/tls && chown -R nginx:nginx /etc/nginx/tls

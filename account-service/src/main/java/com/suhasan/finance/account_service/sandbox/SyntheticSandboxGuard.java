@@ -11,8 +11,8 @@ public class SyntheticSandboxGuard {
     private final Environment environment;
     private final boolean enabled;
 
-    public SyntheticSandboxGuard(Environment environment,
-                                 @Value("${sandbox.synthetic.enabled:false}") boolean enabled) {
+    public SyntheticSandboxGuard(final Environment environment,
+                                 @Value("${sandbox.synthetic.enabled:false}") final boolean enabled) {
         this.environment = environment;
         this.enabled = enabled;
     }

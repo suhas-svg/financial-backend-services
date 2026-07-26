@@ -25,6 +25,10 @@ import java.util.Map;
     value = "EI_EXPOSE_REP2",
     justification = "Dependencies are injected and managed by Spring"
 )
+@SuppressWarnings({
+        "PMD.AvoidDuplicateLiterals", // Stable response-schema keys intentionally repeat across endpoints.
+        "PMD.AvoidLiteralsInIfCondition" // Deployment status values are protocol constants.
+})
 public class HealthController {
 
     private final DeploymentTrackingService deploymentTrackingService;
@@ -45,14 +49,14 @@ public class HealthController {
     public ResponseEntity<Map<String, Object>> getHealthStatus() {
         log.debug("Health status requested");
         
-        Map<String, Object> healthStatus = new HashMap<>();
+        final Map<String, Object> healthStatus = new HashMap<>();
         
         try {
             // Perform health check
-            boolean isHealthy = deploymentTrackingService.performHealthCheck();
+            final boolean isHealthy = deploymentTrackingService.performHealthCheck();
             
             // Get deployment information
-            DeploymentTrackingService.DeploymentInfo deploymentInfo = deploymentTrackingService.getDeploymentInfo();
+            final DeploymentTrackingService.DeploymentInfo deploymentInfo = deploymentTrackingService.getDeploymentInfo();
             
             // Build response
             healthStatus.put("status", isHealthy ? "UP" : "DOWN");
@@ -80,7 +84,7 @@ public class HealthController {
         log.debug("Deployment info requested");
         
         try {
-            DeploymentTrackingService.DeploymentInfo deploymentInfo = deploymentTrackingService.getDeploymentInfo();
+            final DeploymentTrackingService.DeploymentInfo deploymentInfo = deploymentTrackingService.getDeploymentInfo();
             return ResponseEntity.ok(deploymentInfo);
         } catch (Exception e) {
             log.error("Error getting deployment info", e);
@@ -95,10 +99,10 @@ public class HealthController {
     public ResponseEntity<Map<String, Object>> triggerHealthCheck() {
         log.info("Manual health check triggered");
         
-        Map<String, Object> result = new HashMap<>();
+        final Map<String, Object> result = new HashMap<>();
         
         try {
-            boolean isHealthy = deploymentTrackingService.performHealthCheck();
+            final boolean isHealthy = deploymentTrackingService.performHealthCheck();
             
             result.put("healthy", isHealthy);
             result.put("timestamp", Instant.now().toString());
@@ -121,19 +125,19 @@ public class HealthController {
      */
     @PostMapping("/deployment")
     public ResponseEntity<Map<String, String>> recordDeployment(
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) Long duration) {
+            @RequestParam(required = false) final String status,
+            @RequestParam(required = false) final Long duration) {
         
         log.info("Deployment event recorded - Status: {}, Duration: {}ms", status, duration);
         
-        Map<String, String> response = new HashMap<>();
+        final Map<String, String> response = new HashMap<>();
         
         try {
             if ("success".equalsIgnoreCase(status)) {
                 deploymentTrackingService.recordDeploymentSuccess();
                 response.put("message", "Deployment success recorded");
             } else if ("failure".equalsIgnoreCase(status)) {
-                String reason = "Deployment failed";
+                final String reason = "Deployment failed";
                 deploymentTrackingService.recordDeploymentFailure(reason);
                 response.put("message", "Deployment failure recorded");
             } else {
@@ -163,7 +167,7 @@ public class HealthController {
     public ResponseEntity<Map<String, Object>> getMetricsSummary() {
         log.debug("Metrics summary requested");
         
-        Map<String, Object> metrics = new HashMap<>();
+        final Map<String, Object> metrics = new HashMap<>();
         
         try {
             // Get key metrics from the meter registry
@@ -185,7 +189,7 @@ public class HealthController {
 
     // Helper methods
     private Map<String, Object> getDetailedHealthChecks() {
-        Map<String, Object> checks = new HashMap<>();
+        final Map<String, Object> checks = new HashMap<>();
         
         // Database health
         checks.put("database", Map.of(
@@ -194,12 +198,12 @@ public class HealthController {
         ));
         
         // Memory health
-        Runtime runtime = Runtime.getRuntime();
-        long maxMemory = runtime.maxMemory();
-        long totalMemory = runtime.totalMemory();
-        long freeMemory = runtime.freeMemory();
-        long usedMemory = totalMemory - freeMemory;
-        double memoryUsagePercent = (double) usedMemory / maxMemory * 100;
+        final Runtime runtime = Runtime.getRuntime();
+        final long maxMemory = runtime.maxMemory();
+        final long totalMemory = runtime.totalMemory();
+        final long freeMemory = runtime.freeMemory();
+        final long usedMemory = totalMemory - freeMemory;
+        final double memoryUsagePercent = (double) usedMemory / maxMemory * 100;
         
         checks.put("memory", Map.of(
             "status", memoryUsagePercent < 85.0 ? "UP" : "DOWN",
@@ -225,13 +229,13 @@ public class HealthController {
         return checks;
     }
 
-    private double getCounterValue(String meterName) {
-        Counter counter = meterRegistry.find(meterName).counter();
+    private double getCounterValue(final String meterName) {
+        final Counter counter = meterRegistry.find(meterName).counter();
         return counter != null ? counter.count() : 0.0;
     }
 
-    private double getGaugeValue(String meterName) {
-        Gauge gauge = meterRegistry.find(meterName).gauge();
+    private double getGaugeValue(final String meterName) {
+        final Gauge gauge = meterRegistry.find(meterName).gauge();
         return gauge != null ? gauge.value() : 0.0;
     }
 }

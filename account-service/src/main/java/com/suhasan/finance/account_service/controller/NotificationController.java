@@ -40,38 +40,38 @@ public class NotificationController {
 
     @GetMapping("/notifications")
     public ResponseEntity<Page<Notification>> list(
-            @RequestParam(required = false) NotificationStatus status,
-            @RequestParam(required = false) NotificationType type,
-            @RequestParam(required = false) NotificationSeverity severity,
-            @RequestParam(required = false) NotificationSourceType sourceType,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
-            @PageableDefault(size = 20, sort = "createdAt") Pageable pageable,
-            Authentication authentication
+            @RequestParam(required = false) final NotificationStatus status,
+            @RequestParam(required = false) final NotificationType type,
+            @RequestParam(required = false) final NotificationSeverity severity,
+            @RequestParam(required = false) final NotificationSourceType sourceType,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) final LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) final LocalDateTime to,
+            @PageableDefault(size = 20, sort = "createdAt") final Pageable pageable,
+            final Authentication authentication
     ) {
-        NotificationFilter filter = new NotificationFilter(status, type, severity, sourceType, from, to);
+        final NotificationFilter filter = new NotificationFilter(status, type, severity, sourceType, from, to);
         return ResponseEntity.ok(notificationService.listForUser(authentication.getName(), filter, pageable));
     }
 
     @GetMapping("/notifications/summary")
-    public ResponseEntity<Map<String, Object>> summary(Authentication authentication) {
+    public ResponseEntity<Map<String, Object>> summary(final Authentication authentication) {
         return ResponseEntity.ok(notificationService.summaryForUser(authentication.getName()));
     }
 
     @PatchMapping("/notifications/{notificationId}/read")
-    public ResponseEntity<Notification> markRead(@PathVariable Long notificationId, Authentication authentication) {
+    public ResponseEntity<Notification> markRead(@PathVariable final Long notificationId, final Authentication authentication) {
         return ResponseEntity.ok(notificationService.markRead(notificationId, authentication.getName()));
     }
 
     @PatchMapping("/notifications/read-all")
-    public ResponseEntity<Map<String, Integer>> markAllRead(Authentication authentication) {
+    public ResponseEntity<Map<String, Integer>> markAllRead(final Authentication authentication) {
         return ResponseEntity.ok(Map.of("updated", notificationService.markAllRead(authentication.getName())));
     }
 
     @PostMapping("/internal/notifications")
     public ResponseEntity<Notification> createInternal(
-            @RequestBody NotificationCreateRequest request,
-            Authentication authentication
+            @RequestBody final NotificationCreateRequest request,
+            final Authentication authentication
     ) {
         if (!isAdmin(authentication) && !isInternalService(authentication)) {
             throw new AccessDeniedException("Only admins or internal services can create notifications");
@@ -79,12 +79,12 @@ public class NotificationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(notificationService.createInternal(request));
     }
 
-    private boolean isAdmin(Authentication authentication) {
+    private boolean isAdmin(final Authentication authentication) {
         return authentication.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
     }
 
-    private boolean isInternalService(Authentication authentication) {
+    private boolean isInternalService(final Authentication authentication) {
         return authentication.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_INTERNAL_SERVICE".equals(a.getAuthority()));
     }

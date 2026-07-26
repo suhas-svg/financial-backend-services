@@ -33,7 +33,7 @@ variable "environment_validation" {
   description = "Validation for environment variable"
   type        = string
   default     = "dev"
-  
+
   validation {
     condition     = contains(["dev", "staging", "prod"], var.environment_validation)
     error_message = "Environment must be one of: dev, staging, prod."
@@ -84,7 +84,7 @@ resource "null_resource" "pre_deployment_validation" {
 # Null resource for post-deployment validation
 resource "null_resource" "post_deployment_validation" {
   depends_on = [null_resource.pre_deployment_validation]
-  
+
   triggers = {
     always_run = timestamp()
   }
@@ -127,10 +127,10 @@ locals {
       memory_limit = "8Gi"
     }
   }
-  
+
   # Validation for resource naming
   name_regex = "^[a-z0-9-]+$"
-  
+
   # Common tags that should be applied to all resources
   required_tags = [
     "environment",
@@ -144,8 +144,8 @@ output "validation_status" {
   description = "Status of infrastructure validation"
   value = {
     terraform_version = "✓ Terraform version >= 1.0"
-    providers        = "✓ Required providers configured"
-    cluster_access   = "✓ Kubernetes cluster accessible"
-    tools_available  = "✓ kubectl and helm available"
+    providers         = "✓ Required providers configured"
+    cluster_access    = "✓ Kubernetes cluster accessible"
+    tools_available   = "✓ kubectl and helm available"
   }
 }

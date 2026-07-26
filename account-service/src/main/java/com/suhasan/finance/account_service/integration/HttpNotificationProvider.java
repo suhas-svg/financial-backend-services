@@ -14,16 +14,20 @@ import java.util.Map;
 
 @Component
 @ConditionalOnProperty(name = "integration.notification.provider", havingValue = "http")
+@SuppressWarnings({
+        "PMD.AvoidDuplicateLiterals", // Provider identifier is intentionally repeated in evidence records.
+        "PMD.AvoidLiteralsInIfCondition" // HTTP status values are protocol constants.
+})
 public class HttpNotificationProvider implements NotificationProvider {
     private final RestClient client;
     private final String contractId;
     private final String evidenceReference;
 
     public HttpNotificationProvider(
-            @Value("${integration.notification.endpoint}") String endpoint,
-            @Value("${integration.notification.bearer-token}") String bearerToken,
-            @Value("${integration.notification.contract-id}") String contractId,
-            @Value("${integration.notification.health-evidence-reference:runtime-health}") String evidenceReference) {
+            @Value("${integration.notification.endpoint}") final String endpoint,
+            @Value("${integration.notification.bearer-token}") final String bearerToken,
+            @Value("${integration.notification.contract-id}") final String contractId,
+            @Value("${integration.notification.health-evidence-reference:runtime-health}") final String evidenceReference) {
         if (endpoint == null || endpoint.isBlank() || bearerToken == null || bearerToken.isBlank()) {
             throw new IllegalStateException("HTTP notification endpoint and secret-manager supplied token are required");
         }
@@ -34,10 +38,10 @@ public class HttpNotificationProvider implements NotificationProvider {
     }
 
     @Override
-    public ProviderReceipt deliver(Notification notification) {
-        Instant attempted = Instant.now();
+    public ProviderReceipt deliver(final Notification notification) {
+        final Instant attempted = Instant.now();
         try {
-            ProviderResponse response = client.post().uri("/v1/messages")
+            final ProviderResponse response = client.post().uri("/v1/messages")
                     .body(Map.of(
                             "deliveryId", notification.getDeliveryId() == null
                                     ? "notification-" + notification.getNotificationId() : notification.getDeliveryId(),
@@ -57,7 +61,7 @@ public class HttpNotificationProvider implements NotificationProvider {
             return new ProviderReceipt("http", null, Classification.TIMEOUT,
                     "UNRECONCILED", attempted, "Provider timed out");
         } catch (RestClientResponseException response) {
-            Classification classification = classify(response.getStatusCode());
+            final Classification classification = classify(response.getStatusCode());
             return new ProviderReceipt("http", null, classification,
                     "UNRECONCILED", attempted, "Provider returned HTTP " + response.getStatusCode().value());
         }
@@ -75,7 +79,7 @@ public class HttpNotificationProvider implements NotificationProvider {
         }
     }
 
-    private Classification classify(HttpStatusCode code) {
+    private Classification classify(final HttpStatusCode code) {
         if (code.value() == 429) return Classification.RATE_LIMITED;
         if (code.is5xxServerError()) return Classification.UNAVAILABLE;
         if (code.value() == 404 || code.value() == 422) return Classification.INVALID_DESTINATION;

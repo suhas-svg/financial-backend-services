@@ -14,7 +14,7 @@ import org.springframework.security.web.util.matcher.OrRequestMatcher;
 public class SyntheticSandboxSecurityConfig {
     @Bean
     @Order(0)
-    SecurityFilterChain syntheticPublicEndpoints(HttpSecurity http) throws Exception {
+    SecurityFilterChain syntheticPublicEndpoints(final HttpSecurity http) throws Exception {
         http.securityMatcher(new OrRequestMatcher(
                         new AntPathRequestMatcher("/api/sandbox/metadata", HttpMethod.GET.name()),
                         new AntPathRequestMatcher("/api/sandbox/bootstrap/status", HttpMethod.GET.name()),

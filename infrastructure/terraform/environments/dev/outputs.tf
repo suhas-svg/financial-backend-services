@@ -66,8 +66,8 @@ output "connection_info" {
       grafana_url    = module.monitoring.grafana_url
     }
     kubernetes = {
-      namespace           = module.kubernetes.namespace_name
-      service_account     = module.kubernetes.service_account_name
+      namespace            = module.kubernetes.namespace_name
+      service_account      = module.kubernetes.service_account_name
       monitoring_namespace = module.monitoring.monitoring_namespace
     }
   }

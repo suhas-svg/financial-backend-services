@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Route, Switch } from "wouter";
+import { Navigate } from "./routing";
 import { AdminLayout } from "./components/AdminLayout";
 import { CustomerLayout } from "./components/CustomerLayout";
 import { RequireAuth } from "./components/RequireAuth";
@@ -29,42 +30,41 @@ const SecurityPage = lazy(() => import("./pages/SecurityPage").then((module) => 
 const StatementsPage = lazy(() => import("./pages/StatementsPage").then((module) => ({ default: module.StatementsPage })));
 
 export function App() {
+  const customerRoute = (page: React.ReactNode) => (
+    <RequireAuth><CustomerLayout>{page}</CustomerLayout></RequireAuth>
+  );
+  const adminRoute = (page: React.ReactNode) => (
+    <RequireAuth admin><AdminLayout>{page}</AdminLayout></RequireAuth>
+  );
+
   return (
     <Suspense fallback={<main className="p-6 text-sm text-muted">Loading...</main>}>
-      <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route element={<RequireAuth />}>
-        <Route element={<CustomerLayout />}>
-          <Route index element={<DashboardPage />} />
-          <Route path="accounts" element={<AccountsPage />} />
-          <Route path="beneficiaries" element={<BeneficiariesPage />} />
-          <Route path="move-money" element={<MoveMoneyPage />} />
-          <Route path="scheduled-transfers" element={<ScheduledTransfersPage />} />
-          <Route path="outcome-protection" element={<OutcomeProtectionPage />} />
-          <Route path="transactions" element={<TransactionsPage />} />
-          <Route path="disputes" element={<DisputesPage />} />
-          <Route path="statements" element={<StatementsPage />} />
-          <Route path="notifications" element={<NotificationsPage />} />
-          <Route path="security" element={<SecurityPage />} />
-        </Route>
-        <Route element={<RequireAuth admin />}>
-          <Route path="admin" element={<AdminLayout />}>
-            <Route index element={<AdminOverviewPage />} />
-            <Route path="accounts" element={<AdminAccountsPage />} />
-            <Route path="monitoring" element={<AdminMonitoringPage />} />
-            <Route path="transactions" element={<AdminTransactionsPage />} />
-            <Route path="audit-log" element={<AdminAuditLogPage />} />
-            <Route path="reconciliation" element={<AdminReconciliationPage />} />
-            <Route path="risk-alerts" element={<AdminRiskAlertsPage />} />
-            <Route path="risk-cases" element={<AdminRiskCasesPage />} />
-            <Route path="disputes" element={<AdminDisputesPage />} />
-            <Route path="investigations" element={<AdminInvestigationsPage />} />
-          </Route>
-        </Route>
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Switch>
+        <Route path="/login"><LoginPage /></Route>
+        <Route path="/register"><RegisterPage /></Route>
+        <Route path="/admin/accounts">{adminRoute(<AdminAccountsPage />)}</Route>
+        <Route path="/admin/monitoring">{adminRoute(<AdminMonitoringPage />)}</Route>
+        <Route path="/admin/transactions">{adminRoute(<AdminTransactionsPage />)}</Route>
+        <Route path="/admin/audit-log">{adminRoute(<AdminAuditLogPage />)}</Route>
+        <Route path="/admin/reconciliation">{adminRoute(<AdminReconciliationPage />)}</Route>
+        <Route path="/admin/risk-alerts">{adminRoute(<AdminRiskAlertsPage />)}</Route>
+        <Route path="/admin/risk-cases">{adminRoute(<AdminRiskCasesPage />)}</Route>
+        <Route path="/admin/disputes">{adminRoute(<AdminDisputesPage />)}</Route>
+        <Route path="/admin/investigations">{adminRoute(<AdminInvestigationsPage />)}</Route>
+        <Route path="/admin">{adminRoute(<AdminOverviewPage />)}</Route>
+        <Route path="/accounts">{customerRoute(<AccountsPage />)}</Route>
+        <Route path="/beneficiaries">{customerRoute(<BeneficiariesPage />)}</Route>
+        <Route path="/move-money">{customerRoute(<MoveMoneyPage />)}</Route>
+        <Route path="/scheduled-transfers">{customerRoute(<ScheduledTransfersPage />)}</Route>
+        <Route path="/outcome-protection">{customerRoute(<OutcomeProtectionPage />)}</Route>
+        <Route path="/transactions">{customerRoute(<TransactionsPage />)}</Route>
+        <Route path="/disputes">{customerRoute(<DisputesPage />)}</Route>
+        <Route path="/statements">{customerRoute(<StatementsPage />)}</Route>
+        <Route path="/notifications">{customerRoute(<NotificationsPage />)}</Route>
+        <Route path="/security">{customerRoute(<SecurityPage />)}</Route>
+        <Route path="/">{customerRoute(<DashboardPage />)}</Route>
+        <Route><Navigate to="/" replace /></Route>
+      </Switch>
     </Suspense>
   );
 }

@@ -34,7 +34,7 @@ public class User {
     return new HashSet<>(roles);
   }
 
-  public void setRoles(Set<Role> roles) {
+  public void setRoles(final Set<Role> roles) {
     this.roles = roles == null ? new HashSet<>() : new HashSet<>(roles);
   }
 }

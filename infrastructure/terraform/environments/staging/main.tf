@@ -38,7 +38,7 @@ module "kubernetes" {
   namespace             = var.namespace
   enable_network_policy = var.enable_network_policy
   enable_resource_quota = var.enable_resource_quota
-  
+
   resource_quota = {
     requests_cpu    = "2"
     requests_memory = "4Gi"
@@ -61,7 +61,7 @@ module "database" {
   db_name            = var.db_name
   db_username        = var.db_username
   postgres_version   = var.postgres_version
-  db_storage_size    = "20Gi"  # Larger storage for staging
+  db_storage_size    = "20Gi" # Larger storage for staging
   storage_class_name = var.storage_class_name
 
   db_resources = {
@@ -76,9 +76,9 @@ module "database" {
   }
 
   # Enhanced database configuration for staging
-  db_max_connections        = "200"
-  db_shared_buffers        = "512MB"
-  db_effective_cache_size  = "2GB"
+  db_max_connections      = "200"
+  db_shared_buffers       = "512MB"
+  db_effective_cache_size = "2GB"
 
   depends_on = [module.kubernetes]
 }
@@ -87,18 +87,18 @@ module "database" {
 module "monitoring" {
   source = "../../modules/monitoring"
 
-  app_name                = var.app_name
-  environment             = var.environment
-  monitoring_namespace    = var.monitoring_namespace
+  app_name               = var.app_name
+  environment            = var.environment
+  monitoring_namespace   = var.monitoring_namespace
   app_namespace          = module.kubernetes.namespace_name
   enable_grafana         = var.enable_grafana
   enable_alertmanager    = var.enable_alertmanager
   grafana_admin_password = var.grafana_admin_password
   storage_class_name     = var.storage_class_name
-  
+
   # Production-like resources for staging
   prometheus_storage_size = "50Gi"
-  prometheus_retention   = "30d"
+  prometheus_retention    = "30d"
   prometheus_resources = {
     requests = {
       cpu    = "500m"
@@ -110,7 +110,7 @@ module "monitoring" {
     }
   }
 
-  grafana_storage_size = "10Gi"
+  grafana_storage_size      = "10Gi"
   alertmanager_storage_size = "10Gi"
 
   # Enable all monitoring features for staging

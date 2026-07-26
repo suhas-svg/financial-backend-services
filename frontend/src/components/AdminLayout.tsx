@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "../routing";
 import { Activity, Bell, ChevronLeft, ChevronRight, CircleHelp, ClipboardList, FolderKanban, Gauge, Landmark, LogOut, Menu, Moon, RefreshCw, Search, Shield, ShieldAlert, Sun, X } from "lucide-react";
 import clsx from "clsx";
 import { Button } from "./ui";
@@ -53,7 +53,7 @@ function NavigationLink({
   );
 }
 
-export function AdminLayout() {
+export function AdminLayout({ children }: { children: ReactNode }) {
   const { session, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -127,7 +127,7 @@ export function AdminLayout() {
           <Button variant="ghost" onClick={logout} aria-label="Logout"><LogOut className="h-4 w-4" /><span className="hidden xl:inline">Logout</span></Button>
         </header>
         <main className="mx-auto max-w-[1600px] p-4 sm:p-6 lg:p-8">
-          <Outlet />
+          {children}
         </main>
       </div>
     </div>

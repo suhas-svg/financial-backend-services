@@ -41,29 +41,29 @@ public class AccountController {
 
     @GetMapping
     public ResponseEntity<Page<AccountResponse>> listAccounts(
-            @RequestParam(required = false) String ownerId,
-            @RequestParam(required = false) String accountType,
-            @RequestParam(required = false) AccountStatus status,
-            @PageableDefault(size = 20, sort = "createdAt") Pageable pageable,
-            Authentication authentication
+            @RequestParam(required = false) final String ownerId,
+            @RequestParam(required = false) final String accountType,
+            @RequestParam(required = false) final AccountStatus status,
+            @PageableDefault(size = 20, sort = "createdAt") final Pageable pageable,
+            final Authentication authentication
     ) {
         String effectiveOwnerId = ownerId;
         if (!isAdmin(authentication) && !isInternalService(authentication)) {
             effectiveOwnerId = authentication.getName();
         }
-        Page<AccountResponse> page = service.listAccounts(effectiveOwnerId, accountType, status, pageable);
+        final Page<AccountResponse> page = service.listAccounts(effectiveOwnerId, accountType, status, pageable);
         return ResponseEntity.ok(page);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Account> get(@PathVariable Long id, Authentication authentication) {
-        Account existing = service.findById(id);
+    public ResponseEntity<Account> get(@PathVariable final Long id, final Authentication authentication) {
+        final Account existing = service.findById(id);
         assertOwnerOrPrivileged(existing, authentication);
         return ResponseEntity.ok(existing);
     }
 
     @PostMapping
-    public ResponseEntity<Account> create(@Valid @RequestBody AccountCreateRequest request, Authentication authentication) {
+    public ResponseEntity<Account> create(@Valid @RequestBody final AccountCreateRequest request, final Authentication authentication) {
         String ownerId = isAdmin(authentication) || isInternalService(authentication)
                 ? request.ownerId() : authentication.getName();
         if (ownerId == null || ownerId.isBlank()) ownerId = authentication.getName();
@@ -71,19 +71,19 @@ public class AccountController {
     }
     @PutMapping("/{id}")
     public ResponseEntity<Account> update(
-            @PathVariable Long id,
-            @Valid @RequestBody AccountMetadataUpdateRequest request,
-            Authentication authentication
+            @PathVariable final Long id,
+            @Valid @RequestBody final AccountMetadataUpdateRequest request,
+            final Authentication authentication
     ) {
-        Account existing = service.findById(id);
+        final Account existing = service.findById(id);
         assertOwnerOrPrivileged(existing, authentication);
         return ResponseEntity.ok(service.updateMetadata(id, request));
     }
     @PatchMapping("/{id}/status")
     public ResponseEntity<Account> updateStatus(
-            @PathVariable Long id,
-            @Valid @RequestBody AccountStatusUpdateRequest request,
-            Authentication authentication
+            @PathVariable final Long id,
+            @Valid @RequestBody final AccountStatusUpdateRequest request,
+            final Authentication authentication
     ) {
         if (!isAdmin(authentication)) {
             throw new AccessDeniedException("Only admins can update account status");
@@ -91,11 +91,11 @@ public class AccountController {
         if (request.getReason() == null || request.getReason().isBlank()) {
             throw new IllegalArgumentException("Status reason is required");
         }
-        Account updated = service.updateStatus(id, request.getStatus(), request.getReason(), authentication.getName());
+        final Account updated = service.updateStatus(id, request.getStatus(), request.getReason(), authentication.getName());
         return ResponseEntity.ok(updated);
     }
 
-    private void assertOwnerOrPrivileged(Account account, Authentication authentication) {
+    private void assertOwnerOrPrivileged(final Account account, final Authentication authentication) {
         if (isAdmin(authentication) || isInternalService(authentication)) {
             return;
         }
@@ -104,12 +104,12 @@ public class AccountController {
         }
     }
 
-    private boolean isAdmin(Authentication authentication) {
+    private boolean isAdmin(final Authentication authentication) {
         return authentication.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
     }
 
-    private boolean isInternalService(Authentication authentication) {
+    private boolean isInternalService(final Authentication authentication) {
         return authentication.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_INTERNAL_SERVICE".equals(a.getAuthority()));
     }

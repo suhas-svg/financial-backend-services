@@ -33,8 +33,8 @@ public class SyntheticSandboxController {
 
     @PostMapping("/bootstrap")
     public ResponseEntity<SyntheticSandboxBootstrapService.BootstrapStatus> bootstrap(
-            @RequestHeader("X-Sandbox-Bootstrap-Token") String token,
-            @Valid @RequestBody BootstrapRequest request) {
+            @RequestHeader("X-Sandbox-Bootstrap-Token") final String token,
+            @Valid @RequestBody final BootstrapRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(bootstrapService.bootstrap(token, request.username(), request.password()));
     }

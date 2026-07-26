@@ -1,6 +1,6 @@
 import { useQueries } from "@tanstack/react-query";
 import { Activity, ArrowRight, CircleAlert, CircleCheck, Clock3, FolderKanban, RefreshCw, Scale, ShieldAlert, Users } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "../routing";
 import { getAccountHealth, getAuditSummary, getDisputeSummary, getRiskCaseSummary, getRiskSummary, getTransactionMonitoringStats, listAccounts, listReconciliationExceptions, searchAuditEvents } from "../lib/queries";
 import type { AuditLogEntry } from "../types";
 import { utcDateTime } from "../lib/format";

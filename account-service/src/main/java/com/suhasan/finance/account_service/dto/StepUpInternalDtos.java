@@ -3,6 +3,7 @@ package com.suhasan.finance.account_service.dto;
 import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
 
+@SuppressWarnings("PMD.MissingStaticMethodInNonInstantiatableClass") // Namespace for nested internal DTO records.
 public final class StepUpInternalDtos {
     private StepUpInternalDtos() {}
 

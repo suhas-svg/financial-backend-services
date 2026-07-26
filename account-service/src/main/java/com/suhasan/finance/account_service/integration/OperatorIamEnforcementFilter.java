@@ -33,12 +33,12 @@ public class OperatorIamEnforcementFilter extends OncePerRequestFilter {
     private final long maxReviewAgeDays;
 
     public OperatorIamEnforcementFilter(
-            @Value("${security.jwt.secret}") String secret,
-            @Value("${integration.iam.issuer:local-account-service}") String issuer,
-            @Value("${integration.iam.audience:account-service}") String audience,
-            @Value("${integration.iam.role-mappings:admin=ROLE_ADMIN}") String mappings,
-            @Value("${integration.iam.strict:false}") boolean strict,
-            @Value("${integration.iam.access-review-max-age-days:90}") long maxReviewAgeDays) {
+            @Value("${security.jwt.secret}") final String secret,
+            @Value("${integration.iam.issuer:local-account-service}") final String issuer,
+            @Value("${integration.iam.audience:account-service}") final String audience,
+            @Value("${integration.iam.role-mappings:admin=ROLE_ADMIN}") final String mappings,
+            @Value("${integration.iam.strict:false}") final boolean strict,
+            @Value("${integration.iam.access-review-max-age-days:90}") final long maxReviewAgeDays) {
         this.secret = secret;
         this.issuer = issuer;
         this.audience = audience;
@@ -50,15 +50,15 @@ public class OperatorIamEnforcementFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+    protected void doFilterInternal(final HttpServletRequest request, final HttpServletResponse response, final FilterChain chain)
             throws ServletException, IOException {
-        String header = request.getHeader("Authorization");
+        final String header = request.getHeader("Authorization");
         if (header == null || !header.startsWith("Bearer ")) {
             chain.doFilter(request, response);
             return;
         }
 
-        Claims claims;
+        final Claims claims;
         try {
             claims = Jwts.parserBuilder()
                     .setSigningKey(Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)))
@@ -80,7 +80,7 @@ public class OperatorIamEnforcementFilter extends OncePerRequestFilter {
         }
     }
 
-    private void validateOperator(Claims claims) {
+    private void validateOperator(final Claims claims) {
         if (!strict) return;
         if (!issuer.equals(claims.getIssuer()) || !audience.equals(claims.getAudience())) {
             throw new IllegalStateException("Operator issuer or audience mismatch");
@@ -91,14 +91,14 @@ public class OperatorIamEnforcementFilter extends OncePerRequestFilter {
         if (mappedAdminClaims.stream().noneMatch(role -> contains(claims.get("operator_roles"), role))) {
             throw new IllegalStateException("Operator role is not explicitly mapped");
         }
-        Number reviewed = claims.get("access_reviewed_at", Number.class);
+        final Number reviewed = claims.get("access_reviewed_at", Number.class);
         if (reviewed == null || Instant.ofEpochSecond(reviewed.longValue())
                 .plusSeconds(maxReviewAgeDays * 86400).isBefore(Instant.now())) {
             throw new IllegalStateException("Operator access review is missing or expired");
         }
     }
 
-    private boolean contains(Object claim, String expected) {
+    private boolean contains(final Object claim, final String expected) {
         if (claim instanceof Collection<?> values) {
             return values.stream().map(String::valueOf).anyMatch(expected::equals);
         }

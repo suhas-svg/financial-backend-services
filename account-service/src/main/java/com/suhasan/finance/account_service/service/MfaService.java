@@ -23,6 +23,10 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@SuppressWarnings({
+        "PMD.AvoidInstantiatingObjectsInLoops", // Every recovery code requires its own persisted entity.
+        "PMD.AvoidLiteralsInIfCondition" // Recovery-code grouping position is part of the display format.
+})
 public class MfaService {
     private static final String METHOD = "TOTP";
     private static final int RECOVERY_CODE_COUNT = 8;
@@ -35,7 +39,7 @@ public class MfaService {
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Transactional(readOnly = true)
-    public MfaResponses.StatusResponse status(String username) {
+    public MfaResponses.StatusResponse status(final String username) {
         return methodRepository.findByUserIdAndMethodType(username, METHOD)
                 .map(method -> new MfaResponses.StatusResponse(
                         method.getStatus() == MfaMethodStatus.ACTIVE,
@@ -44,14 +48,14 @@ public class MfaService {
                 .orElseGet(() -> new MfaResponses.StatusResponse(false, "NOT_ENROLLED", 0));
     }
 
-    public MfaResponses.EnrollmentResponse enroll(String username, String currentPassword) {
+    public MfaResponses.EnrollmentResponse enroll(final String username, final String currentPassword) {
         requirePassword(username, currentPassword);
         MfaMethod method = methodRepository.findByUserIdAndMethodType(username, METHOD).orElseGet(MfaMethod::new);
         if (method.getStatus() == MfaMethodStatus.ACTIVE) {
             throw new IllegalStateException("TOTP is already active");
         }
-        String secret = totpService.generateSecret();
-        MfaSecretManager.Ciphertext encrypted = secretManager.encrypt(secret);
+        final String secret = totpService.generateSecret();
+        final MfaSecretManager.Ciphertext encrypted = secretManager.encrypt(secret);
         method.setUserId(username);
         method.setMethodType(METHOD);
         method.setSecretCiphertext(encrypted.value());
@@ -63,8 +67,8 @@ public class MfaService {
         return new MfaResponses.EnrollmentResponse(secret, totpService.provisioningUri(username, secret));
     }
 
-    public MfaResponses.ConfirmationResponse confirm(String username, String code) {
-        MfaMethod method = requireMethod(username, MfaMethodStatus.PENDING);
+    public MfaResponses.ConfirmationResponse confirm(final String username, final String code) {
+        final MfaMethod method = requireMethod(username, MfaMethodStatus.PENDING);
         if (!totpService.verify(secretManager.decrypt(method.getSecretCiphertext(), method.getSecretKeyId()),
                 code, Instant.now())) {
             throw new MfaVerificationException("Invalid authentication code");
@@ -72,18 +76,18 @@ public class MfaService {
         method.setStatus(MfaMethodStatus.ACTIVE);
         method.setVerifiedAt(Instant.now());
         methodRepository.save(method);
-        List<String> codes = replaceRecoveryCodes(method);
+        final List<String> codes = replaceRecoveryCodes(method);
         return new MfaResponses.ConfirmationResponse(true, codes);
     }
 
-    public MfaResponses.RecoveryCodesResponse regenerateRecoveryCodes(String username, String currentPassword) {
+    public MfaResponses.RecoveryCodesResponse regenerateRecoveryCodes(final String username, final String currentPassword) {
         requirePassword(username, currentPassword);
         return new MfaResponses.RecoveryCodesResponse(replaceRecoveryCodes(requireMethod(username, MfaMethodStatus.ACTIVE)));
     }
 
-    public void disable(String username, String currentPassword, String code) {
+    public void disable(final String username, final String currentPassword, final String code) {
         requirePassword(username, currentPassword);
-        MfaMethod method = requireMethod(username, MfaMethodStatus.ACTIVE);
+        final MfaMethod method = requireMethod(username, MfaMethodStatus.ACTIVE);
         if (!totpService.verify(secretManager.decrypt(method.getSecretCiphertext(), method.getSecretKeyId()),
                 code, Instant.now())) {
             throw new MfaVerificationException("Invalid authentication code");
@@ -93,18 +97,18 @@ public class MfaService {
         recoveryCodeRepository.deleteByMfaMethodId(method.getId());
     }
 
-    MfaMethod activeMethod(String username) {
+    MfaMethod activeMethod(final String username) {
         return requireMethod(username, MfaMethodStatus.ACTIVE);
     }
 
-    boolean verifyCredential(MfaMethod method, String credential) {
+    boolean verifyCredential(final MfaMethod method, final String credential) {
         if (totpService.verify(secretManager.decrypt(method.getSecretCiphertext(), method.getSecretKeyId()),
                 credential, Instant.now())) {
             method.setLastUsedAt(Instant.now());
             methodRepository.save(method);
             return true;
         }
-        for (MfaRecoveryCode code : recoveryCodeRepository.findByMfaMethodIdAndUsedAtIsNull(method.getId())) {
+        for (final MfaRecoveryCode code : recoveryCodeRepository.findByMfaMethodIdAndUsedAtIsNull(method.getId())) {
             if (passwordEncoder.matches(credential, code.getCodeHash())) {
                 code.setUsedAt(Instant.now());
                 recoveryCodeRepository.save(code);
@@ -116,25 +120,25 @@ public class MfaService {
         return false;
     }
 
-    private MfaMethod requireMethod(String username, MfaMethodStatus status) {
+    private MfaMethod requireMethod(final String username, final MfaMethodStatus status) {
         return methodRepository.findByUserIdAndMethodTypeAndStatus(username, METHOD, status)
                 .orElseThrow(() -> new IllegalStateException("Active TOTP enrollment is required"));
     }
 
-    private void requirePassword(String username, String password) {
-        User user = userRepository.findByUsername(username)
+    private void requirePassword(final String username, final String password) {
+        final User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new MfaVerificationException("Current password is invalid");
         }
     }
 
-    private List<String> replaceRecoveryCodes(MfaMethod method) {
+    private List<String> replaceRecoveryCodes(final MfaMethod method) {
         recoveryCodeRepository.deleteByMfaMethodId(method.getId());
-        List<String> rawCodes = new ArrayList<>();
+        final List<String> rawCodes = new ArrayList<>();
         for (int i = 0; i < RECOVERY_CODE_COUNT; i++) {
-            String raw = randomRecoveryCode();
-            MfaRecoveryCode entity = new MfaRecoveryCode();
+            final String raw = randomRecoveryCode();
+            final MfaRecoveryCode entity = new MfaRecoveryCode();
             entity.setMfaMethodId(method.getId());
             entity.setCodeHash(passwordEncoder.encode(raw));
             recoveryCodeRepository.save(entity);
@@ -145,7 +149,7 @@ public class MfaService {
 
     private String randomRecoveryCode() {
         final char[] alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
-        StringBuilder value = new StringBuilder(9);
+        final StringBuilder value = new StringBuilder(9);
         for (int i = 0; i < 8; i++) {
             if (i == 4) value.append('-');
             value.append(alphabet[secureRandom.nextInt(alphabet.length)]);

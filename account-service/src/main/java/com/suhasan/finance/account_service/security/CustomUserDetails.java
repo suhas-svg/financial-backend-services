@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 public class CustomUserDetails implements UserDetails {
   private static final long serialVersionUID = 1L;
   private final transient User user;
-  public CustomUserDetails(User user) { this.user = user; }
+  public CustomUserDetails(final User user) { this.user = user; }
 
   @Override public Collection<? extends GrantedAuthority> getAuthorities() {
     return user.getRoles().stream()

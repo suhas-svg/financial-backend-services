@@ -14,7 +14,7 @@ public record AccountMetadataUpdateRequest(
         @PositiveOrZero BigDecimal creditLimit,
         @Future LocalDate dueDate) {
     @JsonAnySetter
-    public void rejectUnknownField(String field, Object ignored) {
+    public void rejectUnknownField(final String field, final Object ignored) {
         throw new IllegalArgumentException("Unsupported account field: " + field);
     }
 }
