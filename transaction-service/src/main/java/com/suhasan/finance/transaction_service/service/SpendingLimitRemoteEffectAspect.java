@@ -25,6 +25,35 @@ public class SpendingLimitRemoteEffectAspect {
     private final SpendingLimitReservationSagaContext sagaContext;
     private final TransactionIdempotencyClaimService claimService;
 
+    @Around("execution(* com.suhasan.finance.transaction_service.client.ResilientAccountServiceClient.placeDebitHold(..)) "
+            + "&& args(accountId,holdId,amount,transactionId,reason)")
+    public Object placeDebitHold(ProceedingJoinPoint joinPoint, String accountId, String holdId,
+                                 BigDecimal amount, String transactionId, String reason) throws Throwable {
+        Optional<SpendingLimitReservationSagaContext.Context> active = sagaContext.current();
+        if (active.isEmpty()) {
+            return joinPoint.proceed();
+        }
+        SpendingLimitReservationSagaContext.Context context = active.get();
+        markBeforeRemoteEffect(context, "DEBIT_HOLD_PLACEMENT_IN_FLIGHT");
+        try {
+            Object result = joinPoint.proceed();
+            if (result instanceof ResilientAccountServiceClient.DebitHoldResponse response) {
+                if (response.isApplied()) {
+                    safeUpdate(context, TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                            "DEBIT_HOLD_PLACED_AWAITING_CAPTURE_OR_RELEASE");
+                } else {
+                    safeUpdate(context, TransactionIdempotencyClaimState.RESERVED,
+                            "DEBIT_HOLD_PLACEMENT_REJECTED");
+                }
+            }
+            return result;
+        } catch (Throwable failure) {
+            safeUpdate(context, TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                    "DEBIT_HOLD_PLACEMENT_OUTCOME_AMBIGUOUS: " + bounded(failure.getMessage()));
+            throw failure;
+        }
+    }
+
     @Around("execution(* com.suhasan.finance.transaction_service.client.ResilientAccountServiceClient.captureDebitHold(..)) "
             + "&& args(accountId,holdId,transactionId,reason)")
     public Object captureDebitHold(ProceedingJoinPoint joinPoint, String accountId, String holdId,
@@ -34,9 +63,7 @@ public class SpendingLimitRemoteEffectAspect {
             return joinPoint.proceed();
         }
         SpendingLimitReservationSagaContext.Context context = active.get();
-        claimService.updateState(context.userId(), context.idempotencyKey(),
-                TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
-                null, "DEBIT_CAPTURE_IN_FLIGHT");
+        markBeforeRemoteEffect(context, "DEBIT_CAPTURE_IN_FLIGHT");
         try {
             Object result = joinPoint.proceed();
             if (result instanceof ResilientAccountServiceClient.DebitHoldResponse response) {
@@ -44,14 +71,43 @@ public class SpendingLimitRemoteEffectAspect {
                     safeUpdate(context, TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
                             "DEBIT_CAPTURE_APPLIED_AWAITING_LOCAL_COMMIT");
                 } else {
-                    safeUpdate(context, TransactionIdempotencyClaimState.RESERVED,
-                            "DEBIT_CAPTURE_REJECTED");
+                    safeUpdate(context, TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                            "DEBIT_CAPTURE_REJECTED_HOLD_REQUIRES_RELEASE");
                 }
             }
             return result;
         } catch (Throwable failure) {
             safeUpdate(context, TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
                     "DEBIT_CAPTURE_OUTCOME_AMBIGUOUS: " + bounded(failure.getMessage()));
+            throw failure;
+        }
+    }
+
+    @Around("execution(* com.suhasan.finance.transaction_service.client.ResilientAccountServiceClient.releaseDebitHold(..)) "
+            + "&& args(accountId,holdId,transactionId,reason)")
+    public Object releaseDebitHold(ProceedingJoinPoint joinPoint, String accountId, String holdId,
+                                   String transactionId, String reason) throws Throwable {
+        Optional<SpendingLimitReservationSagaContext.Context> active = sagaContext.current();
+        if (active.isEmpty()) {
+            return joinPoint.proceed();
+        }
+        SpendingLimitReservationSagaContext.Context context = active.get();
+        markBeforeRemoteEffect(context, "DEBIT_HOLD_RELEASE_IN_FLIGHT");
+        try {
+            Object result = joinPoint.proceed();
+            if (result instanceof ResilientAccountServiceClient.DebitHoldResponse response) {
+                if (response.isApplied()) {
+                    safeUpdate(context, TransactionIdempotencyClaimState.RESERVED,
+                            "DEBIT_HOLD_RELEASED");
+                } else {
+                    safeUpdate(context, TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                            "DEBIT_HOLD_RELEASE_NOT_CONFIRMED");
+                }
+            }
+            return result;
+        } catch (Throwable failure) {
+            safeUpdate(context, TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                    "DEBIT_HOLD_RELEASE_OUTCOME_AMBIGUOUS: " + bounded(failure.getMessage()));
             throw failure;
         }
     }
@@ -66,6 +122,7 @@ public class SpendingLimitRemoteEffectAspect {
             return joinPoint.proceed();
         }
         SpendingLimitReservationSagaContext.Context context = active.get();
+        markBeforeRemoteEffect(context, "TRANSFER_COMPENSATION_IN_FLIGHT");
         try {
             Object result = joinPoint.proceed();
             if (result instanceof ResilientAccountServiceClient.BalanceOperationResponse response
@@ -82,6 +139,11 @@ public class SpendingLimitRemoteEffectAspect {
                     "TRANSFER_COMPENSATION_OUTCOME_AMBIGUOUS: " + bounded(failure.getMessage()));
             throw failure;
         }
+    }
+
+    private void markBeforeRemoteEffect(SpendingLimitReservationSagaContext.Context context, String details) {
+        claimService.updateState(context.userId(), context.idempotencyKey(),
+                TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED, null, details);
     }
 
     private void safeUpdate(SpendingLimitReservationSagaContext.Context context,
