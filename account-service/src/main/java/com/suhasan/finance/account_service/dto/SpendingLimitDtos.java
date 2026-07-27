@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -23,21 +24,21 @@ public final class SpendingLimitDtos {
     }
 
     public record ReserveRequest(
-            @NotBlank String operationType,
+            @NotBlank @Size(max = 20) String operationType,
             @NotNull @Positive @Digits(integer = 17, fraction = 2) BigDecimal amount,
-            @NotBlank String idempotencyKey,
-            @NotBlank String userId,
+            @NotBlank @Size(max = 160) String idempotencyKey,
+            @NotBlank @Size(max = 255) String userId,
             @Pattern(regexp = "[A-Za-z]{3}") String currency,
-            String transactionCorrelation) {
+            @Size(max = 160) String transactionCorrelation) {
         public ReserveRequest(String operationType, BigDecimal amount, String idempotencyKey, String userId) {
             this(operationType, amount, idempotencyKey, userId, null, null);
         }
     }
 
     public record ReservationTransitionRequest(
-            @NotBlank String userId,
-            String transactionCorrelation,
-            String outcome) {
+            @NotBlank @Size(max = 255) String userId,
+            @Size(max = 160) String transactionCorrelation,
+            @Size(max = 120) String outcome) {
     }
 
     public record LimitResponse(
