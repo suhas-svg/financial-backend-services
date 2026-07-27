@@ -1,0 +1,83 @@
+name: Spending Reservation Fast Verify
+
+on:
+  push:
+    branches:
+      - codex/spending-reservation-fast-verify
+    paths-ignore:
+      - docs/release-evidence/spending-reservation-fast-verify.md
+
+permissions:
+  contents: write
+
+concurrency:
+  group: spending-reservation-fast-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  java-verification:
+    name: ${{ matrix.service }} Java ${{ matrix.java }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [account-service, transaction-service]
+        java: ['21', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+      - name: Run complete Maven verification
+        working-directory: ${{ matrix.service }}
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p ci-logs
+          ./mvnw --batch-mode clean verify 2>&1 | tee ci-logs/verify-java-${{ matrix.java }}.log
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fast-${{ matrix.service }}-java-${{ matrix.java }}
+          path: |
+            ${{ matrix.service }}/ci-logs
+            ${{ matrix.service }}/target/surefire-reports
+            ${{ matrix.service }}/target/failsafe-reports
+            ${{ matrix.service }}/target/site
+          if-no-files-found: error
+          retention-days: 7
+
+  fast-authority:
+    name: Fast Verification Result
+    if: always()
+    needs: [java-verification]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/spending-reservation-fast-verify
+      - name: Publish fast verification result
+        env:
+          RESULT: ${{ needs.java-verification.result }}
+          SOURCE_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p docs/release-evidence
+          cat > docs/release-evidence/spending-reservation-fast-verify.md <<EOF
+          # Spending Reservation Fast Verification
+
+          - Source commit: \`${SOURCE_SHA}\`
+          - Workflow run: ${RUN_URL}
+          - Java 21/22 full verification: ${RESULT}
+          EOF
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add docs/release-evidence/spending-reservation-fast-verify.md
+          git diff --cached --quiet || git commit -m "Record fast spending reservation verification [skip ci]"
+          git push origin HEAD:codex/spending-reservation-fast-verify
+          test "${RESULT}" = "success"
