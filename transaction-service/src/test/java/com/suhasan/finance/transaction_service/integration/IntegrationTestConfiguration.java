@@ -101,12 +101,12 @@ public class IntegrationTestConfiguration {
         }
     }
 
-    private static final class IntegrationSpendingLimitReservationLifecycleClient
+    public static class IntegrationSpendingLimitReservationLifecycleClient
             extends SpendingLimitReservationLifecycleClient {
         private static final BigDecimal DAILY_LIMIT = new BigDecimal("10000.00");
         private final AtomicLong reservationIds = new AtomicLong(10_000L);
 
-        private IntegrationSpendingLimitReservationLifecycleClient(WebClient.Builder webClientBuilder) {
+        public IntegrationSpendingLimitReservationLifecycleClient(WebClient.Builder webClientBuilder) {
             super(webClientBuilder);
         }
 
