@@ -6,7 +6,7 @@
 
 ## Required gate results
 
-- docker-demonstration: failure
+- docker-demonstration: cancelled
 - fresh-postgres-migrations: success
 - java-verification: failure
 - reservation-concurrency-reconciliation: success
