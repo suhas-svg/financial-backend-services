@@ -126,9 +126,9 @@ jobs:
       matrix:
         include:
           - service: account-service
-            tests: NotificationProviderRetryDispatcherTest,NotificationServiceTest
+            tests: NotificationProviderRetryDispatcherTest,NotificationServiceTest,SpendingLimitServiceTest,SpendingLimitReservationConcurrencyTest
           - service: transaction-service
-            tests: LedgerPostingConcurrencyIntegrationTest,ScheduledTransferServiceTest,LedgerProjectionOutboxDispatcherTest
+            tests: LedgerPostingConcurrencyIntegrationTest,ScheduledTransferServiceTest,LedgerProjectionOutboxDispatcherTest,TransactionIdempotencyClaimServiceTest,SpendingLimitReservationSagaAspectTest,SpendingLimitReservationClientAspectTest,SpendingLimitReservationSagaCoordinatorTest,SpendingLimitReservationCrossServiceIntegrationTest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
