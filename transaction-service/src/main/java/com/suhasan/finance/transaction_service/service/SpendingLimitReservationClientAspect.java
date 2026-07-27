@@ -75,27 +75,23 @@ public class SpendingLimitReservationClientAspect {
                         userId, claim.getTransactionType(), claim.getIdempotencyKey());
         if (transaction.isPresent()) {
             TransactionStatus status = transaction.get().getStatus();
+            if (status == TransactionStatus.COMPLETED || status == TransactionStatus.REVERSED) {
+                consume(accountId, userId, idempotencyKey, claim, reservation, correlation);
+                return null;
+            }
             if (status == TransactionStatus.FAILED_REQUIRES_MANUAL_ACTION
                     || status == TransactionStatus.PROCESSING
                     || status == TransactionStatus.PENDING) {
-                SpendingLimitReservationLifecycleClient.ReservationResponse held = lifecycleClient.transition(
-                        accountId, reservation.reservationId(), "reconciliation-required", userId,
+                holdForReconciliation(accountId, userId, idempotencyKey, claim, reservation,
                         correlation, "AMBIGUOUS_TRANSACTION_OUTCOME");
-                claimService.updateState(userId, idempotencyKey,
-                        TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
-                        held == null ? "RECONCILIATION_REQUIRED" : held.state(),
-                        "Legacy release suppressed because the transaction outcome is ambiguous");
                 return null;
             }
-            if (status == TransactionStatus.COMPLETED || status == TransactionStatus.REVERSED) {
-                SpendingLimitReservationLifecycleClient.ReservationResponse consumed = lifecycleClient.transition(
-                        accountId, reservation.reservationId(), "consume", userId,
-                        correlation, "TRANSACTION_COMPLETED");
-                claimService.updateState(userId, idempotencyKey,
-                        TransactionIdempotencyClaimState.COMPLETED,
-                        consumed == null ? "CONSUMED" : consumed.state(), null);
-                return null;
-            }
+        }
+
+        if (claim.getState() == TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED) {
+            holdForReconciliation(accountId, userId, idempotencyKey, claim, reservation,
+                    correlation, firstNonBlank(claim.getFailureDetails(), "AMBIGUOUS_REMOTE_DEBIT_OUTCOME"));
+            return null;
         }
 
         SpendingLimitReservationLifecycleClient.ReservationResponse released = lifecycleClient.transition(
@@ -105,6 +101,31 @@ public class SpendingLimitReservationClientAspect {
                 TransactionIdempotencyClaimState.RELEASED,
                 released == null ? "RELEASED" : released.state(), null);
         return null;
+    }
+
+    private void consume(String accountId, String userId, String idempotencyKey,
+                         TransactionIdempotencyClaim claim,
+                         SpendingLimitReservationLifecycleClient.ReservationResponse reservation,
+                         String correlation) {
+        SpendingLimitReservationLifecycleClient.ReservationResponse consumed = lifecycleClient.transition(
+                accountId, reservation.reservationId(), "consume", userId,
+                correlation, "TRANSACTION_COMPLETED");
+        claimService.updateState(userId, idempotencyKey,
+                TransactionIdempotencyClaimState.COMPLETED,
+                consumed == null ? "CONSUMED" : consumed.state(), null);
+    }
+
+    private void holdForReconciliation(String accountId, String userId, String idempotencyKey,
+                                       TransactionIdempotencyClaim claim,
+                                       SpendingLimitReservationLifecycleClient.ReservationResponse reservation,
+                                       String correlation, String outcome) {
+        SpendingLimitReservationLifecycleClient.ReservationResponse held = lifecycleClient.transition(
+                accountId, reservation.reservationId(), "reconciliation-required", userId,
+                correlation, outcome);
+        claimService.updateState(userId, idempotencyKey,
+                TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                held == null ? "RECONCILIATION_REQUIRED" : held.state(),
+                "Legacy release suppressed because the transaction or remote debit outcome is ambiguous");
     }
 
     private SpendingLimitReservationLifecycleClient.ReservationResponse ensureReservation(
