@@ -39,6 +39,7 @@ import java.util.Objects;
 public class SpendingLimitService {
     private static final String TRANSFER = "TRANSFER";
     private static final String WITHDRAWAL = "WITHDRAWAL";
+    private static final int MAX_RESERVATIONS_PER_SCOPE = 1;
 
     private final AccountRepository accounts;
     private final AccountSpendingLimitRepository limits;
@@ -124,7 +125,7 @@ public class SpendingLimitService {
 
         final List<SpendingLimitReservation> scoped =
                 reservations.findByAccountIdAndIdempotencyKeyOrderByCreatedAtAsc(accountId, idempotencyKey);
-        if (scoped.size() > 1) {
+        if (scoped.size() > MAX_RESERVATIONS_PER_SCOPE) {
             scoped.forEach(reservation -> markReconciliationRequired(
                     reservation, "AMBIGUOUS_LEGACY_IDEMPOTENCY_SCOPE"));
             throw new IllegalStateException(
@@ -412,6 +413,7 @@ public class SpendingLimitService {
     private SpendingLimitDtos.ReserveResponse reservationResponse(
             final SpendingLimitReservation reservation, final boolean replay,
             final Account account, final AccountSpendingLimit limit, final String reason) {
+        Objects.requireNonNull(account, "Response account is required");
         applyDue(limit);
         final BigDecimal dailyLimit = limitFor(limit, reservation.getOperationType());
         final BigDecimal used = reservations.used(reservation.getAccountId(), reservation.getOperationType(),
