@@ -112,8 +112,33 @@ class SpendingLimitReservationClientAspectTest {
         verify(claimService).updateState("alice", "key-1",
                 TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
                 "RECONCILIATION_REQUIRED",
-                "Legacy release suppressed because the transaction outcome is ambiguous");
+                "Legacy release suppressed because the transaction or remote debit outcome is ambiguous");
         verify(joinPoint, never()).proceed();
+    }
+
+    @Test
+    void missingLocalTransactionCannotReleaseAmbiguousRemoteDebit() throws Throwable {
+        TransactionIdempotencyClaim claim = claim();
+        claim.setState(TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED);
+        claim.setFailureDetails("DEBIT_CAPTURE_OUTCOME_AMBIGUOUS: timeout");
+        when(claimService.find("alice", "key-1")).thenReturn(Optional.of(claim));
+        when(transactionRepository.findFirstByCreatedByAndTypeAndIdempotencyKey(
+                "alice", TransactionType.WITHDRAWAL, "key-1"))
+                .thenReturn(Optional.empty());
+        when(lifecycleClient.transition("7", 44L, "reconciliation-required", "alice",
+                "claim-1", "DEBIT_CAPTURE_OUTCOME_AMBIGUOUS: timeout"))
+                .thenReturn(reservation("RECONCILIATION_REQUIRED"));
+
+        aspect.release(joinPoint, "7", "WITHDRAWAL", "key-1", "alice");
+
+        verify(lifecycleClient).transition("7", 44L, "reconciliation-required", "alice",
+                "claim-1", "DEBIT_CAPTURE_OUTCOME_AMBIGUOUS: timeout");
+        verify(lifecycleClient, never()).transition(eq("7"), eq(44L), eq("release"),
+                eq("alice"), eq("claim-1"), any());
+        verify(claimService).updateState("alice", "key-1",
+                TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                "RECONCILIATION_REQUIRED",
+                "Legacy release suppressed because the transaction or remote debit outcome is ambiguous");
     }
 
     private TransactionIdempotencyClaim claim() {
@@ -129,6 +154,7 @@ class SpendingLimitReservationClientAspectTest {
                 .amount(new BigDecimal("25.00"))
                 .state(TransactionIdempotencyClaimState.RESERVED)
                 .reservationId(44L)
+                .reservationCorrelation("claim-1")
                 .reservationFingerprint("reservation-fingerprint")
                 .reservationAmount(new BigDecimal("25.00"))
                 .reservationCurrency("USD")
