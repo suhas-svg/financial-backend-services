@@ -16,6 +16,7 @@ import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -126,6 +127,14 @@ public abstract class BaseIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        // Apache HttpClient automatically retries POST responses such as 503. That
+        // hides the first server response and can turn an idempotent replay into a
+        // misleading success. Use the JDK request factory so each integration-test
+        // request is executed exactly once.
+        if (!(restTemplate.getRestTemplate().getRequestFactory() instanceof SimpleClientHttpRequestFactory)) {
+            restTemplate.getRestTemplate().setRequestFactory(new SimpleClientHttpRequestFactory());
+        }
+
         if (!restTemplate.getRestTemplate().getInterceptors().contains(IDEMPOTENCY_KEY_INTERCEPTOR)) {
             restTemplate.getRestTemplate().getInterceptors().add(IDEMPOTENCY_KEY_INTERCEPTOR);
         }
