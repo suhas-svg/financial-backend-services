@@ -31,11 +31,13 @@ class SpendingLimitReservationSagaAspectTest {
     @Mock SpendingLimitReservationSagaCoordinator coordinator;
     @Mock ProceedingJoinPoint joinPoint;
 
+    private SpendingLimitReservationSagaContext sagaContext;
     private SpendingLimitReservationSagaAspect aspect;
 
     @BeforeEach
     void setUp() {
-        aspect = new SpendingLimitReservationSagaAspect(claimService, coordinator);
+        sagaContext = new SpendingLimitReservationSagaContext();
+        aspect = new SpendingLimitReservationSagaAspect(claimService, coordinator, sagaContext);
     }
 
     @Test
@@ -51,11 +53,18 @@ class SpendingLimitReservationSagaAspectTest {
                 .type(TransactionType.TRANSFER)
                 .status(TransactionStatus.COMPLETED)
                 .build();
-        when(joinPoint.proceed()).thenReturn(response);
+        when(joinPoint.proceed()).thenAnswer(invocation -> {
+            assertThat(sagaContext.current()).hasValueSatisfying(context -> {
+                assertThat(context.userId()).isEqualTo("alice");
+                assertThat(context.idempotencyKey()).isEqualTo("key-1");
+            });
+            return response;
+        });
 
         Object result = aspect.processTransfer(joinPoint, request, "alice", "key-1");
 
         assertThat(result).isSameAs(response);
+        assertThat(sagaContext.current()).isEmpty();
         InOrder order = inOrder(claimService, joinPoint, coordinator);
         order.verify(claimService).claimTransfer(request, "alice", "key-1");
         order.verify(joinPoint).proceed();
@@ -63,18 +72,22 @@ class SpendingLimitReservationSagaAspectTest {
     }
 
     @Test
-    void localFailureAfterRemoteReservationKeepsOriginalFailureAndRunsReconciliation() throws Throwable {
+    void localFailureAfterRemoteReservationKeepsOriginalFailureAndClearsContext() throws Throwable {
         RuntimeException localFailure = new RuntimeException("local transaction insert failed");
         TransactionIdempotencyClaim claim = withdrawalClaim();
         when(claimService.find("alice", "key-1")).thenReturn(Optional.empty());
         when(claimService.claimWithdrawal("7", new BigDecimal("25.00"),
                 "cash", "ref", "alice", "key-1")).thenReturn(claim);
-        when(joinPoint.proceed()).thenThrow(localFailure);
+        when(joinPoint.proceed()).thenAnswer(invocation -> {
+            assertThat(sagaContext.current()).isPresent();
+            throw localFailure;
+        });
 
         assertThatThrownBy(() -> aspect.processWithdrawal(joinPoint, "7", new BigDecimal("25.00"),
                 "cash", "ref", "alice", "key-1"))
                 .isSameAs(localFailure);
 
+        assertThat(sagaContext.current()).isEmpty();
         InOrder order = inOrder(claimService, joinPoint, coordinator);
         order.verify(claimService).find("alice", "key-1");
         order.verify(claimService).claimWithdrawal("7", new BigDecimal("25.00"),
@@ -98,6 +111,7 @@ class SpendingLimitReservationSagaAspectTest {
                 "cash", "ref", "alice", "key-1");
 
         assertThat(result).isSameAs(response);
+        assertThat(sagaContext.current()).isEmpty();
         verify(claimService, never()).claimWithdrawal("7", new BigDecimal("25.00"),
                 "cash", "ref", "alice", "key-1");
         verify(coordinator).completed(response, "alice", "key-1");
@@ -123,6 +137,7 @@ class SpendingLimitReservationSagaAspectTest {
         Object result = aspect.processTransfer(joinPoint, request, "alice", "key-1");
 
         assertThat(result).isSameAs(response);
+        assertThat(sagaContext.current()).isEmpty();
         verify(coordinator).completed(response, "alice", "key-1");
     }
 
