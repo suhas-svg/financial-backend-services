@@ -40,7 +40,7 @@ class SpendingLimitReservationSagaCoordinatorTest {
     }
 
     @Test
-    void localFailureAfterRemoteReservationReleasesOrphan() {
+    void localFailureBeforeAnyRemoteDebitReleasesOrphan() {
         TransactionIdempotencyClaim claim = claim(TransactionIdempotencyClaimState.RESERVED,
                 LocalDateTime.now().plusMinutes(20));
         when(claimService.require("alice", "key-1")).thenReturn(claim);
@@ -61,7 +61,7 @@ class SpendingLimitReservationSagaCoordinatorTest {
     }
 
     @Test
-    void completedTransactionConsumesReservation() {
+    void completedTransactionConsumesReservationEvenAfterResponseFailure() {
         TransactionIdempotencyClaim claim = claim(TransactionIdempotencyClaimState.RESERVED,
                 LocalDateTime.now().plusMinutes(20));
         Transaction transaction = transaction(TransactionStatus.COMPLETED);
@@ -110,6 +110,50 @@ class SpendingLimitReservationSagaCoordinatorTest {
     }
 
     @Test
+    void failedLocalRowDoesNotReleaseWhenRemoteCaptureOutcomeIsAmbiguous() {
+        TransactionIdempotencyClaim claim = claim(TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                LocalDateTime.now().minusMinutes(1));
+        claim.setFailureDetails("DEBIT_CAPTURE_OUTCOME_AMBIGUOUS: timeout");
+        Transaction transaction = transaction(TransactionStatus.FAILED);
+        when(claimService.require("alice", "key-1")).thenReturn(claim);
+        when(transactionRepository.findFirstByCreatedByAndTypeAndIdempotencyKey(
+                "alice", TransactionType.WITHDRAWAL, "key-1"))
+                .thenReturn(Optional.of(transaction));
+        when(lifecycleClient.transition("7", 44L, "reconciliation-required", "alice", "claim-1",
+                "DEBIT_CAPTURE_OUTCOME_AMBIGUOUS: timeout"))
+                .thenReturn(reservation("RECONCILIATION_REQUIRED"));
+
+        coordinator.failed("alice", TransactionType.WITHDRAWAL, "key-1",
+                new RuntimeException("transaction rolled back"));
+
+        verify(lifecycleClient).transition("7", 44L, "reconciliation-required", "alice", "claim-1",
+                "DEBIT_CAPTURE_OUTCOME_AMBIGUOUS: timeout");
+        verify(lifecycleClient, never()).transition(eq("7"), eq(44L), eq("release"),
+                eq("alice"), eq("claim-1"), any());
+    }
+
+    @Test
+    void missingLocalRowDoesNotReleaseWhenRemoteCaptureOutcomeIsAmbiguous() {
+        TransactionIdempotencyClaim claim = claim(TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                LocalDateTime.now().minusMinutes(1));
+        claim.setFailureDetails("DEBIT_CAPTURE_IN_FLIGHT");
+        when(claimService.require("alice", "key-1")).thenReturn(claim);
+        when(transactionRepository.findFirstByCreatedByAndTypeAndIdempotencyKey(
+                "alice", TransactionType.WITHDRAWAL, "key-1"))
+                .thenReturn(Optional.empty());
+        when(lifecycleClient.transition("7", 44L, "reconciliation-required", "alice", "claim-1",
+                "DEBIT_CAPTURE_IN_FLIGHT"))
+                .thenReturn(reservation("RECONCILIATION_REQUIRED"));
+
+        coordinator.reconcileStaleClaims();
+
+        verify(lifecycleClient).transition("7", 44L, "reconciliation-required", "alice", "claim-1",
+                "DEBIT_CAPTURE_IN_FLIGHT");
+        verify(lifecycleClient, never()).transition(eq("7"), eq(44L), eq("release"),
+                eq("alice"), eq("claim-1"), any());
+    }
+
+    @Test
     void manualActionPersistsLocallyWhenRemoteLookupFails() {
         TransactionIdempotencyClaim claim = claim(TransactionIdempotencyClaimState.CLAIMED,
                 LocalDateTime.now().minusMinutes(1));
@@ -132,7 +176,7 @@ class SpendingLimitReservationSagaCoordinatorTest {
     }
 
     @Test
-    void expiredClaimWithoutTransactionIsReleasedByScheduledReconciliation() {
+    void expiredSafeClaimWithoutTransactionIsReleasedByScheduledReconciliation() {
         TransactionIdempotencyClaim claim = claim(TransactionIdempotencyClaimState.RESERVED,
                 LocalDateTime.now().minusMinutes(1));
         when(claimService.staleClaims(any(), any())).thenReturn(List.of(claim));
@@ -164,6 +208,7 @@ class SpendingLimitReservationSagaCoordinatorTest {
                 .amount(new BigDecimal("25.00"))
                 .state(state)
                 .reservationId(44L)
+                .reservationCorrelation("claim-1")
                 .reservationFingerprint("reservation-fingerprint")
                 .reservationAmount(new BigDecimal("25.00"))
                 .reservationCurrency("USD")
