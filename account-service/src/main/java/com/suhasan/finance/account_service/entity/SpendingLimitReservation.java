@@ -86,20 +86,14 @@ public class SpendingLimitReservation {
         if (state == null) {
             state = SpendingLimitReservationState.RESERVED;
         }
-        ensureRequestScope();
+        if ((requestScope == null || requestScope.isBlank())
+                && accountId != null && idempotencyKey != null && !idempotencyKey.isBlank()) {
+            requestScope = accountId + "|" + idempotencyKey;
+        }
     }
 
     @PreUpdate
     void onUpdate() {
         updatedAt = LocalDateTime.now();
-        ensureRequestScope();
-    }
-
-    private void ensureRequestScope() {
-        if (state != SpendingLimitReservationState.RECONCILIATION_REQUIRED
-                && (requestScope == null || requestScope.isBlank())
-                && accountId != null && idempotencyKey != null && !idempotencyKey.isBlank()) {
-            requestScope = accountId + "|" + idempotencyKey;
-        }
     }
 }
