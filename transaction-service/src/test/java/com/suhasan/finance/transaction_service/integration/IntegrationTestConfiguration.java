@@ -46,7 +46,7 @@ public class IntegrationTestConfiguration {
      */
     @Bean
     @Primary
-    public SpendingLimitReservationLifecycleClient spendingLimitReservationLifecycleClient(
+    public SpendingLimitReservationLifecycleClient integrationSpendingLimitReservationLifecycleClient(
             WebClient.Builder webClientBuilder) {
         return new IntegrationSpendingLimitReservationLifecycleClient(webClientBuilder);
     }
