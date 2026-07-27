@@ -96,7 +96,8 @@ public class SpendingLimitReservation {
     }
 
     private void ensureRequestScope() {
-        if ((requestScope == null || requestScope.isBlank())
+        if (state != SpendingLimitReservationState.RECONCILIATION_REQUIRED
+                && (requestScope == null || requestScope.isBlank())
                 && accountId != null && idempotencyKey != null && !idempotencyKey.isBlank()) {
             requestScope = accountId + "|" + idempotencyKey;
         }
