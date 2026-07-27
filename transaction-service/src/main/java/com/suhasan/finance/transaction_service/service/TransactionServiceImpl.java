@@ -723,14 +723,14 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = AccountServiceUnavailableException.class)
     @CacheEvict(value = "transaction:history", allEntries = true)
     public TransactionResponse reverseTransaction(String transactionId, String reason, String userId) {
         return reverseTransaction(transactionId, reason, userId, null);
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = AccountServiceUnavailableException.class)
     @CacheEvict(value = "transaction:history", allEntries = true)
     public TransactionResponse reverseTransaction(String transactionId, String reason, String userId,
             String idempotencyKey) {
