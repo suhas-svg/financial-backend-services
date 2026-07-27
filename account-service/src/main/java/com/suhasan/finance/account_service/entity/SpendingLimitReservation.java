@@ -47,6 +47,9 @@ public class SpendingLimitReservation {
     @Column(length = 64)
     private String fingerprint;
 
+    @Column(length = 256, unique = true)
+    private String requestScope;
+
     @Column(length = 160)
     private String transactionCorrelation;
 
