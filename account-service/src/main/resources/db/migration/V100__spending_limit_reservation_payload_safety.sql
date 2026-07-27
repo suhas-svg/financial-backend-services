@@ -1,5 +1,5 @@
 ALTER TABLE spending_limit_reservations
-    ADD COLUMN IF NOT EXISTS owner_id VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS owner_id VARCHAR(255),
     ADD COLUMN IF NOT EXISTS currency VARCHAR(3),
     ADD COLUMN IF NOT EXISTS fingerprint VARCHAR(64),
     ADD COLUMN IF NOT EXISTS request_scope VARCHAR(256),
