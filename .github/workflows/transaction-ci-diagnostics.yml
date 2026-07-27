@@ -1,0 +1,61 @@
+name: Transaction CI Diagnostics
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: transaction-service Java ${{ matrix.java }} diagnostics
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['21', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: temurin
+          cache: maven
+      - name: Run Maven verification
+        id: verify
+        working-directory: transaction-service
+        shell: bash
+        run: |
+          set +e
+          ./mvnw -q clean verify
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Build compact failure summary
+        if: always()
+        working-directory: transaction-service
+        shell: bash
+        run: |
+          {
+            echo "=== Surefire summaries ==="
+            grep -R -h -E "Tests run:|Failures:|Errors:|<<< FAILURE|<<< ERROR" target/surefire-reports target/failsafe-reports 2>/dev/null || true
+            echo "=== Failure messages ==="
+            grep -R -h -E "AssertionFailedError|expected:|but was:|Caused by:|Exception:" target/surefire-reports target/failsafe-reports 2>/dev/null | tail -n 400 || true
+          } > target/ci-failure-summary.txt
+          cat target/ci-failure-summary.txt
+      - name: Upload Maven reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: transaction-service-java-${{ matrix.java }}-reports
+          path: |
+            transaction-service/target/ci-failure-summary.txt
+            transaction-service/target/surefire-reports
+            transaction-service/target/failsafe-reports
+          retention-days: 3
+      - name: Preserve verification result
+        if: always()
+        shell: bash
+        run: exit ${{ steps.verify.outputs.exit_code }}
