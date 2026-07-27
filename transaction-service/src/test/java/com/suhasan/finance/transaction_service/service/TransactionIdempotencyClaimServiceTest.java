@@ -70,6 +70,30 @@ class TransactionIdempotencyClaimServiceTest {
     }
 
     @Test
+    void sameKeyAndDifferentCurrencyConflictsBeforeRemoteCall() {
+        TransactionIdempotencyClaim original = withdrawalRequestClaim("25.00", "USD", "key-1");
+        when(claims.findByUserIdAndIdempotencyKey("alice", "key-1"))
+                .thenReturn(Optional.of(original));
+
+        assertThatThrownBy(() -> service.claimWithdrawalRequest(
+                "7", new BigDecimal("25.00"), "EUR", "cash", "ref", "alice", "key-1"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("different transaction or reservation payload");
+    }
+
+    @Test
+    void sameKeyAndSameCurrencyReturnsOriginalRequestClaim() {
+        TransactionIdempotencyClaim original = withdrawalRequestClaim("25.00", "USD", "key-1");
+        when(claims.findByUserIdAndIdempotencyKey("alice", "key-1"))
+                .thenReturn(Optional.of(original));
+
+        TransactionIdempotencyClaim replay = service.claimWithdrawalRequest(
+                "7", new BigDecimal("25.0"), "usd", "cash", "ref", "alice", "key-1");
+
+        assertThat(replay).isSameAs(original);
+    }
+
+    @Test
     void sameKeyAndDifferentOperationConflictsBeforeRemoteCall() {
         TransactionIdempotencyClaim original = withdrawalClaim("25.00", "key-1");
         when(claims.findByUserIdAndIdempotencyKey("alice", "key-1"))
@@ -146,11 +170,32 @@ class TransactionIdempotencyClaimServiceTest {
                 .userId("alice")
                 .transactionType(TransactionType.WITHDRAWAL)
                 .idempotencyKey(key)
-                .requestFingerprint(hash("WITHDRAWAL|alice|7|" + new BigDecimal(amount).stripTrailingZeros().toPlainString()
-                        + "|cash|ref"))
+                .requestFingerprint(hash("WITHDRAWAL|alice|7|"
+                        + new BigDecimal(amount).stripTrailingZeros().toPlainString() + "|cash|ref"))
                 .accountId("7")
                 .operationType("WITHDRAWAL")
                 .amount(new BigDecimal(amount))
+                .state(TransactionIdempotencyClaimState.CLAIMED)
+                .createdAt(now)
+                .updatedAt(now)
+                .expiresAt(now.plusMinutes(30))
+                .build();
+    }
+
+    private TransactionIdempotencyClaim withdrawalRequestClaim(String amount, String currency, String key) {
+        LocalDateTime now = LocalDateTime.now();
+        return TransactionIdempotencyClaim.builder()
+                .claimId("claim-1")
+                .userId("alice")
+                .transactionType(TransactionType.WITHDRAWAL)
+                .idempotencyKey(key)
+                .requestFingerprint(hash("WITHDRAWAL|alice|7|"
+                        + new BigDecimal(amount).stripTrailingZeros().toPlainString()
+                        + "|" + currency + "|cash|ref"))
+                .accountId("7")
+                .operationType("WITHDRAWAL")
+                .amount(new BigDecimal(amount))
+                .currency(currency)
                 .state(TransactionIdempotencyClaimState.CLAIMED)
                 .createdAt(now)
                 .updatedAt(now)
