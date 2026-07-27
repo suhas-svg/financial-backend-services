@@ -63,7 +63,7 @@ class SpendingLimitReservationClientAspectTest {
     }
 
     @Test
-    void closedOriginalReservationCannotAuthorizeAnotherDebit() {
+    void closedOriginalReservationCannotAuthorizeAnotherDebit() throws Throwable {
         TransactionIdempotencyClaim claim = claim();
         SpendingLimitReservationLifecycleClient.ReservationResponse response = reservation("RELEASED");
         when(claimService.find("alice", "key-1")).thenReturn(Optional.of(claim));
