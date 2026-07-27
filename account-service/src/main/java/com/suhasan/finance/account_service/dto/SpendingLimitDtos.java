@@ -38,7 +38,7 @@ public final class SpendingLimitDtos {
     public record ReservationTransitionRequest(
             @NotBlank @Size(max = 255) String userId,
             @Size(max = 160) String transactionCorrelation,
-            @Size(max = 120) String outcome) {
+            @Size(max = 1000) String outcome) {
     }
 
     public record LimitResponse(
