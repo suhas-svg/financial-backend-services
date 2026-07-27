@@ -1,12 +1,12 @@
 # Spending Reservation Latest Branch Verification
 
-- Verified source commit: `74cf4a61a34c2496ca7e488ecf79b6f31fcaf233`
-- Workflow run: https://github.com/suhas-svg/financial-backend-services/actions/runs/30303726248
+- Verified source commit: `f14b4c5e12534bc98d0e47b1d46ed640d4b869b9`
+- Workflow run: https://github.com/suhas-svg/financial-backend-services/actions/runs/30303938560
 - Overall result: failed
 
 ## Required gate results
 
-- docker-demonstration: cancelled
+- docker-demonstration: failure
 - fresh-postgres-migrations: success
-- java-verification: cancelled
+- java-verification: failure
 - reservation-concurrency-reconciliation: success
