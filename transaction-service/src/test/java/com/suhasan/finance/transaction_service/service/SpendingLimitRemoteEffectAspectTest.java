@@ -34,10 +34,58 @@ class SpendingLimitRemoteEffectAspectTest {
     }
 
     @Test
+    void holdPlacementIsMarkedBeforeRemoteCallAndRemainsHeldUntilCaptureOrRelease() throws Throwable {
+        ResilientAccountServiceClient.DebitHoldResponse response = holdResponse(true, "PLACED");
+        when(joinPoint.proceed()).thenReturn(response);
+
+        try (SpendingLimitReservationSagaContext.Scope ignored = context.open("alice", "key-1")) {
+            assertThat(aspect.placeDebitHold(joinPoint, "7", "hold-1", new BigDecimal("25.00"),
+                    "tx-1", "WITHDRAWAL_HOLD")).isSameAs(response);
+        }
+
+        InOrder order = inOrder(claimService, joinPoint);
+        order.verify(claimService).updateState("alice", "key-1",
+                TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                null, "DEBIT_HOLD_PLACEMENT_IN_FLIGHT");
+        order.verify(joinPoint).proceed();
+        order.verify(claimService).updateState("alice", "key-1",
+                TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                null, "DEBIT_HOLD_PLACED_AWAITING_CAPTURE_OR_RELEASE");
+    }
+
+    @Test
+    void rejectedHoldPlacementReturnsClaimToSafeReservedState() throws Throwable {
+        when(joinPoint.proceed()).thenReturn(holdResponse(false, "REJECTED"));
+
+        try (SpendingLimitReservationSagaContext.Scope ignored = context.open("alice", "key-1")) {
+            aspect.placeDebitHold(joinPoint, "7", "hold-1", new BigDecimal("25.00"),
+                    "tx-1", "WITHDRAWAL_HOLD");
+        }
+
+        verify(claimService).updateState("alice", "key-1",
+                TransactionIdempotencyClaimState.RESERVED,
+                null, "DEBIT_HOLD_PLACEMENT_REJECTED");
+    }
+
+    @Test
+    void placementTimeoutLeavesDurableClaimInReconciliationState() {
+        RuntimeException timeout = new RuntimeException("placement timeout");
+        when(joinPoint.proceed()).thenThrow(timeout);
+
+        try (SpendingLimitReservationSagaContext.Scope ignored = context.open("alice", "key-1")) {
+            assertThatThrownBy(() -> aspect.placeDebitHold(joinPoint, "7", "hold-1",
+                    new BigDecimal("25.00"), "tx-1", "WITHDRAWAL_HOLD"))
+                    .isSameAs(timeout);
+        }
+
+        verify(claimService).updateState("alice", "key-1",
+                TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                null, "DEBIT_HOLD_PLACEMENT_OUTCOME_AMBIGUOUS: placement timeout");
+    }
+
+    @Test
     void captureIsMarkedAmbiguousBeforeRemoteCallAndRemainsHeldAfterAppliedResponse() throws Throwable {
-        ResilientAccountServiceClient.DebitHoldResponse response = new ResilientAccountServiceClient.DebitHoldResponse(
-                "hold-1", 7L, true, new BigDecimal("975.00"), new BigDecimal("975.00"),
-                "CAPTURED", null);
+        ResilientAccountServiceClient.DebitHoldResponse response = holdResponse(true, "CAPTURED");
         when(joinPoint.proceed()).thenReturn(response);
 
         Object result;
@@ -57,18 +105,42 @@ class SpendingLimitRemoteEffectAspectTest {
     }
 
     @Test
-    void rejectedCaptureReturnsClaimToSafeReservedState() throws Throwable {
-        ResilientAccountServiceClient.DebitHoldResponse response = new ResilientAccountServiceClient.DebitHoldResponse(
-                "hold-1", 7L, false, new BigDecimal("1000.00"), new BigDecimal("1000.00"),
-                "REJECTED", "Insufficient funds");
-        when(joinPoint.proceed()).thenReturn(response);
+    void rejectedCaptureRemainsAmbiguousUntilThePlacedHoldIsReleased() throws Throwable {
+        when(joinPoint.proceed()).thenReturn(holdResponse(false, "PLACED"));
 
         try (SpendingLimitReservationSagaContext.Scope ignored = context.open("alice", "key-1")) {
             aspect.captureDebitHold(joinPoint, "7", "hold-1", "tx-1", "WITHDRAWAL_CAPTURE");
         }
 
         verify(claimService).updateState("alice", "key-1",
-                TransactionIdempotencyClaimState.RESERVED, null, "DEBIT_CAPTURE_REJECTED");
+                TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                null, "DEBIT_CAPTURE_REJECTED_HOLD_REQUIRES_RELEASE");
+    }
+
+    @Test
+    void successfulHoldReleaseMakesReservationReleaseSafe() throws Throwable {
+        when(joinPoint.proceed()).thenReturn(holdResponse(true, "RELEASED"));
+
+        try (SpendingLimitReservationSagaContext.Scope ignored = context.open("alice", "key-1")) {
+            aspect.releaseDebitHold(joinPoint, "7", "hold-1", "tx-1", "CAPTURE_FAILED");
+        }
+
+        verify(claimService).updateState("alice", "key-1",
+                TransactionIdempotencyClaimState.RESERVED,
+                null, "DEBIT_HOLD_RELEASED");
+    }
+
+    @Test
+    void unconfirmedHoldReleaseKeepsReservationForReconciliation() throws Throwable {
+        when(joinPoint.proceed()).thenReturn(holdResponse(false, "CAPTURED"));
+
+        try (SpendingLimitReservationSagaContext.Scope ignored = context.open("alice", "key-1")) {
+            aspect.releaseDebitHold(joinPoint, "7", "hold-1", "tx-1", "CAPTURE_FAILED");
+        }
+
+        verify(claimService).updateState("alice", "key-1",
+                TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                null, "DEBIT_HOLD_RELEASE_NOT_CONFIRMED");
     }
 
     @Test
@@ -100,6 +172,9 @@ class SpendingLimitRemoteEffectAspectTest {
                     "tx-1", "TRANSFER_COMPENSATION", true);
         }
 
+        verify(claimService).updateState("alice", "key-1",
+                TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                null, "TRANSFER_COMPENSATION_IN_FLIGHT");
         verify(claimService).updateState("alice", "key-1",
                 TransactionIdempotencyClaimState.RESERVED,
                 null, "TRANSFER_COMPENSATION_APPLIED");
@@ -137,5 +212,11 @@ class SpendingLimitRemoteEffectAspectTest {
                 org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any());
+    }
+
+    private ResilientAccountServiceClient.DebitHoldResponse holdResponse(boolean applied, String status) {
+        return new ResilientAccountServiceClient.DebitHoldResponse(
+                "hold-1", 7L, applied, new BigDecimal("975.00"), new BigDecimal("975.00"),
+                status, null);
     }
 }
