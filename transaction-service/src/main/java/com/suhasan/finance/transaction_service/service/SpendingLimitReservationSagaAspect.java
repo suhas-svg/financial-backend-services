@@ -24,19 +24,22 @@ import java.util.Objects;
 public class SpendingLimitReservationSagaAspect {
     private final TransactionIdempotencyClaimService claimService;
     private final SpendingLimitReservationSagaCoordinator coordinator;
+    private final SpendingLimitReservationSagaContext sagaContext;
 
     @Around("execution(* com.suhasan.finance.transaction_service.service.TransactionServiceImpl.processTransfer(..)) "
             + "&& args(request,userId,idempotencyKey)")
     public Object processTransfer(ProceedingJoinPoint joinPoint, TransferRequest request,
                                   String userId, String idempotencyKey) throws Throwable {
         claimService.claimTransfer(request, userId, idempotencyKey);
-        try {
-            TransactionResponse response = (TransactionResponse) joinPoint.proceed();
-            reconcileCompleted(response, userId, idempotencyKey);
-            return response;
-        } catch (Throwable failure) {
-            reconcileFailed(userId, TransactionType.TRANSFER, idempotencyKey, failure);
-            throw failure;
+        try (SpendingLimitReservationSagaContext.Scope ignored = sagaContext.open(userId, idempotencyKey)) {
+            try {
+                TransactionResponse response = (TransactionResponse) joinPoint.proceed();
+                reconcileCompleted(response, userId, idempotencyKey);
+                return response;
+            } catch (Throwable failure) {
+                reconcileFailed(userId, TransactionType.TRANSFER, idempotencyKey, failure);
+                throw failure;
+            }
         }
     }
 
@@ -49,13 +52,15 @@ public class SpendingLimitReservationSagaAspect {
                 .orElseGet(() -> claimService.claimWithdrawal(
                         accountId, amount, description, reference, userId, idempotencyKey));
         requireCompatibleWithdrawalClaim(claim, accountId, amount);
-        try {
-            TransactionResponse response = (TransactionResponse) joinPoint.proceed();
-            reconcileCompleted(response, userId, idempotencyKey);
-            return response;
-        } catch (Throwable failure) {
-            reconcileFailed(userId, TransactionType.WITHDRAWAL, idempotencyKey, failure);
-            throw failure;
+        try (SpendingLimitReservationSagaContext.Scope ignored = sagaContext.open(userId, idempotencyKey)) {
+            try {
+                TransactionResponse response = (TransactionResponse) joinPoint.proceed();
+                reconcileCompleted(response, userId, idempotencyKey);
+                return response;
+            } catch (Throwable failure) {
+                reconcileFailed(userId, TransactionType.WITHDRAWAL, idempotencyKey, failure);
+                throw failure;
+            }
         }
     }
 
