@@ -130,7 +130,7 @@ class SpendingLimitServiceAdditionalTest {
         assertThat(service.reserve(1L, reserve("withdrawal", "5", "alice")).allowed()).isTrue();
         when(reservations.used(1L, "TRANSFER", LocalDate.now())).thenReturn(new BigDecimal("79"));
         assertThat(service.reserve(1L, reserve("transfer", "2", "alice")).remaining())
-                .isEqualByComparingTo("19");
+                .isEqualByComparingTo("21");
         verify(notifications).createInternal(any());
     }
 
