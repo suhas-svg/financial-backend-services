@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - codex/spending-reservation-payload-safety
+  pull_request:
+    branches: [main, develop]
   workflow_dispatch:
 
 permissions:
@@ -54,7 +56,7 @@ jobs:
           - service: account-service
             tests: SpendingLimitServiceTest,SpendingLimitReservationConcurrencyTest
           - service: transaction-service
-            tests: TransactionIdempotencyClaimServiceTest,SpendingLimitReservationSagaAspectTest,SpendingLimitReservationSagaCoordinatorTest,SpendingLimitReservationCrossServiceIntegrationTest
+            tests: TransactionIdempotencyClaimServiceTest,SpendingLimitReservationSagaAspectTest,SpendingLimitReservationClientAspectTest,SpendingLimitReservationSagaCoordinatorTest,SpendingLimitReservationCrossServiceIntegrationTest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -123,7 +125,7 @@ jobs:
           -c "select table_name, column_name, data_type from information_schema.columns where table_name in ('spending_limit_reservations','transaction_idempotency_claims') order by table_name, ordinal_position;"
 
   docker-demonstration:
-    name: Docker and Synthetic Topology Demonstration
+    name: Docker API and Synthetic Topology Demonstration
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -141,6 +143,11 @@ jobs:
       SANDBOX_BOOTSTRAP_TOKEN: ci-${{ github.run_id }}-bootstrap-token-at-least-32-bytes
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - name: Validate synthetic topology
         shell: pwsh
         run: ./scripts/validate-synthetic-sandbox.ps1
@@ -152,18 +159,41 @@ jobs:
         run: docker compose -f docker-compose.synthetic-sandbox.yml config > /tmp/synthetic-compose.yml
       - name: Start fresh synthetic sandbox
         run: docker compose -f docker-compose.synthetic-sandbox.yml up --build --detach --wait
-      - name: Capture running topology and health
+      - name: Install canonical browser dependencies
+        working-directory: frontend
         run: |
-          docker compose -f docker-compose.synthetic-sandbox.yml ps
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+      - name: Demonstrate identical replay and different-payload conflict across both services
+        working-directory: frontend
+        run: npx playwright test --config playwright.sandbox.config.ts
+      - name: Capture migration, reservation, claim, and reconciliation evidence
+        if: always()
+        shell: bash
+        run: |
+          docker compose -f docker-compose.synthetic-sandbox.yml ps > /tmp/synthetic-services.txt
           docker compose -f docker-compose.synthetic-sandbox.yml logs --no-color account-service transaction-service > /tmp/reservation-service-logs.txt
-      - name: Upload Docker demonstration evidence
+          docker compose -f docker-compose.synthetic-sandbox.yml exec -T account-postgres \
+            psql -U account_app -d account_sandbox -P pager=off \
+            -c "select reservation_id, account_id, owner_id, operation_type, amount, currency, fingerprint, transaction_correlation, state, created_at, updated_at, expires_at, outcome from spending_limit_reservations order by reservation_id;" \
+            > /tmp/account-reservation-evidence.txt || true
+          docker compose -f docker-compose.synthetic-sandbox.yml exec -T transaction-postgres \
+            psql -U transaction_app -d transaction_sandbox -P pager=off \
+            -c "select claim_id, user_id, transaction_type, idempotency_key, account_id, operation_type, amount, currency, state, reservation_id, reservation_fingerprint, reservation_amount, reservation_currency, reservation_state, transaction_id, failure_details, created_at, updated_at, expires_at from transaction_idempotency_claims order by created_at;" \
+            > /tmp/transaction-claim-evidence.txt || true
+      - name: Upload Docker and API evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: spending-reservation-docker-evidence
           path: |
             /tmp/synthetic-compose.yml
+            /tmp/synthetic-services.txt
             /tmp/reservation-service-logs.txt
+            /tmp/account-reservation-evidence.txt
+            /tmp/transaction-claim-evidence.txt
+            frontend/playwright-report
+            frontend/test-results
           if-no-files-found: ignore
           retention-days: 14
       - name: Tear down sandbox
