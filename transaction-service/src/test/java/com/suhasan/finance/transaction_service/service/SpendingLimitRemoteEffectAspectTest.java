@@ -68,7 +68,7 @@ class SpendingLimitRemoteEffectAspectTest {
     }
 
     @Test
-    void placementTimeoutLeavesDurableClaimInReconciliationState() {
+    void placementTimeoutLeavesDurableClaimInReconciliationState() throws Throwable {
         RuntimeException timeout = new RuntimeException("placement timeout");
         when(joinPoint.proceed()).thenThrow(timeout);
 
@@ -144,7 +144,7 @@ class SpendingLimitRemoteEffectAspectTest {
     }
 
     @Test
-    void captureTimeoutLeavesDurableClaimInReconciliationState() {
+    void captureTimeoutLeavesDurableClaimInReconciliationState() throws Throwable {
         RuntimeException timeout = new RuntimeException("capture timeout");
         when(joinPoint.proceed()).thenThrow(timeout);
 
@@ -181,7 +181,7 @@ class SpendingLimitRemoteEffectAspectTest {
     }
 
     @Test
-    void ambiguousCompensationFailureKeepsReservationForReconciliation() {
+    void ambiguousCompensationFailureKeepsReservationForReconciliation() throws Throwable {
         RuntimeException timeout = new RuntimeException("compensation timeout");
         when(joinPoint.proceed()).thenThrow(timeout);
 
