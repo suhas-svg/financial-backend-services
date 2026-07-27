@@ -1,0 +1,67 @@
+name: Spending Reservation Frontend Final Verify
+
+on:
+  push:
+    branches:
+      - codex/spending-reservation-frontend-final-verify
+    paths-ignore:
+      - docs/release-evidence/spending-reservation-frontend-final-verify.md
+
+permissions:
+  contents: write
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci --ignore-scripts
+      - working-directory: frontend
+        run: npm run lint
+      - working-directory: frontend
+        run: npm test
+      - working-directory: frontend
+        run: npm run build -- --config vite.sandbox.config.ts
+      - name: Install accessibility browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run WCAG accessibility checks
+        working-directory: frontend
+        run: npm run test:a11y
+
+  authority:
+    if: always()
+    needs: [frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/spending-reservation-frontend-final-verify
+      - name: Publish frontend verification result
+        env:
+          RESULT: ${{ needs.frontend.result }}
+          SOURCE_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p docs/release-evidence
+          cat > docs/release-evidence/spending-reservation-frontend-final-verify.md <<EOF
+          # Spending Reservation Frontend Final Verification
+
+          - Source commit: \`${SOURCE_SHA}\`
+          - Workflow run: ${RUN_URL}
+          - Frontend lint, unit tests, production build, and accessibility: ${RESULT}
+          EOF
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add docs/release-evidence/spending-reservation-frontend-final-verify.md
+          git diff --cached --quiet || git commit -m "Record frontend final verification [skip ci]"
+          git push origin HEAD:codex/spending-reservation-frontend-final-verify
+          test "${RESULT}" = "success"
