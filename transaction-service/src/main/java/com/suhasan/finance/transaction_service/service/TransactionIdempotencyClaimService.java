@@ -61,6 +61,17 @@ public class TransactionIdempotencyClaimService {
                 accountId, "WITHDRAWAL", amount, null);
     }
 
+    public TransactionIdempotencyClaim claimWithdrawalRequest(
+            String accountId, BigDecimal amount, String currency, String description, String reference,
+            String userId, String idempotencyKey) {
+        String key = normalizeKey(idempotencyKey);
+        String normalizedCurrency = normalizeCurrency(currency);
+        String fingerprint = canonicalFingerprint("WITHDRAWAL", userId, accountId,
+                amount, normalizedCurrency, description, reference);
+        return claim(userId, TransactionType.WITHDRAWAL, key, fingerprint,
+                accountId, "WITHDRAWAL", amount, normalizedCurrency);
+    }
+
     public Optional<TransactionIdempotencyClaim> find(String userId, String idempotencyKey) {
         if (userId == null || idempotencyKey == null || idempotencyKey.isBlank()) {
             return Optional.empty();
