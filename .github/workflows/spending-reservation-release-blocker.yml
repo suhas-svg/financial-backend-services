@@ -36,17 +36,22 @@ jobs:
           cache: maven
       - name: Run complete Maven verification
         working-directory: ${{ matrix.service }}
-        run: ./mvnw -q clean verify
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p target/ci-logs
+          ./mvnw --batch-mode clean verify 2>&1 | tee target/ci-logs/verify-java-${{ matrix.java }}.log
       - name: Upload verification reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: reports-${{ matrix.service }}-java-${{ matrix.java }}
           path: |
+            ${{ matrix.service }}/target/ci-logs
             ${{ matrix.service }}/target/surefire-reports
             ${{ matrix.service }}/target/failsafe-reports
             ${{ matrix.service }}/target/site/jacoco
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 14
 
   reservation-concurrency-reconciliation:
@@ -69,13 +74,19 @@ jobs:
           cache: maven
       - name: Run payload replay, concurrency, failure, remote-effect, and orphan tests
         working-directory: ${{ matrix.service }}
-        run: ./mvnw -q -Dtest=${{ matrix.tests }} test
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p target/ci-logs
+          ./mvnw --batch-mode -Dtest=${{ matrix.tests }} test 2>&1 | tee target/ci-logs/focused-reservation-tests.log
       - name: Upload focused evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: spending-reservation-evidence-${{ matrix.service }}
-          path: ${{ matrix.service }}/target/surefire-reports
+          path: |
+            ${{ matrix.service }}/target/ci-logs
+            ${{ matrix.service }}/target/surefire-reports
           if-no-files-found: error
           retention-days: 14
 
@@ -121,12 +132,27 @@ jobs:
           cache: maven
       - name: Apply fresh migrations and backwards-safe upgrade scenarios
         working-directory: ${{ matrix.service }}
-        run: ./mvnw -q -Dtest=${{ matrix.tests }} test
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p target/ci-logs
+          ./mvnw --batch-mode -Dtest=${{ matrix.tests }} test 2>&1 | tee target/ci-logs/postgres-migration-tests.log
       - name: Capture migration inventory
+        if: always()
         run: >-
           PGPASSWORD=postgres psql -h localhost -U postgres -d reservation_migrations
           -c "select installed_rank, version, description, success from flyway_schema_history order by installed_rank;"
           -c "select table_name, column_name, data_type from information_schema.columns where table_name in ('spending_limit_reservations','transaction_idempotency_claims') order by table_name, ordinal_position;"
+      - name: Upload migration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-evidence-${{ matrix.service }}
+          path: |
+            ${{ matrix.service }}/target/ci-logs
+            ${{ matrix.service }}/target/surefire-reports
+          if-no-files-found: error
+          retention-days: 14
 
   docker-demonstration:
     name: Docker API and Synthetic Topology Demonstration
