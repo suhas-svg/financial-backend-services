@@ -73,6 +73,9 @@ public class TransactionIdempotencyClaim {
     @Column(name = "reservation_id")
     private Long reservationId;
 
+    @Column(name = "reservation_correlation", length = 160)
+    private String reservationCorrelation;
+
     @Column(name = "reservation_fingerprint", length = 64)
     private String reservationFingerprint;
 
