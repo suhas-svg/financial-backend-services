@@ -40,7 +40,7 @@ public class TransactionIdempotencyClaim {
     @Column(name = "claim_id", length = 36)
     private String claimId;
 
-    @Column(name = "user_id", nullable = false, length = 100)
+    @Column(name = "user_id", nullable = false, length = 255)
     private String userId;
 
     @Enumerated(EnumType.STRING)
