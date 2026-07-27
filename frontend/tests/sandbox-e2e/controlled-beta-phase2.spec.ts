@@ -59,7 +59,7 @@ test("gateway exposes only a hardened, unmistakably synthetic entry point", asyn
   expect(rejectedOrigin.status()).toBe(403);
 });
 
-test("one-time bootstrap, login, MFA seed replay, zero closure, and recovery", async ({ page, request }) => {
+test("one-time bootstrap, payload-safe reservation replay, zero closure, and recovery", async ({ page, request }) => {
   test.skip(!username || !password || !bootstrapToken, "Runtime-only operator inputs are required");
   const status = await request.get("/account-api/api/sandbox/bootstrap/status");
   expect(status.ok()).toBeTruthy();
@@ -122,6 +122,44 @@ test("one-time bootstrap, login, MFA seed replay, zero closure, and recovery", a
     fundingTransactionId: first.fundingTransactionId,
     fundedAmount: 1000
   });
+
+  const accountBefore = await request.get(`/account-api/api/accounts/${first.fundedAccountId}`, { headers });
+  expect(accountBefore.ok()).toBeTruthy();
+  const balanceBefore = Number((await accountBefore.json()).balance);
+  const reservationKey = "spending-reservation-payload-safe-v1";
+  const withdrawalBody = {
+    accountId: String(first.fundedAccountId),
+    amount: 25,
+    currency: "USD",
+    description: "Controlled beta reservation replay",
+    reference: "reservation-payload-safe"
+  };
+  const firstWithdrawal = await request.post("/transaction-api/api/transactions/withdraw", {
+    headers: { ...headers, "Idempotency-Key": reservationKey }, data: withdrawalBody
+  });
+  expect(firstWithdrawal.status()).toBe(201);
+  const firstWithdrawalBody = await firstWithdrawal.json();
+
+  const identicalReplay = await request.post("/transaction-api/api/transactions/withdraw", {
+    headers: { ...headers, "Idempotency-Key": reservationKey }, data: withdrawalBody
+  });
+  expect(identicalReplay.status()).toBe(201);
+  expect(await identicalReplay.json()).toMatchObject({
+    transactionId: firstWithdrawalBody.transactionId,
+    amount: 25,
+    currency: "USD"
+  });
+
+  const mismatchedReplay = await request.post("/transaction-api/api/transactions/withdraw", {
+    headers: { ...headers, "Idempotency-Key": reservationKey },
+    data: { ...withdrawalBody, amount: 30 }
+  });
+  expect(mismatchedReplay.status()).toBe(409);
+  expect(JSON.stringify(await mismatchedReplay.json())).toContain("different");
+
+  const accountAfter = await request.get(`/account-api/api/accounts/${first.fundedAccountId}`, { headers });
+  expect(accountAfter.ok()).toBeTruthy();
+  expect(Number((await accountAfter.json()).balance)).toBe(balanceBefore - 25);
 
   await page.goto("/login");
   await page.getByRole("button", { name: "Admin operations" }).click();
