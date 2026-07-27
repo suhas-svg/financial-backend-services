@@ -86,10 +86,19 @@ public class SpendingLimitReservation {
         if (state == null) {
             state = SpendingLimitReservationState.RESERVED;
         }
+        ensureRequestScope();
     }
 
     @PreUpdate
     void onUpdate() {
         updatedAt = LocalDateTime.now();
+        ensureRequestScope();
+    }
+
+    private void ensureRequestScope() {
+        if ((requestScope == null || requestScope.isBlank())
+                && accountId != null && idempotencyKey != null && !idempotencyKey.isBlank()) {
+            requestScope = accountId + "|" + idempotencyKey;
+        }
     }
 }
