@@ -2,6 +2,8 @@ package com.suhasan.finance.transaction_service.service;
 
 import com.suhasan.finance.transaction_service.dto.TransactionResponse;
 import com.suhasan.finance.transaction_service.dto.TransferRequest;
+import com.suhasan.finance.transaction_service.entity.TransactionIdempotencyClaim;
+import com.suhasan.finance.transaction_service.entity.TransactionIdempotencyClaimState;
 import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -13,10 +15,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -60,6 +65,10 @@ class SpendingLimitReservationSagaAspectTest {
     @Test
     void localFailureAfterRemoteReservationKeepsOriginalFailureAndRunsReconciliation() throws Throwable {
         RuntimeException localFailure = new RuntimeException("local transaction insert failed");
+        TransactionIdempotencyClaim claim = withdrawalClaim();
+        when(claimService.find("alice", "key-1")).thenReturn(Optional.empty());
+        when(claimService.claimWithdrawal("7", new BigDecimal("25.00"),
+                "cash", "ref", "alice", "key-1")).thenReturn(claim);
         when(joinPoint.proceed()).thenThrow(localFailure);
 
         assertThatThrownBy(() -> aspect.processWithdrawal(joinPoint, "7", new BigDecimal("25.00"),
@@ -67,10 +76,31 @@ class SpendingLimitReservationSagaAspectTest {
                 .isSameAs(localFailure);
 
         InOrder order = inOrder(claimService, joinPoint, coordinator);
+        order.verify(claimService).find("alice", "key-1");
         order.verify(claimService).claimWithdrawal("7", new BigDecimal("25.00"),
                 "cash", "ref", "alice", "key-1");
         order.verify(joinPoint).proceed();
         order.verify(coordinator).failed("alice", TransactionType.WITHDRAWAL, "key-1", localFailure);
+    }
+
+    @Test
+    void preclaimedWithdrawalRequestIsReusedWithoutWeakeningItsCurrencyFingerprint() throws Throwable {
+        TransactionIdempotencyClaim claim = withdrawalClaim();
+        TransactionResponse response = TransactionResponse.builder()
+                .transactionId("tx-1")
+                .type(TransactionType.WITHDRAWAL)
+                .status(TransactionStatus.COMPLETED)
+                .build();
+        when(claimService.find("alice", "key-1")).thenReturn(Optional.of(claim));
+        when(joinPoint.proceed()).thenReturn(response);
+
+        Object result = aspect.processWithdrawal(joinPoint, "7", new BigDecimal("25.00"),
+                "cash", "ref", "alice", "key-1");
+
+        assertThat(result).isSameAs(response);
+        verify(claimService, never()).claimWithdrawal("7", new BigDecimal("25.00"),
+                "cash", "ref", "alice", "key-1");
+        verify(coordinator).completed(response, "alice", "key-1");
     }
 
     @Test
@@ -94,5 +124,24 @@ class SpendingLimitReservationSagaAspectTest {
 
         assertThat(result).isSameAs(response);
         verify(coordinator).completed(response, "alice", "key-1");
+    }
+
+    private TransactionIdempotencyClaim withdrawalClaim() {
+        LocalDateTime now = LocalDateTime.now();
+        return TransactionIdempotencyClaim.builder()
+                .claimId("claim-1")
+                .userId("alice")
+                .transactionType(TransactionType.WITHDRAWAL)
+                .idempotencyKey("key-1")
+                .requestFingerprint("fingerprint")
+                .accountId("7")
+                .operationType("WITHDRAWAL")
+                .amount(new BigDecimal("25.00"))
+                .currency("USD")
+                .state(TransactionIdempotencyClaimState.CLAIMED)
+                .createdAt(now)
+                .updatedAt(now)
+                .expiresAt(now.plusMinutes(30))
+                .build();
     }
 }
