@@ -86,33 +86,45 @@ public class SpendingLimitReservationSagaCoordinator {
                             .type(current.getType())
                             .status(current.getStatus())
                             .build());
+            TransactionIdempotencyClaim refreshed = claimService.require(userId, idempotencyKey);
             if (current.getStatus() == TransactionStatus.COMPLETED
                     || current.getStatus() == TransactionStatus.REVERSED) {
-                consume(claimService.require(userId, idempotencyKey), reservation,
-                        "TRANSACTION_COMPLETED");
+                consume(refreshed, reservation, "TRANSACTION_COMPLETED");
+                return;
+            }
+            if (current.getStatus() == TransactionStatus.FAILED_REQUIRES_MANUAL_ACTION) {
+                requireManualReconciliation(refreshed, "AMBIGUOUS_TRANSACTION_OUTCOME");
                 return;
             }
             if (current.getStatus() == TransactionStatus.FAILED
                     || current.getStatus() == TransactionStatus.CANCELLED) {
-                release(claimService.require(userId, idempotencyKey), reservation,
-                        "TRANSACTION_DEFINITIVELY_FAILED");
+                if (refreshed.getState() == TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED) {
+                    requireManualReconciliation(refreshed,
+                            firstNonBlank(refreshed.getFailureDetails(),
+                                    "FAILED_TRANSACTION_WITH_AMBIGUOUS_REMOTE_DEBIT_OUTCOME"));
+                } else {
+                    release(refreshed, reservation, "TRANSACTION_DEFINITIVELY_FAILED");
+                }
                 return;
             }
-            if (current.getStatus() == TransactionStatus.FAILED_REQUIRES_MANUAL_ACTION) {
-                requireManualReconciliation(claimService.require(userId, idempotencyKey),
-                        "AMBIGUOUS_TRANSACTION_OUTCOME");
-                return;
-            }
-            if (claim.getExpiresAt() != null && claim.getExpiresAt().isBefore(LocalDateTime.now())) {
-                requireManualReconciliation(claimService.require(userId, idempotencyKey),
-                        "PROCESSING_TRANSACTION_EXCEEDED_RESERVATION_LEASE");
+            if (refreshed.getState() == TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED
+                    || (refreshed.getExpiresAt() != null
+                    && refreshed.getExpiresAt().isBefore(LocalDateTime.now()))) {
+                requireManualReconciliation(refreshed,
+                        firstNonBlank(refreshed.getFailureDetails(),
+                                "PROCESSING_TRANSACTION_EXCEEDED_RESERVATION_LEASE"));
             }
             return;
         }
 
+        if (claim.getState() == TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED) {
+            requireManualReconciliation(claim,
+                    firstNonBlank(claim.getFailureDetails(), "AMBIGUOUS_REMOTE_DEBIT_OUTCOME"));
+            return;
+        }
+
         if (reservation == null || reservation.reservationId() == null) {
-            if (immediateFailure || (claim.getExpiresAt() != null
-                    && claim.getExpiresAt().isBefore(LocalDateTime.now()))) {
+            if (immediateFailure || isExpired(claim)) {
                 claimService.updateState(userId, idempotencyKey,
                         TransactionIdempotencyClaimState.CLOSED_NO_RESERVATION,
                         null, bounded(failureDetails, "NO_REMOTE_RESERVATION_FOUND"));
@@ -120,11 +132,14 @@ public class SpendingLimitReservationSagaCoordinator {
             return;
         }
 
-        if (immediateFailure || (claim.getExpiresAt() != null
-                && claim.getExpiresAt().isBefore(LocalDateTime.now()))) {
+        if (immediateFailure || isExpired(claim)) {
             release(claimService.require(userId, idempotencyKey), reservation,
                     "LOCAL_TRANSACTION_NOT_CREATED");
         }
+    }
+
+    private boolean isExpired(TransactionIdempotencyClaim claim) {
+        return claim.getExpiresAt() != null && claim.getExpiresAt().isBefore(LocalDateTime.now());
     }
 
     private SpendingLimitReservationLifecycleClient.ReservationResponse ensureReservation(
@@ -168,6 +183,11 @@ public class SpendingLimitReservationSagaCoordinator {
     private void release(TransactionIdempotencyClaim claim,
                          SpendingLimitReservationLifecycleClient.ReservationResponse reservation,
                          String outcome) {
+        if (claim.getState() == TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED) {
+            requireManualReconciliation(claim,
+                    firstNonBlank(claim.getFailureDetails(), "AMBIGUOUS_REMOTE_DEBIT_OUTCOME"));
+            return;
+        }
         if (reservation == null || reservation.reservationId() == null) {
             claimService.updateState(claim.getUserId(), claim.getIdempotencyKey(),
                     TransactionIdempotencyClaimState.CLOSED_NO_RESERVATION,
