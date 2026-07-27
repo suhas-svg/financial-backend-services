@@ -168,11 +168,11 @@ test("one-time bootstrap, payload-safe reservation replay, zero closure, and rec
   const [concurrentA, concurrentB] = await Promise.all([
     request.post("/transaction-api/api/transactions/withdraw", {
       headers: { ...headers, "Idempotency-Key": concurrentKey },
-      data: { ...withdrawalBody, amount: 10, reference: "concurrent-a" }
+      data: { ...withdrawalBody, amount: 10 }
     }),
     request.post("/transaction-api/api/transactions/withdraw", {
       headers: { ...headers, "Idempotency-Key": concurrentKey },
-      data: { ...withdrawalBody, amount: 11, reference: "concurrent-b" }
+      data: { ...withdrawalBody, amount: 11 }
     })
   ]);
   expect([concurrentA.status(), concurrentB.status()].sort((left, right) => left - right))
