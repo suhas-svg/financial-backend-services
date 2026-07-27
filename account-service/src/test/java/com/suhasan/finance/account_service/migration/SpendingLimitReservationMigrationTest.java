@@ -1,6 +1,7 @@
 package com.suhasan.finance.account_service.migration;
 
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
@@ -24,7 +25,7 @@ class SpendingLimitReservationMigrationTest {
                     .locations("classpath:db/migration")
                     .schemas(schema)
                     .defaultSchema(schema)
-                    .target("9")
+                    .target(MigrationVersion.fromVersion("9"))
                     .cleanDisabled(true)
                     .load();
             assertThat(legacy.migrate().success).isTrue();
