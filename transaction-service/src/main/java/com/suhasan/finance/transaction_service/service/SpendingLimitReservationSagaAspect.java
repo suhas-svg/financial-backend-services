@@ -2,6 +2,7 @@ package com.suhasan.finance.transaction_service.service;
 
 import com.suhasan.finance.transaction_service.dto.TransactionResponse;
 import com.suhasan.finance.transaction_service.dto.TransferRequest;
+import com.suhasan.finance.transaction_service.entity.TransactionIdempotencyClaim;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +14,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.Objects;
 
 @Aspect
 @Component
@@ -43,7 +45,10 @@ public class SpendingLimitReservationSagaAspect {
     public Object processWithdrawal(ProceedingJoinPoint joinPoint, String accountId, BigDecimal amount,
                                     String description, String reference, String userId,
                                     String idempotencyKey) throws Throwable {
-        claimService.claimWithdrawal(accountId, amount, description, reference, userId, idempotencyKey);
+        TransactionIdempotencyClaim claim = claimService.find(userId, idempotencyKey)
+                .orElseGet(() -> claimService.claimWithdrawal(
+                        accountId, amount, description, reference, userId, idempotencyKey));
+        requireCompatibleWithdrawalClaim(claim, accountId, amount);
         try {
             TransactionResponse response = (TransactionResponse) joinPoint.proceed();
             reconcileCompleted(response, userId, idempotencyKey);
@@ -51,6 +56,19 @@ public class SpendingLimitReservationSagaAspect {
         } catch (Throwable failure) {
             reconcileFailed(userId, TransactionType.WITHDRAWAL, idempotencyKey, failure);
             throw failure;
+        }
+    }
+
+    private void requireCompatibleWithdrawalClaim(TransactionIdempotencyClaim claim,
+                                                   String accountId, BigDecimal amount) {
+        boolean amountMatches = claim.getAmount() != null && amount != null
+                && claim.getAmount().compareTo(amount) == 0;
+        if (claim.getTransactionType() != TransactionType.WITHDRAWAL
+                || !Objects.equals(claim.getOperationType(), "WITHDRAWAL")
+                || !Objects.equals(claim.getAccountId(), accountId)
+                || !amountMatches) {
+            throw new IllegalStateException(
+                    "Idempotency-Key was reused with a different transaction or reservation payload");
         }
     }
 
