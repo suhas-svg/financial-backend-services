@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS transaction_idempotency_claims (
     claim_id VARCHAR(36) PRIMARY KEY,
-    user_id VARCHAR(100) NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
     transaction_type VARCHAR(30) NOT NULL,
     idempotency_key VARCHAR(128) NOT NULL,
     request_fingerprint VARCHAR(64) NOT NULL,
