@@ -1,5 +1,6 @@
 package com.suhasan.finance.transaction_service.service;
 
+import com.suhasan.finance.transaction_service.dto.TransactionResponse;
 import com.suhasan.finance.transaction_service.entity.Transaction;
 import com.suhasan.finance.transaction_service.entity.TransactionIdempotencyClaim;
 import com.suhasan.finance.transaction_service.entity.TransactionIdempotencyClaimState;
@@ -105,7 +106,29 @@ class SpendingLimitReservationSagaCoordinatorTest {
                 eq("alice"), eq("claim-1"), any());
         verify(claimService).updateState("alice", "key-1",
                 TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
-                "RESERVED", "AMBIGUOUS_TRANSACTION_OUTCOME");
+                "RECONCILIATION_REQUIRED", "AMBIGUOUS_TRANSACTION_OUTCOME");
+    }
+
+    @Test
+    void manualActionPersistsLocallyWhenRemoteLookupFails() {
+        TransactionIdempotencyClaim claim = claim(TransactionIdempotencyClaimState.CLAIMED,
+                LocalDateTime.now().minusMinutes(1));
+        claim.setReservationId(null);
+        claim.setReservationState(null);
+        when(claimService.require("alice", "key-1")).thenReturn(claim);
+        when(lifecycleClient.lookup("7", "WITHDRAWAL", "key-1", "alice"))
+                .thenThrow(new RuntimeException("account service unavailable"));
+        TransactionResponse response = TransactionResponse.builder()
+                .transactionId("tx-1")
+                .type(TransactionType.WITHDRAWAL)
+                .status(TransactionStatus.FAILED_REQUIRES_MANUAL_ACTION)
+                .build();
+
+        coordinator.completed(response, "alice", "key-1");
+
+        verify(claimService).updateState("alice", "key-1",
+                TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                null, "TRANSACTION_REQUIRES_MANUAL_ACTION: account service unavailable");
     }
 
     @Test
