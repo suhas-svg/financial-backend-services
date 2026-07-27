@@ -1,7 +1,11 @@
 package com.suhasan.finance.transaction_service.service;
 
 import com.suhasan.finance.transaction_service.client.ResilientAccountServiceClient;
+import com.suhasan.finance.transaction_service.entity.Transaction;
 import com.suhasan.finance.transaction_service.entity.TransactionIdempotencyClaim;
+import com.suhasan.finance.transaction_service.entity.TransactionIdempotencyClaimState;
+import com.suhasan.finance.transaction_service.entity.TransactionStatus;
+import com.suhasan.finance.transaction_service.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -20,6 +24,7 @@ import java.util.Optional;
 public class SpendingLimitReservationClientAspect {
     private final TransactionIdempotencyClaimService claimService;
     private final SpendingLimitReservationLifecycleClient lifecycleClient;
+    private final TransactionRepository transactionRepository;
 
     @Around("execution(* com.suhasan.finance.transaction_service.client.ResilientAccountServiceClient.reserveSpendingLimit(..)) "
             + "&& args(accountId,operationType,amount,idempotencyKey,userId)")
@@ -57,11 +62,40 @@ public class SpendingLimitReservationClientAspect {
         if (reservation == null || reservation.reservationId() == null) {
             return null;
         }
+
+        Optional<Transaction> transaction = transactionRepository
+                .findFirstByCreatedByAndTypeAndIdempotencyKey(
+                        userId, claim.getTransactionType(), claim.getIdempotencyKey());
+        if (transaction.isPresent()) {
+            TransactionStatus status = transaction.get().getStatus();
+            if (status == TransactionStatus.FAILED_REQUIRES_MANUAL_ACTION
+                    || status == TransactionStatus.PROCESSING
+                    || status == TransactionStatus.PENDING) {
+                SpendingLimitReservationLifecycleClient.ReservationResponse held = lifecycleClient.transition(
+                        accountId, reservation.reservationId(), "reconciliation-required", userId,
+                        claim.getClaimId(), "AMBIGUOUS_TRANSACTION_OUTCOME");
+                claimService.updateState(userId, idempotencyKey,
+                        TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                        held == null ? "RECONCILIATION_REQUIRED" : held.state(),
+                        "Legacy release suppressed because the transaction outcome is ambiguous");
+                return null;
+            }
+            if (status == TransactionStatus.COMPLETED || status == TransactionStatus.REVERSED) {
+                SpendingLimitReservationLifecycleClient.ReservationResponse consumed = lifecycleClient.transition(
+                        accountId, reservation.reservationId(), "consume", userId,
+                        claim.getClaimId(), "TRANSACTION_COMPLETED");
+                claimService.updateState(userId, idempotencyKey,
+                        TransactionIdempotencyClaimState.COMPLETED,
+                        consumed == null ? "CONSUMED" : consumed.state(), null);
+                return null;
+            }
+        }
+
         SpendingLimitReservationLifecycleClient.ReservationResponse released = lifecycleClient.transition(
                 accountId, reservation.reservationId(), "release", userId, claim.getClaimId(),
                 "TRANSACTION_DEFINITIVELY_FAILED");
         claimService.updateState(userId, idempotencyKey,
-                com.suhasan.finance.transaction_service.entity.TransactionIdempotencyClaimState.RELEASED,
+                TransactionIdempotencyClaimState.RELEASED,
                 released == null ? "RELEASED" : released.state(), null);
         return null;
     }
