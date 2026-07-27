@@ -132,8 +132,8 @@ public class SpendingLimitReservationSagaCoordinator {
         if (claim.getReservationId() != null) {
             return new SpendingLimitReservationLifecycleClient.ReservationResponse(
                     true, true, claim.getReservationCurrency(), null, null, null, null,
-                    claim.getReservationId(), claim.getClaimId(), claim.getReservationAmount(),
-                    claim.getReservationFingerprint(), claim.getReservationState(),
+                    claim.getReservationId(), firstNonBlank(claim.getReservationCorrelation(), claim.getClaimId()),
+                    claim.getReservationAmount(), claim.getReservationFingerprint(), claim.getReservationState(),
                     null, null, claim.getExpiresAt(), null);
         }
         SpendingLimitReservationLifecycleClient.ReservationResponse response = lifecycleClient.lookup(
@@ -154,7 +154,7 @@ public class SpendingLimitReservationSagaCoordinator {
         try {
             SpendingLimitReservationLifecycleClient.ReservationResponse consumed = lifecycleClient.transition(
                     claim.getAccountId(), reservation.reservationId(), "consume",
-                    claim.getUserId(), claim.getClaimId(), outcome);
+                    claim.getUserId(), reservationCorrelation(claim, reservation), outcome);
             claimService.updateState(claim.getUserId(), claim.getIdempotencyKey(),
                     TransactionIdempotencyClaimState.COMPLETED,
                     consumed == null ? "CONSUMED" : consumed.state(), null);
@@ -177,7 +177,7 @@ public class SpendingLimitReservationSagaCoordinator {
         try {
             SpendingLimitReservationLifecycleClient.ReservationResponse released = lifecycleClient.transition(
                     claim.getAccountId(), reservation.reservationId(), "release",
-                    claim.getUserId(), claim.getClaimId(), outcome);
+                    claim.getUserId(), reservationCorrelation(claim, reservation), outcome);
             claimService.updateState(claim.getUserId(), claim.getIdempotencyKey(),
                     TransactionIdempotencyClaimState.RELEASED,
                     released == null ? "RELEASED" : released.state(), null);
@@ -199,7 +199,8 @@ public class SpendingLimitReservationSagaCoordinator {
                 try {
                     SpendingLimitReservationLifecycleClient.ReservationResponse marked =
                             lifecycleClient.transition(claim.getAccountId(), reservation.reservationId(),
-                                    "reconciliation-required", claim.getUserId(), claim.getClaimId(), outcome);
+                                    "reconciliation-required", claim.getUserId(),
+                                    reservationCorrelation(claim, reservation), outcome);
                     if (marked != null) {
                         reservation = marked;
                     }
@@ -217,6 +218,17 @@ public class SpendingLimitReservationSagaCoordinator {
         claimService.updateState(claim.getUserId(), claim.getIdempotencyKey(),
                 TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
                 reservation == null ? claim.getReservationState() : reservation.state(), persistedOutcome);
+    }
+
+    private String reservationCorrelation(
+            TransactionIdempotencyClaim claim,
+            SpendingLimitReservationLifecycleClient.ReservationResponse reservation) {
+        return firstNonBlank(reservation.transactionCorrelation(),
+                firstNonBlank(claim.getReservationCorrelation(), claim.getClaimId()));
+    }
+
+    private String firstNonBlank(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     private String bounded(String first, String second) {
