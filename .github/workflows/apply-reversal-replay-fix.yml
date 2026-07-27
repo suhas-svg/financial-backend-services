@@ -1,0 +1,62 @@
+name: Apply Reversal Replay Fix
+
+on:
+  push:
+    branches: [codex/pre-phase4-closure]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/pre-phase4-closure
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+      - name: Preserve unavailable reversal semantics on idempotent replay
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('transaction-service/src/main/java/com/suhasan/finance/transaction_service/service/TransactionServiceImpl.java')
+          text = path.read_text()
+          old = '''        if (existing.isPresent()) {
+            requireReplayFingerprint(existing.get(), requestFingerprint);
+            return mapToResponse(existing.get());
+        }
+
+        // Requirement 6.1: Validate the original transaction exists.'''
+          new = '''        if (existing.isPresent()) {
+            Transaction replay = existing.get();
+            requireReplayFingerprint(replay, requestFingerprint);
+            if (replay.getStatus() == TransactionStatus.FAILED_REQUIRES_MANUAL_ACTION) {
+                throw new AccountServiceUnavailableException(
+                        "Reversal is pending manual action because Account Service is unavailable");
+            }
+            return mapToResponse(replay);
+        }
+
+        // Requirement 6.1: Validate the original transaction exists.'''
+          if old not in text:
+              raise SystemExit('target reversal replay block not found')
+          path.write_text(text.replace(old, new, 1))
+      - name: Run focused reversal integration tests
+        working-directory: transaction-service
+        run: ./mvnw -q -Dtest=TransactionReversalIntegrationTest test
+      - name: Commit production fix and remove temporary workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm -f .github/workflows/apply-reversal-replay-fix.yml .github/workflows/transaction-ci-diagnostics.yml
+          git add transaction-service/src/main/java/com/suhasan/finance/transaction_service/service/TransactionServiceImpl.java
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Preserve unavailable reversal replay status'
+          git push origin HEAD:codex/pre-phase4-closure
