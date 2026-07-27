@@ -20,6 +20,15 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Apply notification enum import correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          service=account-service/src/main/java/com/suhasan/finance/account_service/service/SpendingLimitService.java
+          sed -i 's/import com\.suhasan\.finance\.account_service\.dto\.NotificationSeverity;/import com.suhasan.finance.account_service.entity.NotificationSeverity;/' "$service"
+          sed -i 's/import com\.suhasan\.finance\.account_service\.dto\.NotificationSourceType;/import com.suhasan.finance.account_service.entity.NotificationSourceType;/' "$service"
+          sed -i 's/import com\.suhasan\.finance\.account_service\.dto\.NotificationType;/import com.suhasan.finance.account_service.entity.NotificationType;/' "$service"
+          git diff --check
       - name: Compile both services and capture output
         id: compile
         shell: bash
@@ -31,7 +40,7 @@ jobs:
           transaction_status=$?
           echo "account_status=${account_status}" >> "$GITHUB_OUTPUT"
           echo "transaction_status=${transaction_status}" >> "$GITHUB_OUTPUT"
-      - name: Publish compiler diagnostics
+      - name: Publish diagnostics and verified correction
         shell: bash
         env:
           ACCOUNT_STATUS: ${{ steps.compile.outputs.account_status }}
@@ -63,6 +72,13 @@ jobs:
           } > docs/release-evidence/spending-reservation-compile-diagnostics.md
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add docs/release-evidence/spending-reservation-compile-diagnostics.md
-          git commit -m "Record spending reservation compile diagnostics [skip ci]"
+          if [[ "$ACCOUNT_STATUS" == "0" && "$TRANSACTION_STATUS" == "0" ]]; then
+            git add account-service/src/main/java/com/suhasan/finance/account_service/service/SpendingLimitService.java \
+              docs/release-evidence/spending-reservation-compile-diagnostics.md
+            git commit -m "Fix notification enum imports"
+          else
+            git restore account-service/src/main/java/com/suhasan/finance/account_service/service/SpendingLimitService.java
+            git add docs/release-evidence/spending-reservation-compile-diagnostics.md
+            git commit -m "Record spending reservation compile diagnostics [skip ci]"
+          fi
           git push origin HEAD:codex/spending-reservation-payload-safety
