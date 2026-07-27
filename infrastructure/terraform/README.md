@@ -138,6 +138,15 @@ terraform {
 ```
 
 ### Remote State (Staging/Production)
+Staging and production declare an empty `s3` backend block. Supply all backend
+coordinates through a protected file outside the repository; the deployment
+script fails closed when it is absent:
+
+```bash
+export TF_BACKEND_CONFIG=/secure/path/staging.backend.hcl
+./infrastructure/terraform/scripts/deploy.sh -e staging
+```
+
 
 For staging and production, configure remote state backends:
 

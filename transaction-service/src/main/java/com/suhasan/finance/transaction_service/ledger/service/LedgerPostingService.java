@@ -119,6 +119,15 @@ public class LedgerPostingService {
         return new JournalResult(journal.getJournalId(), JournalState.PENDING, false);
     }
 
+    @Transactional(readOnly = true)
+    public Optional<JournalResult> findByCorrelationId(String correlationId) {
+        return journalRepository.findByCorrelationId(correlationId)
+                .map(journal -> new JournalResult(
+                        journal.getJournalId(),
+                        latestState(journal.getJournalId()).getState(),
+                        true));
+    }
+
     @Transactional
     public JournalResult post(UUID journalId, String actor) {
         return complete(journalId, actor, null, JournalState.POSTED);

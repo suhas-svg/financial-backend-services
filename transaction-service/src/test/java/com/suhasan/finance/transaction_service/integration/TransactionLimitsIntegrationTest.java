@@ -2,13 +2,16 @@ package com.suhasan.finance.transaction_service.integration;
 
 import com.suhasan.finance.transaction_service.dto.*;
 import com.suhasan.finance.transaction_service.entity.Transaction;
+import com.suhasan.finance.transaction_service.entity.TransactionLimit;
 import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
+import com.suhasan.finance.transaction_service.repository.TransactionLimitRepository;
 import com.suhasan.finance.transaction_service.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.cache.CacheManager;
 import org.springframework.http.*;
 import org.springframework.test.context.ContextConfiguration;
 
@@ -32,6 +35,12 @@ class TransactionLimitsIntegrationTest extends BaseIntegrationTest {
     private TransactionRepository transactionRepository;
 
     @Autowired
+    private TransactionLimitRepository transactionLimitRepository;
+
+    @Autowired
+    private CacheManager cacheManager;
+
+    @Autowired
     private IntegrationTestConfiguration.JwtTestUtil jwtTestUtil;
 
     private AccountServiceStubs accountServiceStubs;
@@ -42,8 +51,25 @@ class TransactionLimitsIntegrationTest extends BaseIntegrationTest {
         accountServiceStubs = new AccountServiceStubs(getWireMockServer(), objectMapper);
         validJwtToken = jwtTestUtil.generateToken("testuser");
         
-        // Clear database before each test
+        // Reset transaction data and install deterministic CHECKING limits.
         transactionRepository.deleteAll();
+        transactionLimitRepository.deleteAll();
+        transactionLimitRepository.save(TransactionLimit.builder()
+                .accountType("CHECKING")
+                .transactionType(TransactionType.TRANSFER)
+                .perTransactionLimit(BigDecimal.valueOf(10000.00))
+                .active(true)
+                .build());
+        transactionLimitRepository.save(TransactionLimit.builder()
+                .accountType("CHECKING")
+                .transactionType(TransactionType.WITHDRAWAL)
+                .perTransactionLimit(BigDecimal.valueOf(10000.00))
+                .active(true)
+                .build());
+        var limitCache = cacheManager.getCache("transaction:limits");
+        if (limitCache != null) {
+            limitCache.clear();
+        }
     }
 
     @Test

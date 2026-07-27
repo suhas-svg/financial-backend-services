@@ -12,9 +12,9 @@ keywords:
   - transaction-service
   - payments
 
-home: https://github.com/your-org/transaction-service
+home: https://github.com/suhas-svg/financial-backend-services
 sources:
-  - https://github.com/your-org/transaction-service
+  - https://github.com/suhas-svg/financial-backend-services
 
 maintainers:
   - name: Development Team

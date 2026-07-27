@@ -151,10 +151,17 @@ jobs:
         run: |
           set -euo pipefail
           for chart in account-service transaction-service; do
-            helm lint "infrastructure/helm/${chart}"
-            helm template "${chart}" "infrastructure/helm/${chart}" > "/tmp/${chart}.yaml"
+            repository="validation/${chart}"
+            helm lint "infrastructure/helm/${chart}" \
+              --set "image.repository=${repository}" \
+              --set "image.tag=1.0.0"
             helm template "${chart}" "infrastructure/helm/${chart}" \
-              --values "infrastructure/helm/${chart}/values-prod.yaml" > "/tmp/${chart}-prod.yaml"
+              --set "image.repository=${repository}" \
+              --set "image.tag=1.0.0" > "/tmp/${chart}.yaml"
+            helm template "${chart}" "infrastructure/helm/${chart}" \
+              --values "infrastructure/helm/${chart}/values-prod.yaml" \
+              --set "image.repository=${repository}" \
+              --set "image.tag=1.0.0" > "/tmp/${chart}-prod.yaml"
           done
       - name: Check Terraform formatting
         run: terraform -chdir=infrastructure/terraform fmt -check -recursive

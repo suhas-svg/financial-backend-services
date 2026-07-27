@@ -56,31 +56,31 @@ public class AccountController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Account> get(@PathVariable final Long id, final Authentication authentication) {
+    public ResponseEntity<AccountResponse> get(@PathVariable final Long id, final Authentication authentication) {
         final Account existing = service.findById(id);
         assertOwnerOrPrivileged(existing, authentication);
-        return ResponseEntity.ok(existing);
+        return ResponseEntity.ok(service.toResponse(existing));
     }
 
     @PostMapping
-    public ResponseEntity<Account> create(@Valid @RequestBody final AccountCreateRequest request, final Authentication authentication) {
+    public ResponseEntity<AccountResponse> create(@Valid @RequestBody final AccountCreateRequest request, final Authentication authentication) {
         String ownerId = isAdmin(authentication) || isInternalService(authentication)
                 ? request.ownerId() : authentication.getName();
         if (ownerId == null || ownerId.isBlank()) ownerId = authentication.getName();
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request, ownerId));
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.toResponse(service.create(request, ownerId)));
     }
     @PutMapping("/{id}")
-    public ResponseEntity<Account> update(
+    public ResponseEntity<AccountResponse> update(
             @PathVariable final Long id,
             @Valid @RequestBody final AccountMetadataUpdateRequest request,
             final Authentication authentication
     ) {
         final Account existing = service.findById(id);
         assertOwnerOrPrivileged(existing, authentication);
-        return ResponseEntity.ok(service.updateMetadata(id, request));
+        return ResponseEntity.ok(service.toResponse(service.updateMetadata(id, request)));
     }
     @PatchMapping("/{id}/status")
-    public ResponseEntity<Account> updateStatus(
+    public ResponseEntity<AccountResponse> updateStatus(
             @PathVariable final Long id,
             @Valid @RequestBody final AccountStatusUpdateRequest request,
             final Authentication authentication
@@ -92,7 +92,7 @@ public class AccountController {
             throw new IllegalArgumentException("Status reason is required");
         }
         final Account updated = service.updateStatus(id, request.getStatus(), request.getReason(), authentication.getName());
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.ok(service.toResponse(updated));
     }
 
     private void assertOwnerOrPrivileged(final Account account, final Authentication authentication) {

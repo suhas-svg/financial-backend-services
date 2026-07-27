@@ -102,11 +102,12 @@ class TransactionControllerTest {
     @WithMockUser(username = "user123")
     void processTransfer_Success() throws Exception {
         // Arrange
-        when(transferAuthorizationService.submit(any(TransferRequest.class), eq("user123"), isNull()))
+        when(transferAuthorizationService.submit(any(TransferRequest.class), eq("user123"), eq("test-idempotency-key")))
                 .thenReturn(transactionResponse);
 
         // Act & Assert
         mockMvc.perform(post("/api/transactions/transfer")
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(transferRequest)))
@@ -118,7 +119,7 @@ class TransactionControllerTest {
                 .andExpect(jsonPath("$.fromAccountId").value("acc1"))
                 .andExpect(jsonPath("$.toAccountId").value("acc2"));
 
-        verify(transferAuthorizationService).submit(any(TransferRequest.class), eq("user123"), isNull());
+        verify(transferAuthorizationService).submit(any(TransferRequest.class), eq("user123"), eq("test-idempotency-key"));
     }
 
     @Test
@@ -129,6 +130,7 @@ class TransactionControllerTest {
 
         // Act & Assert
         mockMvc.perform(post("/api/transactions/transfer")
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(transferRequest)))
@@ -141,6 +143,7 @@ class TransactionControllerTest {
     void processTransfer_Unauthorized() throws Exception {
         // Act & Assert
         mockMvc.perform(post("/api/transactions/transfer")
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(transferRequest)))
@@ -153,6 +156,7 @@ class TransactionControllerTest {
     @WithMockUser(username = "user123")
     void ordinaryDepositEndpoint_IsNotExposed() throws Exception {
         mockMvc.perform(post("/api/transactions/deposit")
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(depositRequest)))
@@ -165,20 +169,21 @@ class TransactionControllerTest {
     @WithMockUser(username = "user123")
     void processWithdrawal_Success() throws Exception {
         // Arrange
-        when(transactionService.processWithdrawal(eq("acc1"), eq(BigDecimal.valueOf(150)), 
-                eq("Test withdrawal"), eq("WDR-REF"), eq("user123"), isNull()))
+        when(transactionService.processWithdrawal(eq("acc1"), eq(BigDecimal.valueOf(150)),
+                eq("Test withdrawal"), eq("WDR-REF"), eq("user123"), eq("test-idempotency-key")))
                 .thenReturn(transactionResponse);
 
         // Act & Assert
         mockMvc.perform(post("/api/transactions/withdraw")
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(withdrawalRequest)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.transactionId").value("txn123"));
 
-        verify(transactionService).processWithdrawal(eq("acc1"), eq(BigDecimal.valueOf(150)), 
-                eq("Test withdrawal"), eq("WDR-REF"), eq("user123"), isNull());
+        verify(transactionService).processWithdrawal(eq("acc1"), eq(BigDecimal.valueOf(150)),
+                eq("Test withdrawal"), eq("WDR-REF"), eq("user123"), eq("test-idempotency-key"));
     }
 
     @Test
@@ -204,7 +209,7 @@ class TransactionControllerTest {
         String accountId = "acc1";
         List<TransactionResponse> transactions = Arrays.asList(transactionResponse);
         Page<TransactionResponse> page = new PageImpl<>(transactions, PageRequest.of(0, 20), 1);
-        
+
         when(transactionService.getAccountTransactions(eq(accountId), any()))
                 .thenReturn(page);
 
@@ -224,7 +229,7 @@ class TransactionControllerTest {
         // Arrange
         List<TransactionResponse> transactions = Arrays.asList(transactionResponse);
         Page<TransactionResponse> page = new PageImpl<>(transactions, PageRequest.of(0, 20), 1);
-        
+
         when(transactionService.getUserTransactions(eq("user123"), any()))
                 .thenReturn(page);
 
@@ -243,7 +248,7 @@ class TransactionControllerTest {
         // Arrange
         List<TransactionResponse> transactions = Arrays.asList(transactionResponse);
         Page<TransactionResponse> page = new PageImpl<>(transactions, PageRequest.of(0, 20), 1);
-        
+
         when(transactionService.getUserTransactions(eq("user123"), any()))
                 .thenReturn(page);
 
@@ -262,7 +267,7 @@ class TransactionControllerTest {
         // Arrange
         TransactionStatus status = TransactionStatus.COMPLETED;
         List<TransactionResponse> transactions = Arrays.asList(transactionResponse);
-        
+
         when(transactionService.getTransactionsByStatus(status)).thenReturn(transactions);
 
         // Act & Assert
@@ -286,12 +291,13 @@ class TransactionControllerTest {
                 .status(TransactionStatus.COMPLETED)
                 .originalTransactionId(transactionId)
                 .build();
-        
-        when(transactionService.reverseTransaction(eq(transactionId), eq("Customer request"), eq("user123")))
+
+        when(transactionService.reverseTransaction(eq(transactionId), eq("Customer request"), eq("user123"), eq("test-idempotency-key")))
                 .thenReturn(reversalResponse);
 
         // Act & Assert
         mockMvc.perform(post("/api/transactions/{transactionId}/reverse", transactionId)
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(reversalRequest)))
@@ -300,7 +306,7 @@ class TransactionControllerTest {
                 .andExpect(jsonPath("$.type").value("REVERSAL"))
                 .andExpect(jsonPath("$.originalTransactionId").value(transactionId));
 
-        verify(transactionService).reverseTransaction(eq(transactionId), eq("Customer request"), eq("user123"));
+        verify(transactionService).reverseTransaction(eq(transactionId), eq("Customer request"), eq("user123"), eq("test-idempotency-key"));
     }
 
     @Test
@@ -346,7 +352,7 @@ class TransactionControllerTest {
                 .originalTransactionId(transactionId)
                 .build();
         List<TransactionResponse> reversals = Arrays.asList(reversalResponse);
-        
+
         when(transactionService.getReversalTransactions(transactionId)).thenReturn(reversals);
 
         // Act & Assert
@@ -361,25 +367,11 @@ class TransactionControllerTest {
 
     @Test
     @WithMockUser(username = "user123")
-    void getTransactionLimits_Success() throws Exception {
-        // Act & Assert
-        mockMvc.perform(get("/api/transactions/limits"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.dailyLimit").value(10000.00))
-                .andExpect(jsonPath("$.monthlyLimit").value(50000.00))
-                .andExpect(jsonPath("$.singleTransactionLimit").value(10000.00))
-                .andExpect(jsonPath("$.currency").value("USD"));
-
-        verifyNoInteractions(transactionService);
-    }
-
-    @Test
-    @WithMockUser(username = "user123")
     void searchTransactions_Success() throws Exception {
         // Arrange
         List<TransactionResponse> transactions = Arrays.asList(transactionResponse);
         Page<TransactionResponse> page = new PageImpl<>(transactions, PageRequest.of(0, 20), 1);
-        
+
         when(transactionService.searchTransactions(any(), any())).thenReturn(page);
 
         // Act & Assert
@@ -411,34 +403,36 @@ class TransactionControllerTest {
     @WithMockUser(username = "user123")
     void processTransfer_ServiceException() throws Exception {
         // Arrange
-        when(transferAuthorizationService.submit(any(TransferRequest.class), eq("user123"), isNull()))
+        when(transferAuthorizationService.submit(any(TransferRequest.class), eq("user123"), eq("test-idempotency-key")))
                 .thenThrow(new RuntimeException("Service error"));
 
         // Act & Assert
         mockMvc.perform(post("/api/transactions/transfer")
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(transferRequest)))
                 .andExpect(status().isInternalServerError());
 
-        verify(transferAuthorizationService).submit(any(TransferRequest.class), eq("user123"), isNull());
+        verify(transferAuthorizationService).submit(any(TransferRequest.class), eq("user123"), eq("test-idempotency-key"));
     }
 
     @Test
     @WithMockUser(username = "user123")
     void processTransfer_IllegalArgumentException() throws Exception {
         // Arrange
-        when(transferAuthorizationService.submit(any(TransferRequest.class), eq("user123"), isNull()))
+        when(transferAuthorizationService.submit(any(TransferRequest.class), eq("user123"), eq("test-idempotency-key")))
                 .thenThrow(new IllegalArgumentException("Invalid account"));
 
         // Act & Assert
         mockMvc.perform(post("/api/transactions/transfer")
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(transferRequest)))
                 .andExpect(status().isBadRequest());
 
-        verify(transferAuthorizationService).submit(any(TransferRequest.class), eq("user123"), isNull());
+        verify(transferAuthorizationService).submit(any(TransferRequest.class), eq("user123"), eq("test-idempotency-key"));
     }
 
     @Test
@@ -465,6 +459,7 @@ class TransactionControllerTest {
 
         // Act & Assert
         mockMvc.perform(post("/api/transactions/withdraw")
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(withdrawalRequest)))
@@ -482,6 +477,7 @@ class TransactionControllerTest {
 
         // Act & Assert
         mockMvc.perform(post("/api/transactions/{transactionId}/reverse", transactionId)
+                .header("Idempotency-Key", "test-idempotency-key")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(reversalRequest)))

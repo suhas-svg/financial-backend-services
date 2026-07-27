@@ -150,6 +150,7 @@ export type MfaConfirmation = { active: boolean; recoveryCodes: string[] };
 export type ChallengeVerification = { challengeId: string; proof: string; proofExpiresAt: string };
 export type SpendingLimit = {
   accountId: number;
+  currency: string;
   transferDailyLimit: number;
   withdrawalDailyLimit: number;
   transferUsedToday: number;

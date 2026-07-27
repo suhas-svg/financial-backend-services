@@ -69,11 +69,12 @@ class TransactionControllerReversalTest {
                 .reversalReason("Customer request for refund")
                 .build();
 
-        when(transactionService.reverseTransaction("original-tx-123", "Customer request for refund", "admin-user"))
+        when(transactionService.reverseTransaction("original-tx-123", "Customer request for refund", "admin-user", "test-idempotency-key"))
                 .thenReturn(response);
 
         // Act & Assert
         mockMvc.perform(post("/api/transactions/original-tx-123/reverse")
+                        .header("Idempotency-Key", "test-idempotency-key")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -85,7 +86,7 @@ class TransactionControllerReversalTest {
                 .andExpect(jsonPath("$.amount").value(100.00))
                 .andExpect(jsonPath("$.status").value("COMPLETED"));
 
-        verify(transactionService).reverseTransaction("original-tx-123", "Customer request for refund", "admin-user");
+        verify(transactionService).reverseTransaction("original-tx-123", "Customer request for refund", "admin-user", "test-idempotency-key");
     }
 
     @Test
@@ -96,17 +97,18 @@ class TransactionControllerReversalTest {
                 .reason("Customer request")
                 .build();
 
-        when(transactionService.reverseTransaction("original-tx-123", "Customer request", "admin-user"))
+        when(transactionService.reverseTransaction("original-tx-123", "Customer request", "admin-user", "test-idempotency-key"))
                 .thenThrow(new TransactionAlreadyReversedException("original-tx-123"));
 
         // Act & Assert
         mockMvc.perform(post("/api/transactions/original-tx-123/reverse")
+                        .header("Idempotency-Key", "test-idempotency-key")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict());
 
-        verify(transactionService).reverseTransaction("original-tx-123", "Customer request", "admin-user");
+        verify(transactionService).reverseTransaction("original-tx-123", "Customer request", "admin-user", "test-idempotency-key");
     }
 
     @Test
@@ -119,12 +121,13 @@ class TransactionControllerReversalTest {
 
         // Act & Assert
         mockMvc.perform(post("/api/transactions/original-tx-123/reverse")
+                        .header("Idempotency-Key", "test-idempotency-key")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
 
-        verify(transactionService, never()).reverseTransaction(anyString(), anyString(), anyString());
+        verify(transactionService, never()).reverseTransaction(anyString(), anyString(), anyString(), anyString());
     }
 
     @Test
@@ -202,11 +205,12 @@ class TransactionControllerReversalTest {
 
         // Act & Assert - no authentication
         mockMvc.perform(post("/api/transactions/original-tx-123/reverse")
+                        .header("Idempotency-Key", "test-idempotency-key")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized());
 
-        verify(transactionService, never()).reverseTransaction(anyString(), anyString(), anyString());
+        verify(transactionService, never()).reverseTransaction(anyString(), anyString(), anyString(), anyString());
     }
 }

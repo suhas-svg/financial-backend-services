@@ -31,7 +31,7 @@ public class SecurityConfig {
                         // â”€â”€ Public read-only health probes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         .requestMatchers("/api/transactions/health").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
 
                         // â”€â”€ Privileged actuator endpoints (Prometheus scrape, metrics) â”€â”€â”€â”€â”€â”€â”€
                         .requestMatchers("/actuator/prometheus", "/actuator/metrics", "/actuator/metrics/**")
@@ -52,6 +52,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/disputes/admin/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
                         .requestMatchers("/api/disputes/**").authenticated()
 
+                        .requestMatchers("/api/transactions/status/**")
+                                .hasAnyRole("ADMIN", "INTERNAL_SERVICE")
                         // â”€â”€ Transaction endpoints â€” require authenticated user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         .requestMatchers("/api/scheduled-transfers/**").authenticated()
                         .requestMatchers("/api/outcome-protection/**").authenticated()

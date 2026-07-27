@@ -167,13 +167,21 @@ Create database secret name
 Validate required values
 */}}
 {{- define "account-service.validateValues" -}}
-{{- if not .Values.database.host }}
+{{- if not .Values.image.repository }}
+{{- fail "image.repository is required" }}
+{{- end }}
+{{- if or (not .Values.image.tag) (eq .Values.image.tag "latest") }}
+{{- fail "image.tag must be an explicit immutable version" }}
+{{- end }}
 {{- if not .Values.postgresql.enabled }}
+{{- if not .Values.database.host }}
 {{- fail "database.host is required when postgresql.enabled is false" }}
 {{- end }}
+{{- if not .Values.database.existingSecret }}
+{{- fail "database.existingSecret is required when postgresql.enabled is false" }}
 {{- end }}
 {{- end }}
-
+{{- end }}
 {{/*
 Create environment variables
 */}}

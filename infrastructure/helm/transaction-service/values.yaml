@@ -15,8 +15,8 @@ app:
 # Image configuration
 image:
   registry: ghcr.io
-  repository: your-org/transaction-service
-  tag: "latest"
+  repository: "" # Required: set to the immutable image repository built by CI
+  tag: "1.0.0"
   pullPolicy: IfNotPresent
   pullSecrets: []
 
@@ -326,5 +326,5 @@ tests:
   enabled: true
   image:
     repository: curlimages/curl
-    tag: latest
+    tag: "8.12.1"
     pullPolicy: IfNotPresent

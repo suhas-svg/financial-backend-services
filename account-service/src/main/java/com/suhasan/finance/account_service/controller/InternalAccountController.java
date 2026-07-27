@@ -6,7 +6,6 @@ import com.suhasan.finance.account_service.dto.BalanceOperationResponse;
 import com.suhasan.finance.account_service.dto.DebitHoldRequest;
 import com.suhasan.finance.account_service.dto.DebitHoldResponse;
 import com.suhasan.finance.account_service.dto.LedgerProjectionUpdateRequest;
-import com.suhasan.finance.account_service.entity.Account;
 import com.suhasan.finance.account_service.service.AccountService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -53,13 +52,13 @@ public class InternalAccountController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Account> get(@PathVariable final Long id) {
-        return ResponseEntity.ok(accountService.findById(id));
+    public ResponseEntity<AccountResponse> get(@PathVariable final Long id) {
+        return ResponseEntity.ok(accountService.toResponse(accountService.findById(id)));
     }
 
     @PostMapping("/{id}/close")
-    public ResponseEntity<Account> close(@PathVariable final Long id, @RequestParam final String reason) {
-        return ResponseEntity.ok(accountService.close(id, reason, "transaction-service"));
+    public ResponseEntity<AccountResponse> close(@PathVariable final Long id, @RequestParam final String reason) {
+        return ResponseEntity.ok(accountService.toResponse(accountService.close(id, reason, "transaction-service")));
     }
 
     @PostMapping("/{id}/balance-ops")

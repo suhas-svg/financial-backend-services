@@ -29,7 +29,7 @@ public class TransferAuthorizationService {
     private final TransactionService transactionService;
     private final AuditService auditService;
 
-    @Transactional(noRollbackFor = Exception.class)
+    @Transactional
     public TransactionResponse submit(TransferRequest request, String userId, String idempotencyKey) {
         String fingerprint = TransferAuthorizationFingerprint.of(userId, request);
         String normalizedKey = normalizeKey(idempotencyKey);

@@ -20,6 +20,10 @@ import org.mockito.quality.Strictness;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
@@ -636,6 +640,38 @@ class TransactionServiceImplTest {
                 verify(transactionRepository).findById(transactionId);
         }
 
+
+        @Test
+        void getTransaction_DifferentUserIsDenied() {
+                when(transactionRepository.findById("txn123")).thenReturn(Optional.of(transaction));
+                SecurityContextHolder.getContext().setAuthentication(
+                                new UsernamePasswordAuthenticationToken("attacker", "n/a",
+                                                List.of(new SimpleGrantedAuthority("ROLE_USER"))));
+                try {
+                        assertThrows(AccessDeniedException.class,
+                                        () -> transactionService.getTransaction("txn123"));
+                } finally {
+                        SecurityContextHolder.clearContext();
+                }
+        }
+
+        @Test
+        void getAccountTransactions_DifferentOwnerIsDenied() {
+                String accountId = String.valueOf(fromAccount.getId());
+                when(accountServiceClient.getAccount(accountId)).thenReturn(fromAccount);
+                SecurityContextHolder.getContext().setAuthentication(
+                                new UsernamePasswordAuthenticationToken("attacker", "n/a",
+                                                List.of(new SimpleGrantedAuthority("ROLE_USER"))));
+                try {
+                        assertThrows(AccessDeniedException.class,
+                                        () -> transactionService.getAccountTransactions(
+                                                        accountId, PageRequest.of(0, 10)));
+                        verify(transactionRepository, never())
+                                        .findByFromAccountIdOrToAccountIdOrderByCreatedAtDesc(any(), any(), any());
+                } finally {
+                        SecurityContextHolder.clearContext();
+                }
+        }
         @Test
         void getTransaction_NotFound() {
                 // Arrange
@@ -829,6 +865,7 @@ class TransactionServiceImplTest {
                 // Arrange
                 String transactionId = "txn123";
                 when(transactionRepository.isTransactionReversed(transactionId)).thenReturn(true);
+                when(transactionRepository.findById(transactionId)).thenReturn(Optional.of(transaction));
 
                 // Act
                 boolean result = transactionService.isTransactionReversed(transactionId);
@@ -843,6 +880,7 @@ class TransactionServiceImplTest {
                 // Arrange
                 String transactionId = "txn123";
                 when(transactionRepository.isTransactionReversed(transactionId)).thenReturn(false);
+                when(transactionRepository.findById(transactionId)).thenReturn(Optional.of(transaction));
 
                 // Act
                 boolean result = transactionService.isTransactionReversed(transactionId);
@@ -858,6 +896,7 @@ class TransactionServiceImplTest {
                 String originalTransactionId = "txn123";
                 List<Transaction> reversals = Arrays.asList(transaction);
 
+                when(transactionRepository.findById(originalTransactionId)).thenReturn(Optional.of(transaction));
                 when(transactionRepository.findReversalsByOriginalTransactionId(originalTransactionId))
                                 .thenReturn(reversals);
 
@@ -933,7 +972,7 @@ class TransactionServiceImplTest {
                 TransactionType type = TransactionType.TRANSFER;
                 BigDecimal amount = BigDecimal.valueOf(15000);
                 when(transactionLimitService.validateTransactionLimits(accountId, accountType, type, amount))
-                                .thenReturn(true);
+                                .thenReturn(false);
 
                 // Act
                 boolean result = transactionService.validateTransactionLimits(accountId, accountType, type, amount);

@@ -6,8 +6,8 @@ replicaCount: 1
 # Development image configuration
 image:
   registry: ghcr.io
-  repository: your-org/account-service
-  tag: "dev-latest"
+  repository: ""
+  tag: "1.0.0"
   pullPolicy: Always
 
 # Reduced resources for development
@@ -98,32 +98,32 @@ configMap:
       # Development Spring Boot Configuration
       server.port=8080
       server.servlet.context-path=/
-      
+
       # Database Configuration
       spring.datasource.url=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
       spring.datasource.username=${DB_USERNAME}
       spring.datasource.password=${DB_PASSWORD}
       spring.datasource.driver-class-name=org.postgresql.Driver
-      
+
       # JPA Configuration - More verbose for development
       spring.jpa.hibernate.ddl-auto=update
       spring.jpa.show-sql=true
       spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
       spring.jpa.properties.hibernate.format_sql=true
       spring.jpa.properties.hibernate.use_sql_comments=true
-      
+
       # Actuator Configuration - More endpoints exposed
       management.endpoints.web.base-path=/actuator
       management.endpoints.web.exposure.include=*
       management.endpoint.health.show-details=always
       management.endpoint.health.show-components=always
       management.health.probes.enabled=true
-      
+
       # Metrics Configuration
       management.metrics.export.prometheus.enabled=true
       management.metrics.distribution.percentiles-histogram.http.server.requests=true
       management.metrics.distribution.percentiles.http.server.requests=0.5,0.95,0.99
-      
+
       # Development Logging Configuration
       logging.level.com.suhasan.finance.account_service=DEBUG
       logging.level.org.springframework.security=DEBUG

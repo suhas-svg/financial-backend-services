@@ -26,6 +26,7 @@ class AccountControllerTest {
     private AccountService service;
     private AccountController controller;
     private CheckingAccount account;
+    private AccountResponse response;
 
     @BeforeEach
     void setUp() {
@@ -34,8 +35,12 @@ class AccountControllerTest {
         account = new CheckingAccount();
         account.setId(1L);
         account.setOwnerId("owner");
-    }
+        response = new AccountResponse();
+        response.setId(1L);
+        response.setOwnerId("owner");
+        when(service.toResponse(account)).thenReturn(response);
 
+    }
     @Test
     void customerListingIsAlwaysScopedWhileAdminAndInternalCanChooseOwner() {
         PageRequest page = PageRequest.of(0, 20);
@@ -56,14 +61,14 @@ class AccountControllerTest {
         when(service.findById(1L)).thenReturn(account);
         when(service.updateMetadata(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(account);
-        assertThat(controller.get(1L, auth("owner", "ROLE_USER")).getBody()).isSameAs(account);
+        assertThat(controller.get(1L, auth("owner", "ROLE_USER")).getBody()).isSameAs(response);
         assertThatThrownBy(() -> controller.get(1L, auth("other", "ROLE_USER")))
                 .isInstanceOf(AccessDeniedException.class);
-        assertThat(controller.get(1L, auth("admin", "ROLE_ADMIN")).getBody()).isSameAs(account);
-        assertThat(controller.get(1L, auth("service", "ROLE_INTERNAL_SERVICE")).getBody()).isSameAs(account);
+        assertThat(controller.get(1L, auth("admin", "ROLE_ADMIN")).getBody()).isSameAs(response);
+        assertThat(controller.get(1L, auth("service", "ROLE_INTERNAL_SERVICE")).getBody()).isSameAs(response);
 
         AccountMetadataUpdateRequest request = new AccountMetadataUpdateRequest(null, null, null);
-        assertThat(controller.update(1L, request, auth("owner", "ROLE_USER")).getBody()).isSameAs(account);
+        assertThat(controller.update(1L, request, auth("owner", "ROLE_USER")).getBody()).isSameAs(response);
         assertThatThrownBy(() -> controller.update(1L, request, auth("other", "ROLE_USER")))
                 .isInstanceOf(AccessDeniedException.class);
     }

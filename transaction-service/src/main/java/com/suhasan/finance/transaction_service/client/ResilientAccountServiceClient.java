@@ -598,9 +598,21 @@ public class ResilientAccountServiceClient {
         private boolean allowed;
         private boolean replay;
         private BigDecimal dailyLimit;
+        private String currency;
+
         private BigDecimal dailyUsed;
         private BigDecimal remaining;
         private String reason;
+
+        public SpendingLimitReservationResponse(boolean allowed, boolean replay, BigDecimal dailyLimit,
+                                                BigDecimal dailyUsed, BigDecimal remaining, String reason) {
+            this.allowed = allowed;
+            this.replay = replay;
+            this.dailyLimit = dailyLimit;
+            this.dailyUsed = dailyUsed;
+            this.remaining = remaining;
+            this.reason = reason;
+        }
     }
 
     @Data

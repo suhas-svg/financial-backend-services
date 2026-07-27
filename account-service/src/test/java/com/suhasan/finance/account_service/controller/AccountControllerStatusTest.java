@@ -1,6 +1,7 @@
 package com.suhasan.finance.account_service.controller;
 
 import com.suhasan.finance.account_service.dto.AccountStatusUpdateRequest;
+import com.suhasan.finance.account_service.dto.AccountResponse;
 import com.suhasan.finance.account_service.entity.Account;
 import com.suhasan.finance.account_service.entity.AccountStatus;
 import com.suhasan.finance.account_service.entity.CheckingAccount;
@@ -38,11 +39,15 @@ class AccountControllerStatusTest {
     @Test
     @DisplayName("Admin can freeze account with reason")
     void adminCanFreezeAccountWithReason() {
+        AccountResponse response = new AccountResponse();
+        response.setId(1L);
+        response.setStatus(AccountStatus.FROZEN);
+        when(accountService.toResponse(account)).thenReturn(response);
         account.setStatus(AccountStatus.FROZEN);
         when(accountService.updateStatus(1L, AccountStatus.FROZEN, "fraud review", "admin"))
                 .thenReturn(account);
 
-        Account result = controller.updateStatus(
+        AccountResponse result = controller.updateStatus(
                 1L,
                 new AccountStatusUpdateRequest(AccountStatus.FROZEN, "fraud review"),
                 auth("admin", "ROLE_ADMIN")

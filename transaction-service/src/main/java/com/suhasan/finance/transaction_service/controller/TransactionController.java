@@ -33,25 +33,25 @@ import java.util.Map;
 @RequiredArgsConstructor
 @Slf4j
 public class TransactionController {
-    
+
     private final TransactionService transactionService;
     private final TransferAuthorizationService transferAuthorizationService;
-    
+
     /**
      * Process a transfer between accounts
      */
     @PostMapping("/transfer")
     public ResponseEntity<TransactionResponse> processTransfer(
             @Valid @RequestBody TransferRequest request,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
             Authentication authentication) {
-        
-        log.info("Processing transfer request from {} to {} for amount {}", 
+
+        log.info("Processing transfer request from {} to {} for amount {}",
                 request.getFromAccountId(), request.getToAccountId(), request.getAmount());
-        
+
         String userId = authentication.getName();
         TransactionResponse response = transferAuthorizationService.submit(request, userId, idempotencyKey);
-        
+
         HttpStatus status = Boolean.TRUE.equals(response.getAuthorizationRequired())
                 ? HttpStatus.ACCEPTED : HttpStatus.CREATED;
         return ResponseEntity.status(status).body(response);
@@ -73,39 +73,36 @@ public class TransactionController {
         return ResponseEntity.ok(transferAuthorizationService.cancel(
                 authorizationId, authentication.getName()));
     }
-    
+
     /**
      * Process a withdrawal from an account
      */
     @PostMapping("/withdraw")
     public ResponseEntity<TransactionResponse> processWithdrawal(
             @Valid @RequestBody WithdrawalRequest request,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
             Authentication authentication) {
-        
+
         log.info("Processing withdrawal from account {} for amount {}", request.getAccountId(), request.getAmount());
-        
+
         String userId = authentication.getName();
-        TransactionResponse response = idempotencyKey == null || idempotencyKey.isBlank()
-                ? transactionService.processWithdrawal(
-                    request.getAccountId(), request.getAmount(), request.getDescription(), request.getReference(), userId, null)
-                : transactionService.processWithdrawal(
-                    request.getAccountId(), request.getAmount(), request.getDescription(), request.getReference(), userId, idempotencyKey);
-        
+        TransactionResponse response = transactionService.processWithdrawal(
+                request.getAccountId(), request.getAmount(), request.getDescription(), request.getReference(), userId, idempotencyKey);
+
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
-    
+
     /**
      * Get transaction by ID
      */
     @GetMapping("/{transactionId}")
     public ResponseEntity<TransactionResponse> getTransaction(@PathVariable String transactionId) {
         log.debug("Retrieving transaction: {}", transactionId);
-        
+
         TransactionResponse response = transactionService.getTransaction(transactionId);
         return ResponseEntity.ok(response);
     }
-    
+
     /**
      * Get transaction history for an account
      */
@@ -113,13 +110,13 @@ public class TransactionController {
     public ResponseEntity<Page<TransactionResponse>> getAccountTransactions(
             @PathVariable String accountId,
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
-        
+
         log.debug("Retrieving transactions for account: {}", accountId);
-        
+
         Page<TransactionResponse> transactions = transactionService.getAccountTransactions(accountId, pageable);
         return ResponseEntity.ok(transactions);
     }
-    
+
     /**
      * Get transaction history for the authenticated user
      */
@@ -127,14 +124,14 @@ public class TransactionController {
     public ResponseEntity<Page<TransactionResponse>> getUserTransactions(
             Authentication authentication,
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
-        
+
         String userId = authentication.getName();
         log.debug("Retrieving transactions for user: {}", userId);
-        
+
         Page<TransactionResponse> transactions = transactionService.getUserTransactions(userId, pageable);
         return ResponseEntity.ok(transactions);
     }
-    
+
     /**
      * Get transaction history for the authenticated user (alternative endpoint)
      */
@@ -142,25 +139,25 @@ public class TransactionController {
     public ResponseEntity<Page<TransactionResponse>> getUserTransactionsAlternative(
             Authentication authentication,
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
-        
+
         String userId = authentication.getName();
         log.debug("Retrieving transactions for user: {}", userId);
-        
+
         Page<TransactionResponse> transactions = transactionService.getUserTransactions(userId, pageable);
         return ResponseEntity.ok(transactions);
     }
-    
+
     /**
      * Get transactions by status
      */
     @GetMapping("/status/{status}")
     public ResponseEntity<List<TransactionResponse>> getTransactionsByStatus(@PathVariable TransactionStatus status) {
         log.debug("Retrieving transactions with status: {}", status);
-        
+
         List<TransactionResponse> transactions = transactionService.getTransactionsByStatus(status);
         return ResponseEntity.ok(transactions);
     }
-    
+
     /**
      * Reverse a transaction
      */
@@ -168,46 +165,45 @@ public class TransactionController {
     public ResponseEntity<TransactionResponse> reverseTransaction(
             @PathVariable String transactionId,
             @Valid @RequestBody ReversalRequest request,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
             Authentication authentication) {
-        
+
         log.info("Reversing transaction {} with reason: {}", transactionId, request.getReason());
-        
+
         String userId = authentication.getName();
-        TransactionResponse response = idempotencyKey == null || idempotencyKey.isBlank()
-                ? transactionService.reverseTransaction(transactionId, request.getReason(), userId)
-                : transactionService.reverseTransaction(transactionId, request.getReason(), userId, idempotencyKey);
-        
+        TransactionResponse response = transactionService.reverseTransaction(
+                transactionId, request.getReason(), userId, idempotencyKey);
+
         return ResponseEntity.ok(response);
     }
-    
+
     /**
      * Check if a transaction has been reversed
      */
     @GetMapping("/{transactionId}/reversed")
     public ResponseEntity<Map<String, Object>> isTransactionReversed(@PathVariable String transactionId) {
         log.debug("Checking if transaction {} has been reversed", transactionId);
-        
+
         boolean isReversed = transactionService.isTransactionReversed(transactionId);
         Map<String, Object> response = Map.of(
             "transactionId", transactionId,
             "isReversed", isReversed
         );
-        
+
         return ResponseEntity.ok(response);
     }
-    
+
     /**
      * Get reversal transactions for an original transaction
      */
     @GetMapping("/{transactionId}/reversals")
     public ResponseEntity<List<TransactionResponse>> getReversalTransactions(@PathVariable String transactionId) {
         log.debug("Retrieving reversal transactions for: {}", transactionId);
-        
+
         List<TransactionResponse> reversals = transactionService.getReversalTransactions(transactionId);
         return ResponseEntity.ok(reversals);
     }
-    
+
     /**
      * Get transaction statistics for an account
      */
@@ -216,32 +212,14 @@ public class TransactionController {
             @PathVariable String accountId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
-        
+
         log.debug("Retrieving transaction statistics for account: {} from {} to {}", accountId, startDate, endDate);
-        
+
         TransactionStatsResponse stats = transactionService.getAccountTransactionStats(accountId, startDate, endDate);
         return ResponseEntity.ok(stats);
     }
-    
-    /**
-     * Get transaction limits for the user
-     */
-    @GetMapping("/limits")
-    public ResponseEntity<Map<String, Object>> getTransactionLimits(Authentication authentication) {
-        String userId = authentication.getName();
-        log.debug("Retrieving transaction limits for user: {}", userId);
-        
-        // Basic limits - can be enhanced later
-        Map<String, Object> limits = Map.of(
-            "dailyLimit", 10000.00,
-            "monthlyLimit", 50000.00,
-            "singleTransactionLimit", 10000.00,
-            "currency", "USD"
-        );
-        
-        return ResponseEntity.ok(limits);
-    }
-    
+
+
     /**
      * Search transactions with filters
      */
@@ -260,9 +238,9 @@ public class TransactionController {
             @RequestParam(required = false) String toAccountId,
             Authentication authentication,
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
-        
+
         log.debug("Searching transactions with filters");
-        
+
         String effectiveCreatedBy = isPrivileged(authentication) ? null : authentication.getName();
 
         TransactionFilterRequest filter = TransactionFilterRequest.builder()
@@ -279,7 +257,7 @@ public class TransactionController {
                 .toAccountId(toAccountId)
                 .createdBy(effectiveCreatedBy)
                 .build();
-        
+
         Page<TransactionResponse> transactions = transactionService.searchTransactions(filter, pageable);
         return ResponseEntity.ok(transactions);
     }
@@ -289,7 +267,7 @@ public class TransactionController {
                 .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority())
                         || "ROLE_INTERNAL_SERVICE".equals(authority.getAuthority()));
     }
-    
+
     /**
      * Get transaction statistics for the authenticated user
      */
@@ -298,14 +276,14 @@ public class TransactionController {
             Authentication authentication,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
-        
+
         String userId = authentication.getName();
         log.debug("Retrieving transaction statistics for user: {} from {} to {}", userId, startDate, endDate);
-        
+
         TransactionStatsResponse stats = transactionService.getUserTransactionStats(userId, startDate, endDate);
         return ResponseEntity.ok(stats);
     }
-    
+
     /**
      * Health check endpoint
      */

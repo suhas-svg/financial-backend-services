@@ -11,9 +11,9 @@ keywords:
   - spring-boot
   - account-service
 
-home: https://github.com/your-org/account-service
+home: https://github.com/suhas-svg/financial-backend-services
 sources:
-  - https://github.com/your-org/account-service
+  - https://github.com/suhas-svg/financial-backend-services
 
 maintainers:
   - name: Development Team

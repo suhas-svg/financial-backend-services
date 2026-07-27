@@ -215,6 +215,8 @@ class TransactionServiceReversalTest {
         void testIsTransactionReversed() {
                 // Arrange
                 when(transactionRepository.isTransactionReversed("tx-123")).thenReturn(true);
+                when(transactionRepository.findById("tx-123")).thenReturn(Optional.of(originalTransaction));
+                when(transactionRepository.findById("tx-456")).thenReturn(Optional.of(originalTransaction));
                 when(transactionRepository.isTransactionReversed("tx-456")).thenReturn(false);
 
                 // Act & Assert

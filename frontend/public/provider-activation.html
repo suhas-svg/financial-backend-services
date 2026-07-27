@@ -43,35 +43,10 @@
   </section>
 </main>
 <script>
-  const token = sessionStorage.getItem("financial-console-token");
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  const adminUrl = "/transaction-api/api/admin/provider-activations";
-  const customerUrl = "/transaction-api/api/outcome-protection/provider-activation-status";
-  const stages = ["DRAFT","SANDBOX_CERTIFIED","APPROVED","ACTIVE"];
-  const label = {DRAFT:"CONFIGURED",SANDBOX_CERTIFIED:"SANDBOX CERTIFIED",APPROVED:"EXTERNALLY APPROVED",ACTIVE:"PRODUCTION ACTIVE",SUSPENDED:"SUSPENDED"};
-  function render(rows, admin) {
-    document.getElementById("scope").textContent = admin ? "OPERATOR VIEW" : "CUSTOMER-SAFE VIEW";
-    document.getElementById("scope").className = "badge SANDBOX_CERTIFIED";
-    document.getElementById("status").textContent = rows.length ? `${rows.length} configured boundary record(s).` : "No provider boundary has been configured.";
-    document.getElementById("cards").innerHTML = rows.map(row => {
-      const state = row.lifecycle_status || row.lifecycleStatus || "DRAFT";
-      const boundary = row.boundary_type || row.boundaryType || "UNKNOWN";
-      const alias = admin ? (row.provider_alias || "Provider-neutral") : "Provider details restricted";
-      const position = state === "SUSPENDED" ? 0 : Math.max(0, stages.indexOf(state));
-      return `<article class="card"><div class="row"><div><strong>${boundary}</strong><div class="muted">${alias}</div></div><span class="badge ${state}">${label[state] || state}</span></div><div class="gates" title="Configured, sandbox-certified, externally approved, production-active">${stages.map((_,i)=>`<span class="gate ${i<=position && state!=="SUSPENDED"?"on":""}"></span>`).join("")}</div></article>`;
-    }).join("");
-  }
-  fetch(adminUrl,{headers}).then(async response => {
-    if (response.ok) return render(await response.json(), true);
-    const fallback = await fetch(customerUrl,{headers});
-    if (!fallback.ok) throw new Error(`Access check failed (${fallback.status})`);
-    const payload = await fallback.json();
-    render(payload.states || [], false);
-  }).catch(error => {
-    document.getElementById("status").textContent = error.message;
-    document.getElementById("scope").textContent = "FAIL CLOSED";
-    document.getElementById("scope").className = "badge SUSPENDED";
-  });
+  document.getElementById("status").textContent = "Provider evidence is available only inside an authenticated operator session.";
+  document.getElementById("scope").textContent = "FAIL CLOSED";
+  document.getElementById("scope").className = "badge SUSPENDED";
+  document.getElementById("cards").innerHTML = '<article class="card"><strong>Sign in through the Financial Console</strong><p class="muted">This static page does not read, persist, or transmit bearer tokens.</p></article>';
 </script>
 </body>
 </html>

@@ -10,18 +10,18 @@ import java.util.Map;
 @AllArgsConstructor
 @Builder
 public class TransactionStatsResponse {
-    
+
     private String accountId;
     private LocalDateTime periodStart;
     private LocalDateTime periodEnd;
-    
+
     // Transaction counts
     private Long totalTransactions;
     private Long completedTransactions;
     private Long pendingTransactions;
     private Long failedTransactions;
     private Long reversedTransactions;
-    
+
     // Transaction amounts
     private BigDecimal totalAmount;
     private BigDecimal totalIncoming;
@@ -29,27 +29,40 @@ public class TransactionStatsResponse {
     private BigDecimal totalDeposits;
     private BigDecimal totalWithdrawals;
     private BigDecimal totalTransfers;
-    
+
     // Average amounts
     private BigDecimal averageTransactionAmount;
     private BigDecimal largestTransaction;
     private BigDecimal smallestTransaction;
-    
+
     // Transaction counts by type
     private Map<String, Long> transactionCountsByType;
-    
+
     // Transaction amounts by type
     private Map<String, BigDecimal> transactionAmountsByType;
-    
+
     // Daily/Monthly summaries
     private BigDecimal dailyTotal;
+    private Map<String, CurrencyBreakdown> currencyBreakdown;
     private BigDecimal monthlyTotal;
     private Long dailyCount;
     private Long monthlyCount;
-    
+
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class CurrencyBreakdown {
+        private BigDecimal totalAmount;
+        private BigDecimal totalDeposits;
+        private BigDecimal totalWithdrawals;
+        private BigDecimal totalTransfers;
+        private Long completedTransactions;
+    }
     // Success rate
     private Double successRate;
-    
+
     // Currency
     @Builder.Default
     private String currency = "USD";

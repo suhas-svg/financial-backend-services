@@ -10,7 +10,7 @@ export const loginSchema = z.object({
 
 export const registerSchema = z.object({
   username: z.string().min(1, "Username is required"),
-  password: z.string().min(6, "Password must be at least 6 characters")
+  password: z.string().min(12, "Password must be at least 12 characters")
 });
 
 export const accountSchema = z

@@ -139,7 +139,15 @@ print_success "Prerequisites check passed"
 
 # Initialize Terraform
 print_status "Initializing Terraform..."
-terraform init
+if [[ "$ENVIRONMENT" == "dev" ]]; then
+    terraform init
+else
+    if [[ -z "${TF_BACKEND_CONFIG:-}" || ! -f "$TF_BACKEND_CONFIG" ]]; then
+        print_error "TF_BACKEND_CONFIG must name an existing backend config for $ENVIRONMENT"
+        exit 1
+    fi
+    terraform init -backend-config="$TF_BACKEND_CONFIG"
+fi
 
 # Validate Terraform configuration
 print_status "Validating Terraform configuration..."
@@ -166,7 +174,7 @@ case $ACTION in
         else
             terraform apply -var="environment=$ENVIRONMENT"
         fi
-        
+
         if [[ $? -eq 0 ]]; then
             print_success "Infrastructure deployment completed successfully!"
             print_status "Getting deployment information..."
@@ -178,7 +186,7 @@ case $ACTION in
         ;;
     destroy)
         print_warning "This will destroy all infrastructure in the $ENVIRONMENT environment!"
-        
+
         if [[ "$AUTO_APPROVE" != true ]]; then
             read -p "Are you sure you want to continue? (yes/no): " confirm
             if [[ "$confirm" != "yes" ]]; then
@@ -186,14 +194,14 @@ case $ACTION in
                 exit 0
             fi
         fi
-        
+
         print_status "Running Terraform destroy for $ENVIRONMENT environment..."
         if [[ "$AUTO_APPROVE" == true ]]; then
             terraform destroy -var="environment=$ENVIRONMENT" -auto-approve
         else
             terraform destroy -var="environment=$ENVIRONMENT"
         fi
-        
+
         if [[ $? -eq 0 ]]; then
             print_success "Infrastructure destruction completed successfully!"
         else

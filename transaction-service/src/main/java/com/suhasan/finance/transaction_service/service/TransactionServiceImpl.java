@@ -27,8 +27,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
@@ -38,6 +38,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
+import java.util.HexFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -68,13 +73,17 @@ public class TransactionServiceImpl implements TransactionService {
     private boolean ledgerAuthoritative;
 
     @Override
-    @Transactional(noRollbackFor = Exception.class)
+    @Transactional
     @CacheEvict(value = "transaction:history", allEntries = true)
     public TransactionResponse processTransfer(TransferRequest request, String userId, String idempotencyKey) {
         String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
+        String requestFingerprint = canonicalFingerprint("TRANSFER", userId,
+                request.getFromAccountId(), request.getToAccountId(), request.getBeneficiaryId(),
+                request.getAmount(), request.getCurrency(), request.getDescription(), request.getReference());
         Optional<Transaction> existing = findIdempotentTransaction(userId, TransactionType.TRANSFER,
                 normalizedIdempotencyKey);
         if (existing.isPresent()) {
+            requireReplayFingerprint(existing.get(), requestFingerprint);
             return mapToResponse(existing.get());
         }
 
@@ -86,6 +95,13 @@ public class TransactionServiceImpl implements TransactionService {
         }
         ensureAccountOwnedByUser(fromAccount, userId);
         ensureAccountAllowsDebit(fromAccount, request.getFromAccountId(), userId);
+        String accountCurrency = firstNonBlank(fromAccount.getCurrency(), "USD")
+                .trim().toUpperCase(Locale.ROOT);
+        String requestCurrency = firstNonBlank(request.getCurrency(), accountCurrency)
+                .trim().toUpperCase(Locale.ROOT);
+        if (!accountCurrency.equals(requestCurrency)) {
+            throw new IllegalArgumentException("Transfer currency must match the source account currency");
+        }
 
         if (!validateTransactionLimits(
                 request.getFromAccountId(), fromAccount.getAccountType(),
@@ -101,6 +117,10 @@ public class TransactionServiceImpl implements TransactionService {
         ResilientAccountServiceClient.SpendingLimitReservationResponse transferLimit = accountServiceClient
                 .reserveSpendingLimit(request.getFromAccountId(), "TRANSFER", request.getAmount(),
                         limitReservationKey, userId);
+        if (transferLimit.getCurrency() != null
+                && !accountCurrency.equalsIgnoreCase(transferLimit.getCurrency())) {
+            throw new IllegalStateException("Spending limit currency does not match the source account currency");
+        }
         auditService.logTransactionLimitCheck(request.getFromAccountId(), fromAccount.getAccountType(),
                 TransactionType.TRANSFER, request.getAmount(), transferLimit.isAllowed(),
                 "CUSTOMER_DAILY", transferLimit.getDailyLimit(), userId);
@@ -113,13 +133,14 @@ public class TransactionServiceImpl implements TransactionService {
                 .fromAccountId(request.getFromAccountId())
                 .toAccountId(request.getToAccountId())
                 .amount(request.getAmount())
-                .currency(request.getCurrency())
+                .currency(accountCurrency)
                 .type(TransactionType.TRANSFER)
                 .status(TransactionStatus.PROCESSING)
                 .processingState(TransactionProcessingState.INITIATED)
                 .description(request.getDescription())
                 .reference(request.getReference())
                 .idempotencyKey(normalizedIdempotencyKey)
+                .requestFingerprint(requestFingerprint)
                 .createdBy(userId)
                 .fromAccountBalanceBefore(fromAccount.ledgerBalanceOrBalance())
                 .build();
@@ -131,7 +152,10 @@ public class TransactionServiceImpl implements TransactionService {
             log.warn("Idempotent replay detected for TRANSFER key={} user={} — returning existing record",
                     normalizedIdempotencyKey, userId);
             return findIdempotentTransaction(userId, TransactionType.TRANSFER, normalizedIdempotencyKey)
-                    .map(this::mapToResponse)
+                    .map(winner -> {
+                        requireReplayFingerprint(winner, requestFingerprint);
+                        return mapToResponse(winner);
+                    })
                     .orElseThrow(() -> new RuntimeException(
                             "Idempotency conflict but record not found — manual review required"));
         }
@@ -318,16 +342,19 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
-    @Transactional(noRollbackFor = Exception.class)
+    @Transactional
     @CacheEvict(value = "transaction:history", allEntries = true)
     public TransactionResponse processDeposit(String accountId, BigDecimal amount,
             String description, String reference, String userId, String idempotencyKey) {
         String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
+        String requestFingerprint = canonicalFingerprint("DEPOSIT", userId, accountId,
+                amount, description, reference);
         Optional<Transaction> existing = findIdempotentTransaction(userId, TransactionType.DEPOSIT,
                 normalizedIdempotencyKey);
         if (existing.isPresent()) {
             Transaction replay = existing.get();
             requireDepositReplayMatches(replay, accountId, amount, description, reference);
+            requireReplayFingerprint(replay, requestFingerprint);
             if (replay.getStatus() == TransactionStatus.COMPLETED) {
                 if (ledgerAuthoritative && replay.getJournalId() == null) {
                     throw new IllegalStateException(
@@ -379,6 +406,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .description(description)
                 .reference(reference)
                 .idempotencyKey(normalizedIdempotencyKey)
+                .requestFingerprint(requestFingerprint)
                 .createdBy(userId)
                 .toAccountBalanceBefore(account.ledgerBalanceOrBalance())
                 .build();
@@ -388,7 +416,10 @@ public class TransactionServiceImpl implements TransactionService {
             log.warn("Idempotent replay detected for DEPOSIT key={} user={} — returning existing record",
                     normalizedIdempotencyKey, userId);
             return findIdempotentTransaction(userId, TransactionType.DEPOSIT, normalizedIdempotencyKey)
-                    .map(this::mapToResponse)
+                    .map(winner -> {
+                        requireReplayFingerprint(winner, requestFingerprint);
+                        return mapToResponse(winner);
+                    })
                     .orElseThrow(() -> new RuntimeException(
                             "Idempotency conflict but record not found — manual review required"));
         }
@@ -473,14 +504,17 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
-    @Transactional(noRollbackFor = Exception.class)
+    @Transactional
     @CacheEvict(value = "transaction:history", allEntries = true)
     public TransactionResponse processWithdrawal(String accountId, BigDecimal amount,
             String description, String reference, String userId, String idempotencyKey) {
         String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
+        String requestFingerprint = canonicalFingerprint("WITHDRAWAL", userId, accountId,
+                amount, description, reference);
         Optional<Transaction> existing = findIdempotentTransaction(userId, TransactionType.WITHDRAWAL,
                 normalizedIdempotencyKey);
         if (existing.isPresent()) {
+            requireReplayFingerprint(existing.get(), requestFingerprint);
             return mapToResponse(existing.get());
         }
 
@@ -504,6 +538,10 @@ public class TransactionServiceImpl implements TransactionService {
         ResilientAccountServiceClient.SpendingLimitReservationResponse withdrawalLimit = accountServiceClient
                 .reserveSpendingLimit(accountId, "WITHDRAWAL", amount,
                         limitReservationKey, userId);
+        if (withdrawalLimit.getCurrency() != null
+                && !accountCurrency.equalsIgnoreCase(withdrawalLimit.getCurrency())) {
+            throw new IllegalStateException("Spending limit currency does not match the account currency");
+        }
         auditService.logTransactionLimitCheck(accountId, account.getAccountType(), TransactionType.WITHDRAWAL,
                 amount, withdrawalLimit.isAllowed(), "CUSTOMER_DAILY",
                 withdrawalLimit.getDailyLimit(), userId);
@@ -522,6 +560,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .description(description)
                 .reference(reference)
                 .idempotencyKey(normalizedIdempotencyKey)
+                .requestFingerprint(requestFingerprint)
                 .createdBy(userId)
                 .fromAccountBalanceBefore(account.ledgerBalanceOrBalance())
                 .build();
@@ -531,7 +570,10 @@ public class TransactionServiceImpl implements TransactionService {
             log.warn("Idempotent replay detected for WITHDRAWAL key={} user={} — returning existing record",
                     normalizedIdempotencyKey, userId);
             return findIdempotentTransaction(userId, TransactionType.WITHDRAWAL, normalizedIdempotencyKey)
-                    .map(this::mapToResponse)
+                    .map(winner -> {
+                        requireReplayFingerprint(winner, requestFingerprint);
+                        return mapToResponse(winner);
+                    })
                     .orElseThrow(() -> new RuntimeException(
                             "Idempotency conflict but record not found — manual review required"));
         }
@@ -666,7 +708,6 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
-    @Cacheable(value = "transaction:history", key = "#accountId + ':' + #pageable.pageNumber + ':' + #pageable.pageSize + ':' + #pageable.sort.toString()")
     public Page<TransactionResponse> getAccountTransactions(String accountId, Pageable pageable) {
         assertCanAccessAccountScope(accountId);
         Page<Transaction> transactions = transactionRepository
@@ -682,23 +723,25 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
-    @Transactional(noRollbackFor = Exception.class)
+    @Transactional(noRollbackFor = AccountServiceUnavailableException.class)
     @CacheEvict(value = "transaction:history", allEntries = true)
     public TransactionResponse reverseTransaction(String transactionId, String reason, String userId) {
         return reverseTransaction(transactionId, reason, userId, null);
     }
 
     @Override
-    @Transactional(noRollbackFor = Exception.class)
+    @Transactional(noRollbackFor = AccountServiceUnavailableException.class)
     @CacheEvict(value = "transaction:history", allEntries = true)
     public TransactionResponse reverseTransaction(String transactionId, String reason, String userId,
             String idempotencyKey) {
         log.info("Processing reversal request for transaction {} by user {}", transactionId, userId);
 
         String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
+        String requestFingerprint = canonicalFingerprint("REVERSAL", userId, transactionId, reason);
         Optional<Transaction> existing = findIdempotentTransaction(userId, TransactionType.REVERSAL,
                 normalizedIdempotencyKey);
         if (existing.isPresent()) {
+            requireReplayFingerprint(existing.get(), requestFingerprint);
             return mapToResponse(existing.get());
         }
 
@@ -727,6 +770,7 @@ public class TransactionServiceImpl implements TransactionService {
         // transaction.
         Transaction reversal = createReversalTransaction(originalTransaction, reason, userId);
         reversal.setIdempotencyKey(normalizedIdempotencyKey);
+        reversal.setRequestFingerprint(requestFingerprint);
         try {
             reversal = transactionRepository.save(reversal);
         } catch (DataIntegrityViolationException dive) {
@@ -925,11 +969,17 @@ public class TransactionServiceImpl implements TransactionService {
 
     @Override
     public boolean isTransactionReversed(String transactionId) {
+        Transaction original = transactionRepository.findById(transactionId)
+                .orElseThrow(() -> new IllegalArgumentException("Transaction not found: " + transactionId));
+        assertCanAccessTransaction(original);
         return transactionRepository.isTransactionReversed(transactionId);
     }
 
     @Override
     public List<TransactionResponse> getReversalTransactions(String originalTransactionId) {
+        Transaction original = transactionRepository.findById(originalTransactionId)
+                .orElseThrow(() -> new IllegalArgumentException("Transaction not found: " + originalTransactionId));
+        assertCanAccessTransaction(original);
         List<Transaction> reversals = transactionRepository.findReversalsByOriginalTransactionId(originalTransactionId);
         return reversals.stream()
                 .map(this::mapToResponse)
@@ -938,6 +988,11 @@ public class TransactionServiceImpl implements TransactionService {
 
     @Override
     public List<TransactionResponse> getTransactionsByStatus(TransactionStatus status) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.isAuthenticated()
+                && !isPrivilegedRequester()) {
+            throw new AccessDeniedException("Status-wide transaction access requires an administrative role");
+        }
         List<Transaction> transactions = transactionRepository.findByStatusOrderByCreatedAtDesc(status);
         return transactions.stream()
                 .map(this::mapToResponse)
@@ -946,14 +1001,38 @@ public class TransactionServiceImpl implements TransactionService {
 
     @Override
     @Transactional
+    @Scheduled(fixedDelayString = "${transactions.recovery.fixed-delay-ms:60000}",
+            initialDelayString = "${transactions.recovery.initial-delay-ms:60000}")
     public void processPendingTransactions() {
         LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(5);
         List<Transaction> pendingTransactions = transactionRepository
                 .findPendingTransactionsOlderThan(cutoffTime);
 
         for (Transaction transaction : pendingTransactions) {
-            log.warn("Processing stale pending transaction: {}", transaction.getTransactionId());
+            Optional<JournalResult> journal = ledgerPostingService
+                    .findByCorrelationId(transaction.getTransactionId());
+            if (journal.isPresent() && journal.get().state() == JournalState.PENDING) {
+                log.warn("Leaving stale transaction {} in processing because its journal {} is still pending",
+                        transaction.getTransactionId(), journal.get().journalId());
+                continue;
+            }
+            if (journal.isPresent() && journal.get().state() == JournalState.POSTED) {
+                log.warn("Recovering stale transaction {} from posted journal {}",
+                        transaction.getTransactionId(), journal.get().journalId());
+                transaction.setJournalId(journal.get().journalId());
+                transaction.setStatus(TransactionStatus.COMPLETED);
+                transaction.setProcessingState(TransactionProcessingState.COMPLETED);
+                transaction.setProcessedBy("SYSTEM_RECOVERY");
+                transaction.setProcessedAt(LocalDateTime.now());
+                transactionRepository.save(transaction);
+                continue;
+            }
+            log.warn("Failing stale transaction {} because no posted ledger journal exists",
+                    transaction.getTransactionId());
             transaction.setStatus(TransactionStatus.FAILED);
+            transaction.setProcessingState(TransactionProcessingState.MANUAL_ACTION_REQUIRED);
+            transaction.setProcessedBy("SYSTEM_RECOVERY");
+            transaction.setProcessedAt(LocalDateTime.now());
             transactionRepository.save(transaction);
         }
     }
@@ -966,12 +1045,7 @@ public class TransactionServiceImpl implements TransactionService {
                 return false;
             }
         } catch (Exception ex) {
-            log.warn("Advanced limit validation unavailable, falling back to basic limits: {}", ex.getMessage());
-        }
-
-        if (amount.compareTo(BigDecimal.valueOf(10000)) > 0) {
-            log.warn("Transaction amount {} exceeds basic limit for account {}", amount, accountId);
-            return false;
+            throw new AccountServiceUnavailableException("Authoritative transaction limit validation is unavailable", ex);
         }
         return true;
     }
@@ -1062,6 +1136,16 @@ public class TransactionServiceImpl implements TransactionService {
         List<Transaction> completedInPeriod = periodTransactions.stream()
                 .filter(t -> t.getStatus() == TransactionStatus.COMPLETED)
                 .collect(Collectors.toList());
+        Map<String, List<Transaction>> completedByCurrency = completedInPeriod.stream()
+                .collect(Collectors.groupingBy(t -> firstNonBlank(t.getCurrency(), "UNKNOWN")
+                        .trim().toUpperCase(Locale.ROOT)));
+        Map<String, TransactionStatsResponse.CurrencyBreakdown> currencyBreakdown = completedByCurrency.entrySet()
+                .stream()
+                .collect(Collectors.toMap(Map.Entry::getKey,
+                        entry -> buildCurrencyBreakdown(entry.getValue())));
+        boolean mixedCurrency = currencyBreakdown.size() > 1;
+        String statsCurrency = currencyBreakdown.isEmpty() ? null
+                : mixedCurrency ? "MIXED" : currencyBreakdown.keySet().iterator().next();
 
         BigDecimal totalAmount = completedInPeriod.stream()
                 .map(Transaction::getAmount)
@@ -1160,38 +1244,85 @@ public class TransactionServiceImpl implements TransactionService {
                 .pendingTransactions(pendingTransactions)
                 .failedTransactions(failedTransactions)
                 .reversedTransactions(reversedTransactions)
-                .totalAmount(totalAmount)
-                .totalIncoming(totalIncoming)
-                .totalOutgoing(totalOutgoing)
-                .totalDeposits(totalDeposits)
-                .totalWithdrawals(totalWithdrawals)
-                .totalTransfers(totalTransfers)
-                .averageTransactionAmount(averageTransactionAmount)
-                .largestTransaction(largestTransaction)
-                .smallestTransaction(smallestTransaction)
+                .totalAmount(mixedCurrency ? null : totalAmount)
+                .totalIncoming(mixedCurrency ? null : totalIncoming)
+                .totalOutgoing(mixedCurrency ? null : totalOutgoing)
+                .totalDeposits(mixedCurrency ? null : totalDeposits)
+                .totalWithdrawals(mixedCurrency ? null : totalWithdrawals)
+                .totalTransfers(mixedCurrency ? null : totalTransfers)
+                .averageTransactionAmount(mixedCurrency ? null : averageTransactionAmount)
+                .largestTransaction(mixedCurrency ? null : largestTransaction)
+                .smallestTransaction(mixedCurrency ? null : smallestTransaction)
                 .transactionCountsByType(java.util.Map.of(
                         "DEPOSIT", depositCount,
                         "WITHDRAWAL", withdrawalCount,
                         "TRANSFER", transferCount))
-                .transactionAmountsByType(java.util.Map.of(
+                .transactionAmountsByType(mixedCurrency ? null : java.util.Map.of(
                         "DEPOSIT", totalDeposits,
                         "WITHDRAWAL", totalWithdrawals,
                         "TRANSFER", totalTransfers))
-                .dailyTotal(dailyTotal)
-                .monthlyTotal(monthlyTotal)
+                .currencyBreakdown(currencyBreakdown)
+                .dailyTotal(mixedCurrency ? null : dailyTotal)
+                .monthlyTotal(mixedCurrency ? null : monthlyTotal)
                 .dailyCount(dailyCount)
                 .monthlyCount(monthlyCount)
                 .successRate(successRate)
-                .currency("USD")
+                .currency(statsCurrency)
                 .build();
     }
 
+
+    private TransactionStatsResponse.CurrencyBreakdown buildCurrencyBreakdown(List<Transaction> transactions) {
+        return TransactionStatsResponse.CurrencyBreakdown.builder()
+                .totalAmount(transactions.stream().map(Transaction::getAmount).filter(Objects::nonNull)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add))
+                .totalDeposits(sumByType(transactions, TransactionType.DEPOSIT))
+                .totalWithdrawals(sumByType(transactions, TransactionType.WITHDRAWAL))
+                .totalTransfers(sumByType(transactions, TransactionType.TRANSFER))
+                .completedTransactions((long) transactions.size())
+                .build();
+    }
     private String normalizeIdempotencyKey(String idempotencyKey) {
-        if (idempotencyKey == null) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return null;
         }
         String normalized = idempotencyKey.trim();
-        return normalized.isEmpty() ? null : normalized;
+        if (normalized.length() > 128 || !normalized.matches("[A-Za-z0-9._:-]+")) {
+            throw new IllegalArgumentException("Idempotency-Key must be 1-128 URL-safe characters");
+        }
+        return normalized;
+    }
+
+    private String canonicalFingerprint(Object... parts) {
+        String canonical = Arrays.stream(parts)
+                .map(this::canonicalPart)
+                .collect(Collectors.joining("|"));
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is unavailable", impossible);
+        }
+    }
+
+    private String canonicalPart(Object value) {
+        if (value == null) {
+            return "";
+        }
+        if (value instanceof BigDecimal decimal) {
+            return decimal.stripTrailingZeros().toPlainString();
+        }
+        return value.toString().trim();
+    }
+
+    private void requireReplayFingerprint(Transaction existing, String expectedFingerprint) {
+        if (existing.getRequestFingerprint() == null) {
+            return;
+        }
+        if (!Objects.equals(existing.getRequestFingerprint(), expectedFingerprint)) {
+            throw new IllegalStateException(
+                    "Idempotency-Key was reused with a different transaction request");
+        }
     }
 
     private Optional<Transaction> findIdempotentTransaction(String userId,
@@ -1217,7 +1348,7 @@ public class TransactionServiceImpl implements TransactionService {
                 || !amountMatches
                 || !Objects.equals(existing.getDescription(), description)
                 || !Objects.equals(existing.getReference(), reference)) {
-            throw new IllegalArgumentException("Idempotency key payload conflict");
+            throw new IllegalStateException("Idempotency-Key was reused with a different transaction request");
         }
         if (existing.getStatus() != TransactionStatus.FAILED
                 && existing.getStatus() != TransactionStatus.PROCESSING
