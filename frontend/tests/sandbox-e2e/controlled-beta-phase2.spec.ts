@@ -130,7 +130,11 @@ test("one-time bootstrap, login, MFA seed replay, zero closure, and recovery", a
   await page.getByLabel("Password", { exact: true }).fill(password!);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL(/\/admin$/);
-  await page.goto("/admin/accounts");
+  await page
+    .getByRole("navigation", { name: "Admin navigation" })
+    .getByRole("link", { name: "Accounts" })
+    .click();
+  await page.waitForURL(/\/admin\/accounts$/);
   await page.getByRole("button", { name: `Close account ${first.zeroAccountId}` }).click();
   await expect(page.getByRole("heading", { name: `Close account #${first.zeroAccountId}` })).toBeVisible();
   await page.getByLabel("Action reason").fill("Phase 2 synthetic zero-account closure smoke");
