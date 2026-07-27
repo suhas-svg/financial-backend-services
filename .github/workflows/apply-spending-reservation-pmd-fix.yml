@@ -33,22 +33,8 @@ jobs:
           assert text.count(old) == 1
           text = text.replace(old, new, 1)
 
-          old = '''    private SpendingLimitDtos.ReserveResponse reservationResponse(
-              final SpendingLimitReservation reservation, final boolean replay,
-              final Account account, final AccountSpendingLimit limit, final String reason) {
-          applyDue(limit);'''
-          new = '''    private SpendingLimitDtos.ReserveResponse reservationResponse(
-              final SpendingLimitReservation reservation, final boolean replay,
-              final Account account, final AccountSpendingLimit limit, final String reason) {
-          final Long responseAccountId = account.getId();
-          applyDue(limit);'''
-          assert text.count(old) == 1
-          text = text.replace(old, new, 1)
-
-          old = '''        final BigDecimal used = reservations.used(reservation.getAccountId(), reservation.getOperationType(),
-                  reservation.getUsageDate());'''
-          new = '''        final BigDecimal used = reservations.used(responseAccountId, reservation.getOperationType(),
-                  reservation.getUsageDate());'''
+          old = 'final Account account, final AccountSpendingLimit limit, final String reason) {\n'
+          new = old + '        Objects.requireNonNull(account, "Response account is required");\n'
           assert text.count(old) == 1
           text = text.replace(old, new, 1)
 
