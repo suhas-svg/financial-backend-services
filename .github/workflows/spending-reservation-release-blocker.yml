@@ -1,0 +1,191 @@
+name: Spending Reservation Release Blocker
+
+on:
+  push:
+    branches:
+      - codex/spending-reservation-payload-safety
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spending-reservation-release-blocker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  java-verification:
+    name: ${{ matrix.service }} Java ${{ matrix.java }} Verify
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [account-service, transaction-service]
+        java: ['21', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+      - name: Run complete Maven verification
+        working-directory: ${{ matrix.service }}
+        run: ./mvnw -q clean verify
+      - name: Upload verification reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-${{ matrix.service }}-java-${{ matrix.java }}
+          path: |
+            ${{ matrix.service }}/target/surefire-reports
+            ${{ matrix.service }}/target/failsafe-reports
+            ${{ matrix.service }}/target/site/jacoco
+          if-no-files-found: ignore
+          retention-days: 14
+
+  reservation-concurrency-reconciliation:
+    name: Reservation Concurrency and Reconciliation
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: account-service
+            tests: SpendingLimitServiceTest,SpendingLimitReservationConcurrencyTest
+          - service: transaction-service
+            tests: TransactionIdempotencyClaimServiceTest,SpendingLimitReservationSagaAspectTest,SpendingLimitReservationSagaCoordinatorTest,SpendingLimitReservationCrossServiceIntegrationTest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Run payload replay, concurrency, failure, and orphan tests
+        working-directory: ${{ matrix.service }}
+        run: ./mvnw -q -Dtest=${{ matrix.tests }} test
+      - name: Upload focused evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spending-reservation-evidence-${{ matrix.service }}
+          path: ${{ matrix.service }}/target/surefire-reports
+          if-no-files-found: error
+          retention-days: 14
+
+  fresh-postgres-migrations:
+    name: Fresh PostgreSQL Migration (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: reservation_migrations
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d reservation_migrations"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      FRESH_TRANSACTION_POSTGRES_URL: jdbc:postgresql://localhost:5432/reservation_migrations
+      FRESH_POSTGRES_USER: postgres
+      FRESH_POSTGRES_PASSWORD: postgres
+      LEDGER_TEST_JDBC_URL: jdbc:postgresql://localhost:5432/reservation_migrations
+      LEDGER_TEST_DB_USER: postgres
+      LEDGER_TEST_DB_PASSWORD: postgres
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: account-service
+            tests: FreshPostgresIntegrationReadinessMigrationTest
+          - service: transaction-service
+            tests: FreshPostgresIntegrationReadinessMigrationTest,LedgerMigrationIntegrationTest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Apply all migrations to a disposable PostgreSQL database
+        working-directory: ${{ matrix.service }}
+        run: ./mvnw -q -Dtest=${{ matrix.tests }} test
+      - name: Capture migration inventory
+        run: >-
+          PGPASSWORD=postgres psql -h localhost -U postgres -d reservation_migrations
+          -c "select installed_rank, version, description, success from flyway_schema_history order by installed_rank;"
+          -c "select table_name, column_name, data_type from information_schema.columns where table_name in ('spending_limit_reservations','transaction_idempotency_claims') order by table_name, ordinal_position;"
+
+  docker-demonstration:
+    name: Docker and Synthetic Topology Demonstration
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      COMPOSE_PROJECT_NAME: spending-reservation-ci-${{ github.run_id }}
+      SANDBOX_IMAGE_TAG: reservation-${{ github.sha }}
+      SANDBOX_BASE_URL: https://127.0.0.1:8443
+      SANDBOX_OPERATOR_USERNAME: release_operator
+      SANDBOX_OPERATOR_PASSWORD: ci-${{ github.run_id }}-operator-password
+      ACCOUNT_DB_PASSWORD: ci-${{ github.run_id }}-account-db
+      TRANSACTION_DB_PASSWORD: ci-${{ github.run_id }}-transaction-db
+      REDIS_PASSWORD: ci-${{ github.run_id }}-redis
+      JWT_SECRET: ci-${{ github.run_id }}-jwt-signing-material-at-least-32-bytes
+      INTERNAL_JWT_SECRET: ci-${{ github.run_id }}-internal-signing-material-at-least-32-bytes
+      MFA_ENCRYPTION_KEY: ci-${{ github.run_id }}-mfa-encryption-material-at-least-32-bytes
+      SANDBOX_BOOTSTRAP_TOKEN: ci-${{ github.run_id }}-bootstrap-token-at-least-32-bytes
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate synthetic topology
+        shell: pwsh
+        run: ./scripts/validate-synthetic-sandbox.ps1
+      - name: Build account-service image
+        run: docker build -t financial-account-service:${{ github.sha }} account-service
+      - name: Build transaction-service image
+        run: docker build -t financial-transaction-service:${{ github.sha }} transaction-service
+      - name: Render Docker Compose configuration
+        run: docker compose -f docker-compose.synthetic-sandbox.yml config > /tmp/synthetic-compose.yml
+      - name: Start fresh synthetic sandbox
+        run: docker compose -f docker-compose.synthetic-sandbox.yml up --build --detach --wait
+      - name: Capture running topology and health
+        run: |
+          docker compose -f docker-compose.synthetic-sandbox.yml ps
+          docker compose -f docker-compose.synthetic-sandbox.yml logs --no-color account-service transaction-service > /tmp/reservation-service-logs.txt
+      - name: Upload Docker demonstration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spending-reservation-docker-evidence
+          path: |
+            /tmp/synthetic-compose.yml
+            /tmp/reservation-service-logs.txt
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Tear down sandbox
+        if: always()
+        run: docker compose -f docker-compose.synthetic-sandbox.yml down --volumes --remove-orphans
+
+  release-blocker-authority:
+    name: Spending Reservation Required Acceptance
+    if: always()
+    needs:
+      - java-verification
+      - reservation-concurrency-reconciliation
+      - fresh-postgres-migrations
+      - docker-demonstration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every release-blocker gate
+        env:
+          NEEDS_JSON: ${{ toJson(needs) }}
+        shell: python
+        run: |
+          import json, os, sys
+          results = {name: data["result"] for name, data in json.loads(os.environ["NEEDS_JSON"]).items()}
+          print(json.dumps(results, indent=2, sort_keys=True))
+          sys.exit(1 if any(result != "success" for result in results.values()) else 0)
