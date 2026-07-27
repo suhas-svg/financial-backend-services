@@ -14,16 +14,19 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import javax.sql.DataSource;
+import java.util.UUID;
 
 /**
  * Base class for integration tests using Testcontainers for PostgreSQL and
@@ -46,6 +49,19 @@ import javax.sql.DataSource;
 })
 @SuppressWarnings({ "resource", "null" })
 public abstract class BaseIntegrationTest {
+
+    private static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+    private static final ClientHttpRequestInterceptor IDEMPOTENCY_KEY_INTERCEPTOR = (request, body, execution) -> {
+        final String path = request.getURI().getPath();
+        final boolean requiresIdempotencyKey = HttpMethod.POST.equals(request.getMethod())
+                && ("/api/transactions/transfer".equals(path)
+                || "/api/transactions/withdraw".equals(path)
+                || path.matches("/api/transactions/[^/]+/reverse"));
+        if (requiresIdempotencyKey && !request.getHeaders().containsKey(IDEMPOTENCY_KEY_HEADER)) {
+            request.getHeaders().set(IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString());
+        }
+        return execution.execute(request, body);
+    };
 
     @LocalServerPort
     protected int port;
@@ -110,6 +126,10 @@ public abstract class BaseIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        if (!restTemplate.getRestTemplate().getInterceptors().contains(IDEMPOTENCY_KEY_INTERCEPTOR)) {
+            restTemplate.getRestTemplate().getInterceptors().add(IDEMPOTENCY_KEY_INTERCEPTOR);
+        }
+
         // Reset WireMock server before each test
         wireMockServer.resetAll();
 
