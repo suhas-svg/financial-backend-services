@@ -1,7 +1,7 @@
 # Spending Reservation Latest Branch Verification
 
-- Verified source commit: `a4b46cae26e95876ba12ef49eae4479e3c2cb813`
-- Workflow run: https://github.com/suhas-svg/financial-backend-services/actions/runs/30301574658
+- Verified source commit: `68e948f22a5cf5eae03e8be50c7a5549b1e7ba80`
+- Workflow run: https://github.com/suhas-svg/financial-backend-services/actions/runs/30302123677
 - Overall result: failed
 
 ## Required gate results
