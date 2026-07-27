@@ -1,7 +1,9 @@
 package com.suhasan.finance.transaction_service.service;
 
 import com.suhasan.finance.transaction_service.client.ResilientAccountServiceClient;
+import com.suhasan.finance.transaction_service.entity.TransactionIdempotencyClaim;
 import com.suhasan.finance.transaction_service.entity.TransactionIdempotencyClaimState;
+import com.suhasan.finance.transaction_service.entity.TransactionType;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -160,12 +163,78 @@ class SpendingLimitRemoteEffectAspectTest {
     }
 
     @Test
-    void successfulTransferCompensationMakesDefinitiveReleaseSafe() throws Throwable {
-        ResilientAccountServiceClient.BalanceOperationResponse response =
-                new ResilientAccountServiceClient.BalanceOperationResponse(
-                        7L, "tx-1:compensate", true, new BigDecimal("1000.00"),
-                        3L, "APPLIED", null);
+    void appliedDestinationCreditRemainsAmbiguousUntilLocalCommit() throws Throwable {
+        ResilientAccountServiceClient.BalanceOperationResponse response = balanceResponse(true, null);
         when(joinPoint.proceed()).thenReturn(response);
+
+        Object result;
+        try (SpendingLimitReservationSagaContext.Scope ignored = context.open("alice", "key-1")) {
+            result = aspect.balanceOperation(joinPoint, "8", "tx-1:credit", new BigDecimal("25.00"),
+                    "tx-1", "TRANSFER_CREDIT", true);
+        }
+
+        assertThat(result).isSameAs(response);
+        verify(claimService).updateState("alice", "key-1",
+                TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                null, "TRANSFER_CREDIT_IN_FLIGHT");
+        verify(claimService).updateState("alice", "key-1",
+                TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                null, "TRANSFER_CREDIT_APPLIED_AWAITING_LOCAL_COMMIT");
+    }
+
+    @Test
+    void rejectedDestinationCreditForcesCompensation() throws Throwable {
+        when(joinPoint.proceed()).thenReturn(balanceResponse(false, "credit rejected"));
+
+        try (SpendingLimitReservationSagaContext.Scope ignored = context.open("alice", "key-1")) {
+            assertThatThrownBy(() -> aspect.balanceOperation(joinPoint, "8", "tx-1:credit",
+                    new BigDecimal("25.00"), "tx-1", "TRANSFER_CREDIT", true))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("credit rejected");
+        }
+
+        verify(claimService).updateState("alice", "key-1",
+                TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                null, "TRANSFER_CREDIT_REJECTED_SOURCE_DEBIT_REQUIRES_COMPENSATION");
+    }
+
+    @Test
+    void destinationCreditTimeoutRemainsAmbiguous() throws Throwable {
+        RuntimeException timeout = new RuntimeException("credit timeout");
+        when(joinPoint.proceed()).thenThrow(timeout);
+
+        try (SpendingLimitReservationSagaContext.Scope ignored = context.open("alice", "key-1")) {
+            assertThatThrownBy(() -> aspect.balanceOperation(joinPoint, "8", "tx-1:credit",
+                    new BigDecimal("25.00"), "tx-1", "TRANSFER_CREDIT", true))
+                    .isSameAs(timeout);
+        }
+
+        verify(claimService).updateState("alice", "key-1",
+                TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
+                null, "TRANSFER_CREDIT_OUTCOME_AMBIGUOUS: credit timeout");
+    }
+
+    @Test
+    void successfulCompensationBeforeDestinationCreditMakesDefinitiveReleaseSafe() throws Throwable {
+        when(claimService.require("alice", "key-1"))
+                .thenReturn(claim("DEBIT_CAPTURE_APPLIED_AWAITING_LOCAL_COMMIT"));
+        when(joinPoint.proceed()).thenReturn(balanceResponse(true, null));
+
+        try (SpendingLimitReservationSagaContext.Scope ignored = context.open("alice", "key-1")) {
+            aspect.balanceOperation(joinPoint, "7", "tx-1:compensate", new BigDecimal("25.00"),
+                    "tx-1", "TRANSFER_COMPENSATION", true);
+        }
+
+        verify(claimService).updateState("alice", "key-1",
+                TransactionIdempotencyClaimState.RESERVED,
+                null, "TRANSFER_COMPENSATION_APPLIED");
+    }
+
+    @Test
+    void compensationCannotClearAmbiguousDestinationCredit() throws Throwable {
+        when(claimService.require("alice", "key-1"))
+                .thenReturn(claim("TRANSFER_CREDIT_OUTCOME_AMBIGUOUS: credit timeout"));
+        when(joinPoint.proceed()).thenReturn(balanceResponse(true, null));
 
         try (SpendingLimitReservationSagaContext.Scope ignored = context.open("alice", "key-1")) {
             aspect.balanceOperation(joinPoint, "7", "tx-1:compensate", new BigDecimal("25.00"),
@@ -174,14 +243,16 @@ class SpendingLimitRemoteEffectAspectTest {
 
         verify(claimService).updateState("alice", "key-1",
                 TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
-                null, "TRANSFER_COMPENSATION_IN_FLIGHT");
-        verify(claimService).updateState("alice", "key-1",
+                null, "SOURCE_COMPENSATED_BUT_TRANSFER_CREDIT_REQUIRES_RECONCILIATION");
+        verify(claimService, never()).updateState("alice", "key-1",
                 TransactionIdempotencyClaimState.RESERVED,
                 null, "TRANSFER_COMPENSATION_APPLIED");
     }
 
     @Test
     void ambiguousCompensationFailureKeepsReservationForReconciliation() throws Throwable {
+        when(claimService.require("alice", "key-1"))
+                .thenReturn(claim("DEBIT_CAPTURE_APPLIED_AWAITING_LOCAL_COMMIT"));
         RuntimeException timeout = new RuntimeException("compensation timeout");
         when(joinPoint.proceed()).thenThrow(timeout);
 
@@ -214,9 +285,35 @@ class SpendingLimitRemoteEffectAspectTest {
                 org.mockito.ArgumentMatchers.any());
     }
 
+    private TransactionIdempotencyClaim claim(String details) {
+        LocalDateTime now = LocalDateTime.now();
+        return TransactionIdempotencyClaim.builder()
+                .claimId("claim-1")
+                .userId("alice")
+                .transactionType(TransactionType.TRANSFER)
+                .idempotencyKey("key-1")
+                .requestFingerprint("fingerprint")
+                .accountId("7")
+                .operationType("TRANSFER")
+                .amount(new BigDecimal("25.00"))
+                .state(TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED)
+                .failureDetails(details)
+                .createdAt(now)
+                .updatedAt(now)
+                .expiresAt(now.plusMinutes(30))
+                .build();
+    }
+
     private ResilientAccountServiceClient.DebitHoldResponse holdResponse(boolean applied, String status) {
         return new ResilientAccountServiceClient.DebitHoldResponse(
                 "hold-1", 7L, applied, new BigDecimal("975.00"), new BigDecimal("975.00"),
                 status, null);
+    }
+
+    private ResilientAccountServiceClient.BalanceOperationResponse balanceResponse(
+            boolean applied, String message) {
+        return new ResilientAccountServiceClient.BalanceOperationResponse(
+                7L, "operation-1", applied, new BigDecimal("1000.00"),
+                3L, applied ? "APPLIED" : "REJECTED", message);
     }
 }
