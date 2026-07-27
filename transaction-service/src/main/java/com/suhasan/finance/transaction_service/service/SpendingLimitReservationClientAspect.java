@@ -15,6 +15,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.Objects;
 import java.util.Optional;
 
 @Aspect
@@ -35,14 +36,19 @@ public class SpendingLimitReservationClientAspect {
             return joinPoint.proceed();
         }
         TransactionIdempotencyClaim claim = existing.get();
+        requireClaimMatchesCall(claim, accountId, operationType, amount);
         SpendingLimitReservationLifecycleClient.ReservationResponse response = lifecycleClient.reserve(
                 accountId, operationType, amount, idempotencyKey, userId,
                 claim.getCurrency(), claim.getClaimId());
-        if (response != null && response.allowed() && response.reservationId() != null) {
-            claimService.recordReservation(userId, idempotencyKey, response);
-        }
         if (response == null) {
             throw new IllegalStateException("Account service returned no spending reservation response");
+        }
+        if (response.allowed()) {
+            claimService.recordReservation(userId, idempotencyKey, response);
+            if (!"RESERVED".equalsIgnoreCase(response.state())) {
+                throw new IllegalStateException(
+                        "Idempotency-Key refers to a reservation that is no longer active: " + response.state());
+            }
         }
         return new ResilientAccountServiceClient.SpendingLimitReservationResponse(
                 response.allowed(), response.replay(), response.dailyLimit(), response.currency(),
@@ -62,6 +68,7 @@ public class SpendingLimitReservationClientAspect {
         if (reservation == null || reservation.reservationId() == null) {
             return null;
         }
+        String correlation = reservationCorrelation(claim, reservation);
 
         Optional<Transaction> transaction = transactionRepository
                 .findFirstByCreatedByAndTypeAndIdempotencyKey(
@@ -73,7 +80,7 @@ public class SpendingLimitReservationClientAspect {
                     || status == TransactionStatus.PENDING) {
                 SpendingLimitReservationLifecycleClient.ReservationResponse held = lifecycleClient.transition(
                         accountId, reservation.reservationId(), "reconciliation-required", userId,
-                        claim.getClaimId(), "AMBIGUOUS_TRANSACTION_OUTCOME");
+                        correlation, "AMBIGUOUS_TRANSACTION_OUTCOME");
                 claimService.updateState(userId, idempotencyKey,
                         TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
                         held == null ? "RECONCILIATION_REQUIRED" : held.state(),
@@ -83,7 +90,7 @@ public class SpendingLimitReservationClientAspect {
             if (status == TransactionStatus.COMPLETED || status == TransactionStatus.REVERSED) {
                 SpendingLimitReservationLifecycleClient.ReservationResponse consumed = lifecycleClient.transition(
                         accountId, reservation.reservationId(), "consume", userId,
-                        claim.getClaimId(), "TRANSACTION_COMPLETED");
+                        correlation, "TRANSACTION_COMPLETED");
                 claimService.updateState(userId, idempotencyKey,
                         TransactionIdempotencyClaimState.COMPLETED,
                         consumed == null ? "CONSUMED" : consumed.state(), null);
@@ -92,7 +99,7 @@ public class SpendingLimitReservationClientAspect {
         }
 
         SpendingLimitReservationLifecycleClient.ReservationResponse released = lifecycleClient.transition(
-                accountId, reservation.reservationId(), "release", userId, claim.getClaimId(),
+                accountId, reservation.reservationId(), "release", userId, correlation,
                 "TRANSACTION_DEFINITIVELY_FAILED");
         claimService.updateState(userId, idempotencyKey,
                 TransactionIdempotencyClaimState.RELEASED,
@@ -105,8 +112,8 @@ public class SpendingLimitReservationClientAspect {
         if (claim.getReservationId() != null) {
             return new SpendingLimitReservationLifecycleClient.ReservationResponse(
                     true, true, claim.getReservationCurrency(), null, null, null, null,
-                    claim.getReservationId(), claim.getClaimId(), claim.getReservationAmount(),
-                    claim.getReservationFingerprint(), claim.getReservationState(),
+                    claim.getReservationId(), firstNonBlank(claim.getReservationCorrelation(), claim.getClaimId()),
+                    claim.getReservationAmount(), claim.getReservationFingerprint(), claim.getReservationState(),
                     null, null, claim.getExpiresAt(), null);
         }
         SpendingLimitReservationLifecycleClient.ReservationResponse response = lifecycleClient.lookup(
@@ -115,5 +122,28 @@ public class SpendingLimitReservationClientAspect {
             claimService.recordReservation(claim.getUserId(), claim.getIdempotencyKey(), response);
         }
         return response;
+    }
+
+    private void requireClaimMatchesCall(TransactionIdempotencyClaim claim, String accountId,
+                                         String operationType, BigDecimal amount) {
+        boolean amountMatches = claim.getAmount() != null && amount != null
+                && claim.getAmount().compareTo(amount) == 0;
+        if (!Objects.equals(claim.getAccountId(), accountId)
+                || !Objects.equals(claim.getOperationType(), operationType)
+                || !amountMatches) {
+            throw new IllegalStateException(
+                    "Durable transaction claim does not match the spending reservation request");
+        }
+    }
+
+    private String reservationCorrelation(
+            TransactionIdempotencyClaim claim,
+            SpendingLimitReservationLifecycleClient.ReservationResponse reservation) {
+        return firstNonBlank(reservation.transactionCorrelation(),
+                firstNonBlank(claim.getReservationCorrelation(), claim.getClaimId()));
+    }
+
+    private String firstNonBlank(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 }
