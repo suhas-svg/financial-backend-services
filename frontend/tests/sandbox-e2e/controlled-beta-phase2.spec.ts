@@ -157,9 +157,34 @@ test("one-time bootstrap, payload-safe reservation replay, zero closure, and rec
   expect(mismatchedReplay.status()).toBe(409);
   expect(JSON.stringify(await mismatchedReplay.json())).toContain("different");
 
-  const accountAfter = await request.get(`/account-api/api/accounts/${first.fundedAccountId}`, { headers });
-  expect(accountAfter.ok()).toBeTruthy();
-  expect(Number((await accountAfter.json()).balance)).toBe(balanceBefore - 25);
+  await expect.poll(async () => {
+    const account = await request.get(`/account-api/api/accounts/${first.fundedAccountId}`, { headers });
+    expect(account.ok()).toBeTruthy();
+    return Number((await account.json()).balance);
+  }, { timeout: 15_000 }).toBe(balanceBefore - 25);
+
+  const concurrentKey = "spending-reservation-concurrent-conflict-v1";
+  const concurrentBalanceBefore = balanceBefore - 25;
+  const [concurrentA, concurrentB] = await Promise.all([
+    request.post("/transaction-api/api/transactions/withdraw", {
+      headers: { ...headers, "Idempotency-Key": concurrentKey },
+      data: { ...withdrawalBody, amount: 10, reference: "concurrent-a" }
+    }),
+    request.post("/transaction-api/api/transactions/withdraw", {
+      headers: { ...headers, "Idempotency-Key": concurrentKey },
+      data: { ...withdrawalBody, amount: 11, reference: "concurrent-b" }
+    })
+  ]);
+  expect([concurrentA.status(), concurrentB.status()].sort((left, right) => left - right))
+    .toEqual([201, 409]);
+  const concurrentWinner = concurrentA.status() === 201 ? concurrentA : concurrentB;
+  const concurrentWinnerBody = await concurrentWinner.json();
+  expect([10, 11]).toContain(Number(concurrentWinnerBody.amount));
+  await expect.poll(async () => {
+    const account = await request.get(`/account-api/api/accounts/${first.fundedAccountId}`, { headers });
+    expect(account.ok()).toBeTruthy();
+    return Number((await account.json()).balance);
+  }, { timeout: 15_000 }).toBe(concurrentBalanceBefore - Number(concurrentWinnerBody.amount));
 
   await page.goto("/login");
   await page.getByRole("button", { name: "Admin operations" }).click();
