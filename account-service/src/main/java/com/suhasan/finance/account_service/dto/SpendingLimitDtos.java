@@ -1,5 +1,6 @@
 package com.suhasan.finance.account_service.dto;
 
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -16,14 +17,14 @@ public final class SpendingLimitDtos {
     }
 
     public record UpdateRequest(
-            @NotNull @PositiveOrZero BigDecimal transferDailyLimit,
-            @NotNull @PositiveOrZero BigDecimal withdrawalDailyLimit,
+            @NotNull @PositiveOrZero @Digits(integer = 17, fraction = 2) BigDecimal transferDailyLimit,
+            @NotNull @PositiveOrZero @Digits(integer = 17, fraction = 2) BigDecimal withdrawalDailyLimit,
             String credential) {
     }
 
     public record ReserveRequest(
             @NotBlank String operationType,
-            @NotNull @Positive BigDecimal amount,
+            @NotNull @Positive @Digits(integer = 17, fraction = 2) BigDecimal amount,
             @NotBlank String idempotencyKey,
             @NotBlank String userId,
             @Pattern(regexp = "[A-Za-z]{3}") String currency,
