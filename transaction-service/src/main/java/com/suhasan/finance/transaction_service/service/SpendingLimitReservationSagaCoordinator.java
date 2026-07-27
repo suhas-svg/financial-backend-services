@@ -191,19 +191,32 @@ public class SpendingLimitReservationSagaCoordinator {
     }
 
     private void requireManualReconciliation(TransactionIdempotencyClaim claim, String outcome) {
-        SpendingLimitReservationLifecycleClient.ReservationResponse reservation = ensureReservation(claim);
-        if (reservation != null && reservation.reservationId() != null) {
-            try {
-                lifecycleClient.transition(claim.getAccountId(), reservation.reservationId(),
-                        "reconciliation-required", claim.getUserId(), claim.getClaimId(), outcome);
-            } catch (RuntimeException error) {
-                log.warn("Failed to mark reservation {} for manual reconciliation: {}",
-                        reservation.reservationId(), error.getMessage());
+        SpendingLimitReservationLifecycleClient.ReservationResponse reservation = null;
+        String persistedOutcome = outcome;
+        try {
+            reservation = ensureReservation(claim);
+            if (reservation != null && reservation.reservationId() != null) {
+                try {
+                    SpendingLimitReservationLifecycleClient.ReservationResponse marked =
+                            lifecycleClient.transition(claim.getAccountId(), reservation.reservationId(),
+                                    "reconciliation-required", claim.getUserId(), claim.getClaimId(), outcome);
+                    if (marked != null) {
+                        reservation = marked;
+                    }
+                } catch (RuntimeException transitionFailure) {
+                    persistedOutcome = bounded(outcome, transitionFailure.getMessage());
+                    log.warn("Failed to mark reservation {} for manual reconciliation: {}",
+                            reservation.reservationId(), transitionFailure.getMessage());
+                }
             }
+        } catch (RuntimeException lookupFailure) {
+            persistedOutcome = bounded(outcome, lookupFailure.getMessage());
+            log.warn("Failed to look up reservation for manual reconciliation claim {}: {}",
+                    claim.getClaimId(), lookupFailure.getMessage());
         }
         claimService.updateState(claim.getUserId(), claim.getIdempotencyKey(),
                 TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
-                reservation == null ? claim.getReservationState() : reservation.state(), outcome);
+                reservation == null ? claim.getReservationState() : reservation.state(), persistedOutcome);
     }
 
     private String bounded(String first, String second) {
