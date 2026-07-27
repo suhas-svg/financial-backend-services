@@ -31,6 +31,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -108,6 +110,70 @@ class TransactionIdempotencyClaimServiceTest {
         assertThatThrownBy(() -> service.claimTransfer(transfer, "alice", "key-1"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("different transaction or reservation payload");
+    }
+
+    @Test
+    void recordsOnlyCanonicalOriginalReservationPayload() {
+        TransactionIdempotencyClaim claim = withdrawalRequestClaim("25.00", "USD", "key-1");
+        when(claims.lockByScope("alice", "key-1")).thenReturn(Optional.of(claim));
+        when(claims.save(any(TransactionIdempotencyClaim.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        TransactionIdempotencyClaim saved = service.recordReservation(
+                "alice", "key-1", reservationResponse("25.00", "USD",
+                        canonicalReservationFingerprint("25.00", "USD"), "RESERVED", "legacy-key-1"));
+
+        assertThat(saved.getReservationId()).isEqualTo(44L);
+        assertThat(saved.getReservationCorrelation()).isEqualTo("legacy-key-1");
+        assertThat(saved.getReservationAmount()).isEqualByComparingTo("25.00");
+        assertThat(saved.getReservationCurrency()).isEqualTo("USD");
+        assertThat(saved.getReservationFingerprint())
+                .isEqualTo(canonicalReservationFingerprint("25.00", "USD"));
+        assertThat(saved.getState()).isEqualTo(TransactionIdempotencyClaimState.RESERVED);
+    }
+
+    @Test
+    void rejectsTamperedReservationAmountCurrencyAndFingerprint() {
+        TransactionIdempotencyClaim amountClaim = withdrawalRequestClaim("25.00", "USD", "key-1");
+        when(claims.lockByScope("alice", "key-1")).thenReturn(Optional.of(amountClaim));
+        assertThatThrownBy(() -> service.recordReservation(
+                "alice", "key-1", reservationResponse("30.00", "USD",
+                        canonicalReservationFingerprint("30.00", "USD"), "RESERVED", "claim-1")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("different reservation amount");
+
+        TransactionIdempotencyClaim currencyClaim = withdrawalRequestClaim("25.00", "USD", "key-2");
+        when(claims.lockByScope("alice", "key-2")).thenReturn(Optional.of(currencyClaim));
+        assertThatThrownBy(() -> service.recordReservation(
+                "alice", "key-2", reservationResponse("25.00", "EUR",
+                        hash("7|alice|WITHDRAWAL|25|EUR|key-2"), "RESERVED", "claim-2")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("different reservation currency");
+
+        TransactionIdempotencyClaim fingerprintClaim = withdrawalRequestClaim("25.00", "USD", "key-3");
+        when(claims.lockByScope("alice", "key-3")).thenReturn(Optional.of(fingerprintClaim));
+        assertThatThrownBy(() -> service.recordReservation(
+                "alice", "key-3", reservationResponse("25.00", "USD",
+                        "0".repeat(64), "RESERVED", "claim-3")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("non-canonical reservation fingerprint");
+
+        verify(claims, never()).save(any(TransactionIdempotencyClaim.class));
+    }
+
+    @Test
+    void closedRemoteReservationIsPersistedForReconciliationInsteadOfReused() {
+        TransactionIdempotencyClaim claim = withdrawalRequestClaim("25.00", "USD", "key-1");
+        when(claims.lockByScope("alice", "key-1")).thenReturn(Optional.of(claim));
+        when(claims.save(any(TransactionIdempotencyClaim.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        TransactionIdempotencyClaim saved = service.recordReservation(
+                "alice", "key-1", reservationResponse("25.00", "USD",
+                        canonicalReservationFingerprint("25.00", "USD"), "RELEASED", "claim-1"));
+
+        assertThat(saved.getState()).isEqualTo(TransactionIdempotencyClaimState.RELEASED);
+        assertThat(saved.getFailureDetails()).contains("RELEASED");
     }
 
     @Test
@@ -201,6 +267,22 @@ class TransactionIdempotencyClaimServiceTest {
                 .updatedAt(now)
                 .expiresAt(now.plusMinutes(30))
                 .build();
+    }
+
+    private SpendingLimitReservationLifecycleClient.ReservationResponse reservationResponse(
+            String amount, String currency, String fingerprint, String state, String correlation) {
+        LocalDateTime now = LocalDateTime.now();
+        return new SpendingLimitReservationLifecycleClient.ReservationResponse(
+                true, false, currency, new BigDecimal("100.00"),
+                new BigDecimal(amount), new BigDecimal("75.00"), null,
+                44L, correlation, new BigDecimal(amount), fingerprint, state,
+                now, now, now.plusMinutes(30), null);
+    }
+
+    private String canonicalReservationFingerprint(String amount, String currency) {
+        return hash("7|alice|WITHDRAWAL|"
+                + new BigDecimal(amount).stripTrailingZeros().toPlainString()
+                + "|" + currency + "|key-1");
     }
 
     private String hash(String canonical) {
