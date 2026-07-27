@@ -6,6 +6,7 @@ on:
       - codex/spending-reservation-payload-safety
     paths-ignore:
       - docs/release-evidence/spending-reservation-pre-pr.md
+      - docs/release-evidence/spending-reservation-latest-run.md
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
@@ -213,6 +214,11 @@ jobs:
       - docker-demonstration
     runs-on: ubuntu-latest
     steps:
+      - name: Check out the verified feature branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/codex/spending-reservation-payload-safety'
+        uses: actions/checkout@v4
+        with:
+          ref: codex/spending-reservation-payload-safety
       - name: Require every release-blocker gate
         env:
           NEEDS_JSON: ${{ toJson(needs) }}
@@ -222,26 +228,51 @@ jobs:
           results = {name: data["result"] for name, data in json.loads(os.environ["NEEDS_JSON"]).items()}
           print(json.dumps(results, indent=2, sort_keys=True))
           sys.exit(1 if any(result != "success" for result in results.values()) else 0)
-      - name: Check out the verified feature branch
-        if: github.event_name == 'push' && github.ref == 'refs/heads/codex/spending-reservation-payload-safety'
-        uses: actions/checkout@v4
-        with:
-          ref: codex/spending-reservation-payload-safety
-      - name: Publish source-SHA-specific pre-PR evidence
-        if: github.event_name == 'push' && github.ref == 'refs/heads/codex/spending-reservation-payload-safety'
+      - name: Publish source-SHA-specific branch verification status
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/codex/spending-reservation-payload-safety'
         continue-on-error: true
         shell: bash
         env:
           VERIFIED_SHA: ${{ github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          NEEDS_JSON: ${{ toJson(needs) }}
         run: |
           set -euo pipefail
           mkdir -p docs/release-evidence
-          cat > docs/release-evidence/spending-reservation-pre-pr.md <<EOF
-          # Spending Reservation Pre-PR Verification
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
 
-          - Verified source commit: \`${VERIFIED_SHA}\`
-          - Workflow run: ${RUN_URL}
+          results = {
+              name: data["result"]
+              for name, data in json.loads(os.environ["NEEDS_JSON"]).items()
+          }
+          passed = all(result == "success" for result in results.values())
+          rendered_results = "\n".join(
+              f"- {name}: {result}" for name, result in sorted(results.items())
+          )
+          latest = f"""# Spending Reservation Latest Branch Verification
+
+          - Verified source commit: `{os.environ['VERIFIED_SHA']}`
+          - Workflow run: {os.environ['RUN_URL']}
+          - Overall result: {'passed' if passed else 'failed'}
+
+          ## Required gate results
+
+          {rendered_results}
+          """
+          Path("docs/release-evidence/spending-reservation-latest-run.md").write_text(
+              latest, encoding="utf-8"
+          )
+
+          pre_pr = Path("docs/release-evidence/spending-reservation-pre-pr.md")
+          if passed:
+              pre_pr.write_text(
+                  f"""# Spending Reservation Pre-PR Verification
+
+          - Verified source commit: `{os.environ['VERIFIED_SHA']}`
+          - Workflow run: {os.environ['RUN_URL']}
           - Java 21 full verification: passed for account-service and transaction-service
           - Java 22 full verification: passed for account-service and transaction-service
           - Focused replay, conflict, concurrency, remote-effect, local-failure, reconciliation, and orphan-expiration tests: passed
@@ -250,10 +281,15 @@ jobs:
           - Canonical concurrency gate includes spending-limit reservation coverage
 
           This file is generated only after every required pre-PR gate succeeds.
-          EOF
+          """,
+                  encoding="utf-8",
+              )
+          elif pre_pr.exists():
+              pre_pr.unlink()
+          PY
           git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add docs/release-evidence/spending-reservation-pre-pr.md
+          git config user.email 4189828+github-actions[bot]@users.noreply.github.com
+          git add docs/release-evidence/spending-reservation-latest-run.md docs/release-evidence/spending-reservation-pre-pr.md
           git diff --cached --quiet && exit 0
-          git commit -m "Record spending reservation pre-PR evidence [skip ci]"
+          git commit -m "Record spending reservation verification evidence [skip ci]"
           git push origin HEAD:codex/spending-reservation-payload-safety
