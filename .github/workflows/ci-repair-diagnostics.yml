@@ -1,0 +1,91 @@
+name: CI Repair Diagnostics
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  transaction-service-java21:
+    name: Transaction service Java 21 diagnostics
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+      - name: Run Maven verification
+        working-directory: transaction-service
+        run: ./mvnw -q clean verify
+      - name: Upload Maven failure reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: transaction-service-java21-failure-reports
+          path: |
+            transaction-service/target/surefire-reports/**
+            transaction-service/target/failsafe-reports/**
+            transaction-service/target/pmd.xml
+            transaction-service/target/checkstyle-*.xml
+            transaction-service/target/spotbugs*.xml
+          if-no-files-found: warn
+          retention-days: 3
+
+  synthetic-api-browser-e2e:
+    name: Synthetic API and browser diagnostics
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      COMPOSE_PROJECT_NAME: financial-synthetic-diagnostics-${{ github.run_id }}
+      SANDBOX_IMAGE_TAG: diagnostic-${{ github.sha }}
+      SANDBOX_BASE_URL: https://127.0.0.1:8443
+      SANDBOX_OPERATOR_USERNAME: release_operator
+      SANDBOX_OPERATOR_PASSWORD: diagnostic-${{ github.run_id }}-operator-password
+      ACCOUNT_DB_PASSWORD: diagnostic-${{ github.run_id }}-account-db
+      TRANSACTION_DB_PASSWORD: diagnostic-${{ github.run_id }}-transaction-db
+      REDIS_PASSWORD: diagnostic-${{ github.run_id }}-redis
+      JWT_SECRET: diagnostic-${{ github.run_id }}-jwt-signing-material-at-least-32-bytes
+      INTERNAL_JWT_SECRET: diagnostic-${{ github.run_id }}-internal-signing-material-at-least-32-bytes
+      MFA_ENCRYPTION_KEY: diagnostic-${{ github.run_id }}-mfa-encryption-material-at-least-32-bytes
+      SANDBOX_BOOTSTRAP_TOKEN: diagnostic-${{ github.run_id }}-bootstrap-token-at-least-32-bytes
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Validate topology
+        shell: pwsh
+        run: ./scripts/validate-synthetic-sandbox.ps1
+      - name: Build and start sandbox
+        run: docker compose -f docker-compose.synthetic-sandbox.yml up --build --detach --wait
+      - name: Install browser dependencies
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+      - name: Run Playwright contract
+        working-directory: frontend
+        run: npx playwright test --config playwright.sandbox.config.ts
+      - name: Upload Playwright failure reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-playwright-failure-reports
+          path: |
+            frontend/test-results/**
+            frontend/playwright-report/**
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Capture container state
+        if: failure()
+        run: docker compose -f docker-compose.synthetic-sandbox.yml ps
+      - name: Remove sandbox
+        if: always()
+        run: docker compose -f docker-compose.synthetic-sandbox.yml down --volumes --remove-orphans
