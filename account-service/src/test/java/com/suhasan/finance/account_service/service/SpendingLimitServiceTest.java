@@ -25,8 +25,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -44,7 +44,7 @@ class SpendingLimitServiceTest {
     @BeforeEach
     void setUp() {
         service = new SpendingLimitService(accounts, limits, reservations, audits, mfa, notifications);
-        when(audits.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(audits.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
