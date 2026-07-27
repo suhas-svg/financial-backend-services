@@ -1,9 +1,9 @@
 package com.suhasan.finance.account_service.service;
 
 import com.suhasan.finance.account_service.dto.NotificationCreateRequest;
-import com.suhasan.finance.account_service.dto.NotificationSeverity;
-import com.suhasan.finance.account_service.dto.NotificationSourceType;
-import com.suhasan.finance.account_service.dto.NotificationType;
+import com.suhasan.finance.account_service.entity.NotificationSeverity;
+import com.suhasan.finance.account_service.entity.NotificationSourceType;
+import com.suhasan.finance.account_service.entity.NotificationType;
 import com.suhasan.finance.account_service.dto.SpendingLimitDtos;
 import com.suhasan.finance.account_service.entity.Account;
 import com.suhasan.finance.account_service.entity.AccountSpendingLimit;
