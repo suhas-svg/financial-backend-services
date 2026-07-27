@@ -58,7 +58,7 @@ jobs:
           - service: account-service
             tests: SpendingLimitServiceTest,SpendingLimitReservationConcurrencyTest
           - service: transaction-service
-            tests: TransactionIdempotencyClaimServiceTest,WithdrawalRequestIdempotencyClaimAspectTest,SpendingLimitReservationSagaAspectTest,SpendingLimitReservationClientAspectTest,SpendingLimitReservationSagaCoordinatorTest,SpendingLimitReservationCrossServiceIntegrationTest
+            tests: TransactionIdempotencyClaimServiceTest,WithdrawalRequestIdempotencyClaimAspectTest,SpendingLimitReservationSagaAspectTest,SpendingLimitReservationClientAspectTest,SpendingLimitRemoteEffectAspectTest,SpendingLimitReservationSagaCoordinatorTest,SpendingLimitReservationCrossServiceIntegrationTest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -66,7 +66,7 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - name: Run payload replay, concurrency, failure, and orphan tests
+      - name: Run payload replay, concurrency, failure, remote-effect, and orphan tests
         working-directory: ${{ matrix.service }}
         run: ./mvnw -q -Dtest=${{ matrix.tests }} test
       - name: Upload focused evidence
@@ -79,7 +79,7 @@ jobs:
           retention-days: 14
 
   fresh-postgres-migrations:
-    name: Fresh PostgreSQL Migration (${{ matrix.service }})
+    name: Fresh and Upgrade PostgreSQL Migration (${{ matrix.service }})
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -108,7 +108,7 @@ jobs:
       matrix:
         include:
           - service: account-service
-            tests: FreshPostgresIntegrationReadinessMigrationTest
+            tests: FreshPostgresIntegrationReadinessMigrationTest,SpendingLimitReservationMigrationTest
           - service: transaction-service
             tests: FreshPostgresIntegrationReadinessMigrationTest,LedgerMigrationIntegrationTest
     steps:
@@ -118,7 +118,7 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - name: Apply all migrations to a disposable PostgreSQL database
+      - name: Apply fresh migrations and backwards-safe upgrade scenarios
         working-directory: ${{ matrix.service }}
         run: ./mvnw -q -Dtest=${{ matrix.tests }} test
       - name: Capture migration inventory
@@ -244,8 +244,8 @@ jobs:
           - Workflow run: ${RUN_URL}
           - Java 21 full verification: passed for account-service and transaction-service
           - Java 22 full verification: passed for account-service and transaction-service
-          - Focused replay, conflict, concurrency, local-failure, reconciliation, and orphan-expiration tests: passed
-          - Fresh PostgreSQL migrations for both services: passed
+          - Focused replay, conflict, concurrency, remote-effect, local-failure, reconciliation, and orphan-expiration tests: passed
+          - Fresh PostgreSQL migrations and legacy reservation upgrade scenario: passed
           - Docker synthetic topology and real cross-service API/browser demonstration: passed
           - Canonical concurrency gate includes spending-limit reservation coverage
 
