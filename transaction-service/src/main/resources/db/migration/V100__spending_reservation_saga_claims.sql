@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS transaction_idempotency_claims (
     currency VARCHAR(3),
     state VARCHAR(40) NOT NULL DEFAULT 'CLAIMED',
     reservation_id BIGINT,
+    reservation_correlation VARCHAR(160),
     reservation_fingerprint VARCHAR(64),
     reservation_amount NUMERIC(19,2),
     reservation_currency VARCHAR(3),
