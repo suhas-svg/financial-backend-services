@@ -38,10 +38,10 @@ public interface SpendingLimitReservationRepository extends JpaRepository<Spendi
     List<SpendingLimitReservation> findTop100ByStateAndExpiresAtBeforeOrderByExpiresAtAsc(
             SpendingLimitReservationState state, LocalDateTime expiresAt);
 
-    @Query("select coalesce(sum(r.amount),0) from SpendingLimitReservation r "
-            + "where r.accountId=:a and r.operationType=:t and r.usageDate=:d "
-            + "and r.state in (com.suhasan.finance.account_service.entity.SpendingLimitReservationState.RESERVED, "
-            + "com.suhasan.finance.account_service.entity.SpendingLimitReservationState.CONSUMED, "
-            + "com.suhasan.finance.account_service.entity.SpendingLimitReservationState.RECONCILIATION_REQUIRED)")
-    BigDecimal used(@Param("a") Long accountId, @Param("t") String operationType, @Param("d") LocalDate usageDate);
+    @Query(value = "select coalesce(sum(amount),0) from spending_limit_reservations "
+            + "where account_id=:a and operation_type=:t and usage_date=:d "
+            + "and state in ('RESERVED','CONSUMED','RECONCILIATION_REQUIRED')",
+            nativeQuery = true)
+    BigDecimal used(@Param("a") Long accountId, @Param("t") String operationType,
+                    @Param("d") LocalDate usageDate);
 }
