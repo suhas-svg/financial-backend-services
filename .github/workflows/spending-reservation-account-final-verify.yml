@@ -1,0 +1,60 @@
+name: Spending Reservation Account Final Verify
+
+on:
+  push:
+    branches:
+      - codex/spending-reservation-account-final-verify
+    paths-ignore:
+      - docs/release-evidence/spending-reservation-account-final-verify.md
+
+permissions:
+  contents: write
+
+jobs:
+  account-verification:
+    name: Account Service Java ${{ matrix.java }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['21', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+      - working-directory: account-service
+        run: ./mvnw --batch-mode clean verify
+
+  authority:
+    if: always()
+    needs: [account-verification]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/spending-reservation-account-final-verify
+      - name: Publish account verification result
+        env:
+          RESULT: ${{ needs.account-verification.result }}
+          SOURCE_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p docs/release-evidence
+          cat > docs/release-evidence/spending-reservation-account-final-verify.md <<EOF
+          # Spending Reservation Account Final Verification
+
+          - Source commit: \`${SOURCE_SHA}\`
+          - Workflow run: ${RUN_URL}
+          - Account Java 21/22 full verification: ${RESULT}
+          EOF
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add docs/release-evidence/spending-reservation-account-final-verify.md
+          git diff --cached --quiet || git commit -m "Record account final verification [skip ci]"
+          git push origin HEAD:codex/spending-reservation-account-final-verify
+          test "${RESULT}" = "success"
