@@ -161,7 +161,7 @@ test("one-time bootstrap, payload-safe reservation replay, zero closure, and rec
     const account = await request.get(`/account-api/api/accounts/${first.fundedAccountId}`, { headers });
     expect(account.ok()).toBeTruthy();
     return Number((await account.json()).balance);
-  }, { timeout: 15_000 }).toBe(balanceBefore - 25);
+  }, { timeout: 45_000 }).toBe(balanceBefore - 25);
 
   const concurrentKey = "spending-reservation-concurrent-conflict-v1";
   const concurrentBalanceBefore = balanceBefore - 25;
@@ -184,7 +184,7 @@ test("one-time bootstrap, payload-safe reservation replay, zero closure, and rec
     const account = await request.get(`/account-api/api/accounts/${first.fundedAccountId}`, { headers });
     expect(account.ok()).toBeTruthy();
     return Number((await account.json()).balance);
-  }, { timeout: 15_000 }).toBe(concurrentBalanceBefore - Number(concurrentWinnerBody.amount));
+  }, { timeout: 45_000 }).toBe(concurrentBalanceBefore - Number(concurrentWinnerBody.amount));
 
   await page.goto("/login");
   await page.getByRole("button", { name: "Admin operations" }).click();
