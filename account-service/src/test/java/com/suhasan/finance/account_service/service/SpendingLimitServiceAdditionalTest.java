@@ -49,6 +49,7 @@ class SpendingLimitServiceAdditionalTest {
         when(limits.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(limits.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(reservations.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(reservations.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
@@ -135,10 +136,11 @@ class SpendingLimitServiceAdditionalTest {
 
     @Test
     void releaseIsIdempotentForMissingReservationAndRejectsPayloadMismatch() {
+        CheckingAccount owned = account("alice");
+        when(accounts.findByIdForUpdate(1L)).thenReturn(Optional.of(owned));
         assertThat(service.release(1L, "transfer", "key", "alice")).isFalse();
 
         CheckingAccount other = account("bob");
-        other.setCurrency("USD");
         when(accounts.findByIdForUpdate(1L)).thenReturn(Optional.of(other));
         SpendingLimitReservation existing = SpendingLimitReservation.builder()
                 .reservationId(9L)
