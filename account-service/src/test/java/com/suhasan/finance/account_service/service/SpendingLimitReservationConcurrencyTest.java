@@ -101,7 +101,8 @@ class SpendingLimitReservationConcurrencyTest {
             assertThat(List.of(firstResult, secondResult).stream()
                     .filter(IllegalStateException.class::isInstance).count()).isEqualTo(1);
             assertThat(winner.get()).isNotNull();
-            assertThat(winner.get().getAmount()).isIn(new BigDecimal("25.00"), new BigDecimal("30.00"));
+            assertThat(List.of(new BigDecimal("25.00"), new BigDecimal("30.00")).stream()
+                    .anyMatch(expected -> expected.compareTo(winner.get().getAmount()) == 0)).isTrue();
         } finally {
             executor.shutdownNow();
         }
