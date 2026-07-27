@@ -137,6 +137,7 @@ class SpendingLimitReservationSagaCoordinatorTest {
         TransactionIdempotencyClaim claim = claim(TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED,
                 LocalDateTime.now().minusMinutes(1));
         claim.setFailureDetails("DEBIT_CAPTURE_IN_FLIGHT");
+        when(claimService.staleClaims(any(), any())).thenReturn(List.of(claim));
         when(claimService.require("alice", "key-1")).thenReturn(claim);
         when(transactionRepository.findFirstByCreatedByAndTypeAndIdempotencyKey(
                 "alice", TransactionType.WITHDRAWAL, "key-1"))
