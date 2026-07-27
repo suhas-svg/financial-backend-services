@@ -1,0 +1,65 @@
+name: Apply Spending Reservation PMD Fix
+
+on:
+  push:
+    branches:
+      - codex/spending-reservation-pmd-patch
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/spending-reservation-payload-safety
+      - name: Apply exact PMD fixes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("account-service/src/main/java/com/suhasan/finance/account_service/service/SpendingLimitService.java")
+          text = path.read_text(encoding="utf-8")
+
+          old = '    private static final String WITHDRAWAL = "WITHDRAWAL";\n'
+          new = old + '    private static final int MAX_RESERVATIONS_PER_SCOPE = 1;\n'
+          assert text.count(old) == 1
+          text = text.replace(old, new, 1)
+
+          old = '        if (scoped.size() > 1) {'
+          new = '        if (scoped.size() > MAX_RESERVATIONS_PER_SCOPE) {'
+          assert text.count(old) == 1
+          text = text.replace(old, new, 1)
+
+          old = '''    private SpendingLimitDtos.ReserveResponse reservationResponse(
+              final SpendingLimitReservation reservation, final boolean replay,
+              final Account account, final AccountSpendingLimit limit, final String reason) {
+          applyDue(limit);'''
+          new = '''    private SpendingLimitDtos.ReserveResponse reservationResponse(
+              final SpendingLimitReservation reservation, final boolean replay,
+              final Account account, final AccountSpendingLimit limit, final String reason) {
+          final Long responseAccountId = account.getId();
+          applyDue(limit);'''
+          assert text.count(old) == 1
+          text = text.replace(old, new, 1)
+
+          old = '''        final BigDecimal used = reservations.used(reservation.getAccountId(), reservation.getOperationType(),
+                  reservation.getUsageDate());'''
+          new = '''        final BigDecimal used = reservations.used(responseAccountId, reservation.getOperationType(),
+                  reservation.getUsageDate());'''
+          assert text.count(old) == 1
+          text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding="utf-8")
+      - name: Commit target branch patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add account-service/src/main/java/com/suhasan/finance/account_service/service/SpendingLimitService.java
+          git diff --cached --check
+          git commit -m "Resolve spending reservation PMD findings"
+          git push origin HEAD:codex/spending-reservation-payload-safety
