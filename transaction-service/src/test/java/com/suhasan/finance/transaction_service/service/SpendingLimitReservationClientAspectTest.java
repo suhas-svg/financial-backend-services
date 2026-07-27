@@ -1,5 +1,6 @@
 package com.suhasan.finance.transaction_service.service;
 
+import com.suhasan.finance.transaction_service.client.ResilientAccountServiceClient;
 import com.suhasan.finance.transaction_service.entity.Transaction;
 import com.suhasan.finance.transaction_service.entity.TransactionIdempotencyClaim;
 import com.suhasan.finance.transaction_service.entity.TransactionIdempotencyClaimState;
@@ -18,6 +19,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -37,6 +40,43 @@ class SpendingLimitReservationClientAspectTest {
     void setUp() {
         aspect = new SpendingLimitReservationClientAspect(
                 claimService, lifecycleClient, transactionRepository);
+    }
+
+    @Test
+    void activeOriginalReservationIsReturnedToExistingTransactionCode() throws Throwable {
+        TransactionIdempotencyClaim claim = claim();
+        SpendingLimitReservationLifecycleClient.ReservationResponse response = reservation("RESERVED");
+        when(claimService.find("alice", "key-1")).thenReturn(Optional.of(claim));
+        when(lifecycleClient.reserve("7", "WITHDRAWAL", new BigDecimal("25.00"),
+                "key-1", "alice", null, "claim-1")).thenReturn(response);
+
+        Object result = aspect.reserve(joinPoint, "7", "WITHDRAWAL",
+                new BigDecimal("25.00"), "key-1", "alice");
+
+        assertThat(result).isInstanceOf(ResilientAccountServiceClient.SpendingLimitReservationResponse.class);
+        ResilientAccountServiceClient.SpendingLimitReservationResponse mapped =
+                (ResilientAccountServiceClient.SpendingLimitReservationResponse) result;
+        assertThat(mapped.isAllowed()).isTrue();
+        assertThat(mapped.getCurrency()).isEqualTo("USD");
+        verify(claimService).recordReservation("alice", "key-1", response);
+        verify(joinPoint, never()).proceed();
+    }
+
+    @Test
+    void closedOriginalReservationCannotAuthorizeAnotherDebit() {
+        TransactionIdempotencyClaim claim = claim();
+        SpendingLimitReservationLifecycleClient.ReservationResponse response = reservation("RELEASED");
+        when(claimService.find("alice", "key-1")).thenReturn(Optional.of(claim));
+        when(lifecycleClient.reserve("7", "WITHDRAWAL", new BigDecimal("25.00"),
+                "key-1", "alice", null, "claim-1")).thenReturn(response);
+
+        assertThatThrownBy(() -> aspect.reserve(joinPoint, "7", "WITHDRAWAL",
+                new BigDecimal("25.00"), "key-1", "alice"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("no longer active");
+
+        verify(claimService).recordReservation("alice", "key-1", response);
+        verify(joinPoint, never()).proceed();
     }
 
     @Test
