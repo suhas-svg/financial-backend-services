@@ -4,12 +4,14 @@ on:
   push:
     branches:
       - codex/spending-reservation-payload-safety
+    paths-ignore:
+      - docs/release-evidence/spending-reservation-pre-pr.md
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: spending-reservation-release-blocker-${{ github.ref }}
@@ -94,6 +96,7 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     env:
+      FRESH_ACCOUNT_POSTGRES_URL: jdbc:postgresql://localhost:5432/reservation_migrations
       FRESH_TRANSACTION_POSTGRES_URL: jdbc:postgresql://localhost:5432/reservation_migrations
       FRESH_POSTGRES_USER: postgres
       FRESH_POSTGRES_PASSWORD: postgres
@@ -164,7 +167,7 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npx playwright install --with-deps chromium
-      - name: Demonstrate identical replay and different-payload conflict across both services
+      - name: Demonstrate replay, conflict, and concurrent amount safety across both services
         working-directory: frontend
         run: npx playwright test --config playwright.sandbox.config.ts
       - name: Capture migration, reservation, claim, and reconciliation evidence
@@ -179,7 +182,7 @@ jobs:
             > /tmp/account-reservation-evidence.txt || true
           docker compose -f docker-compose.synthetic-sandbox.yml exec -T transaction-postgres \
             psql -U transaction_app -d transaction_sandbox -P pager=off \
-            -c "select claim_id, user_id, transaction_type, idempotency_key, account_id, operation_type, amount, currency, state, reservation_id, reservation_fingerprint, reservation_amount, reservation_currency, reservation_state, transaction_id, failure_details, created_at, updated_at, expires_at from transaction_idempotency_claims order by created_at;" \
+            -c "select claim_id, user_id, transaction_type, idempotency_key, account_id, operation_type, amount, currency, state, reservation_id, reservation_correlation, reservation_fingerprint, reservation_amount, reservation_currency, reservation_state, transaction_id, failure_details, created_at, updated_at, expires_at from transaction_idempotency_claims order by created_at;" \
             > /tmp/transaction-claim-evidence.txt || true
       - name: Upload Docker and API evidence
         if: always()
@@ -219,3 +222,38 @@ jobs:
           results = {name: data["result"] for name, data in json.loads(os.environ["NEEDS_JSON"]).items()}
           print(json.dumps(results, indent=2, sort_keys=True))
           sys.exit(1 if any(result != "success" for result in results.values()) else 0)
+      - name: Check out the verified feature branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/codex/spending-reservation-payload-safety'
+        uses: actions/checkout@v4
+        with:
+          ref: codex/spending-reservation-payload-safety
+      - name: Publish source-SHA-specific pre-PR evidence
+        if: github.event_name == 'push' && github.ref == 'refs/heads/codex/spending-reservation-payload-safety'
+        continue-on-error: true
+        shell: bash
+        env:
+          VERIFIED_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p docs/release-evidence
+          cat > docs/release-evidence/spending-reservation-pre-pr.md <<EOF
+          # Spending Reservation Pre-PR Verification
+
+          - Verified source commit: \`${VERIFIED_SHA}\`
+          - Workflow run: ${RUN_URL}
+          - Java 21 full verification: passed for account-service and transaction-service
+          - Java 22 full verification: passed for account-service and transaction-service
+          - Focused replay, conflict, concurrency, local-failure, reconciliation, and orphan-expiration tests: passed
+          - Fresh PostgreSQL migrations for both services: passed
+          - Docker synthetic topology and real cross-service API/browser demonstration: passed
+          - Canonical concurrency gate includes spending-limit reservation coverage
+
+          This file is generated only after every required pre-PR gate succeeds.
+          EOF
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add docs/release-evidence/spending-reservation-pre-pr.md
+          git diff --cached --quiet && exit 0
+          git commit -m "Record spending reservation pre-PR evidence [skip ci]"
+          git push origin HEAD:codex/spending-reservation-payload-safety
