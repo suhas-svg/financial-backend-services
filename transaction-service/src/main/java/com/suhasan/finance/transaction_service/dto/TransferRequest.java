@@ -22,6 +22,7 @@ public class TransferRequest {
     @NotNull(message = "Amount is required")
     @DecimalMin(value = "0.01", message = "Amount must be greater than 0")
     @DecimalMax(value = "999999.99", message = "Amount exceeds maximum limit")
+    @Digits(integer = 6, fraction = 2, message = "Amount must have at most two decimal places")
     private BigDecimal amount;
     
     @Size(max = 500, message = "Description cannot exceed 500 characters")
