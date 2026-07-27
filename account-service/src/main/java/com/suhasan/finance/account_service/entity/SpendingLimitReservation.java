@@ -64,7 +64,7 @@ public class SpendingLimitReservation {
     private LocalDateTime updatedAt;
     private LocalDateTime expiresAt;
 
-    @Column(length = 120)
+    @Column(length = 1000)
     private String outcome;
 
     private LocalDateTime outcomeAt;
