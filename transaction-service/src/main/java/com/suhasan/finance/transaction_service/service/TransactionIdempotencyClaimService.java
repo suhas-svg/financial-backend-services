@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -86,19 +87,22 @@ public class TransactionIdempotencyClaimService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public TransactionIdempotencyClaim recordReservation(
-            String userId, String idempotencyKey, SpendingLimitReservationLifecycleClient.ReservationResponse response) {
+            String userId, String idempotencyKey,
+            SpendingLimitReservationLifecycleClient.ReservationResponse response) {
         TransactionIdempotencyClaim claim = claims.lockByScope(userId, normalizeKey(idempotencyKey))
                 .orElseThrow(() -> new IllegalStateException("Durable transaction idempotency claim is missing"));
-        if (response.reservationId() == null) {
-            return claim;
-        }
+        validateReservationResponse(claim, response);
+
+        String reservationState = response.state().trim().toUpperCase(Locale.ROOT);
         claim.setReservationId(response.reservationId());
+        claim.setReservationCorrelation(firstNonBlank(response.transactionCorrelation(), claim.getClaimId()));
         claim.setReservationFingerprint(response.fingerprint());
         claim.setReservationAmount(response.amount());
         claim.setReservationCurrency(normalizeCurrency(response.currency()));
-        claim.setReservationState(response.state());
-        claim.setState(TransactionIdempotencyClaimState.RESERVED);
-        claim.setFailureDetails(null);
+        claim.setReservationState(reservationState);
+        claim.setState(localStateForReservation(reservationState));
+        claim.setFailureDetails("RESERVED".equals(reservationState)
+                ? null : "Remote reservation returned lifecycle state " + reservationState);
         claim.setUpdatedAt(LocalDateTime.now());
         if (response.expiresAt() != null) {
             claim.setExpiresAt(response.expiresAt());
@@ -207,6 +211,61 @@ public class TransactionIdempotencyClaimService {
         }
     }
 
+    private void validateReservationResponse(
+            TransactionIdempotencyClaim claim,
+            SpendingLimitReservationLifecycleClient.ReservationResponse response) {
+        if (response == null || !response.allowed()) {
+            throw new IllegalStateException("Account service returned an unusable spending reservation response");
+        }
+        if (response.reservationId() == null || response.amount() == null
+                || response.currency() == null || response.currency().isBlank()
+                || response.fingerprint() == null || response.fingerprint().isBlank()
+                || response.state() == null || response.state().isBlank()) {
+            throw new IllegalStateException(
+                    "Account service omitted required spending reservation identity or payload fields");
+        }
+        if (claim.getAmount() == null || claim.getAmount().compareTo(response.amount()) != 0) {
+            throw new IllegalStateException("Account service returned a different reservation amount");
+        }
+        String responseCurrency = normalizeCurrency(response.currency());
+        if (claim.getCurrency() != null
+                && !Objects.equals(normalizeCurrency(claim.getCurrency()), responseCurrency)) {
+            throw new IllegalStateException("Account service returned a different reservation currency");
+        }
+        String expectedFingerprint = reservationFingerprint(
+                claim.getAccountId(), claim.getUserId(), claim.getOperationType(),
+                response.amount(), responseCurrency, claim.getIdempotencyKey());
+        if (!Objects.equals(expectedFingerprint, response.fingerprint())) {
+            throw new IllegalStateException("Account service returned a non-canonical reservation fingerprint");
+        }
+    }
+
+    private TransactionIdempotencyClaimState localStateForReservation(String reservationState) {
+        return switch (reservationState) {
+            case "RESERVED" -> TransactionIdempotencyClaimState.RESERVED;
+            case "RELEASED" -> TransactionIdempotencyClaimState.RELEASED;
+            case "CONSUMED", "EXPIRED", "RECONCILIATION_REQUIRED" ->
+                    TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED;
+            default -> TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED;
+        };
+    }
+
+    private String reservationFingerprint(String accountId, String userId, String operationType,
+                                          BigDecimal amount, String currency, String idempotencyKey) {
+        return canonicalFingerprint(canonicalAccountId(accountId), userId.trim(),
+                operationType.trim().toUpperCase(Locale.ROOT),
+                amount.stripTrailingZeros().toPlainString(), currency, normalizeKey(idempotencyKey));
+    }
+
+    private String canonicalAccountId(String accountId) {
+        String normalized = accountId == null ? "" : accountId.trim();
+        try {
+            return new BigInteger(normalized).toString();
+        } catch (NumberFormatException notNumeric) {
+            return normalized;
+        }
+    }
+
     private String normalizeKey(String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new IllegalArgumentException("Idempotency-Key is required for spending operations");
@@ -245,6 +304,10 @@ public class TransactionIdempotencyClaimService {
             return decimal.stripTrailingZeros().toPlainString();
         }
         return value.toString().trim();
+    }
+
+    private String firstNonBlank(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     private long leaseMinutes() {
