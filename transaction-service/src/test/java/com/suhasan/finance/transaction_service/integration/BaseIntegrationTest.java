@@ -3,6 +3,7 @@ package com.suhasan.finance.transaction_service.integration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
+import com.suhasan.finance.transaction_service.service.SpendingLimitReservationLifecycleClient;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -21,13 +22,28 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import javax.sql.DataSource;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
+import java.util.HexFormat;
+import java.util.Locale;
 import java.util.UUID;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.when;
 
 /**
  * Base class for integration tests using Testcontainers for PostgreSQL and
@@ -78,6 +94,9 @@ public abstract class BaseIntegrationTest {
 
     @Autowired
     protected RedisTemplate<String, Object> redisTemplate;
+
+    @MockitoBean
+    protected SpendingLimitReservationLifecycleClient spendingLimitReservationLifecycleClient;
 
     // PostgreSQL Testcontainer
     @Container
@@ -139,11 +158,127 @@ public abstract class BaseIntegrationTest {
             restTemplate.getRestTemplate().getInterceptors().add(IDEMPOTENCY_KEY_INTERCEPTOR);
         }
 
+        stubSpendingLimitReservationLifecycle();
+
         // Reset WireMock server before each test
         wireMockServer.resetAll();
 
         // Clear Redis cache before each test
         clearRedisCache();
+    }
+
+    private void stubSpendingLimitReservationLifecycle() {
+        when(spendingLimitReservationLifecycleClient.reserve(
+                anyString(), anyString(), any(BigDecimal.class), anyString(), anyString(),
+                nullable(String.class), nullable(String.class)))
+                .thenAnswer(invocation -> reservationResponse(
+                        invocation.getArgument(0),
+                        invocation.getArgument(1),
+                        invocation.getArgument(2),
+                        invocation.getArgument(3),
+                        invocation.getArgument(4),
+                        invocation.getArgument(5),
+                        invocation.getArgument(6)));
+
+        when(spendingLimitReservationLifecycleClient.transition(
+                anyString(), anyLong(), anyString(), anyString(),
+                nullable(String.class), nullable(String.class)))
+                .thenAnswer(invocation -> transitionResponse(
+                        invocation.getArgument(1),
+                        invocation.getArgument(2),
+                        invocation.getArgument(4),
+                        invocation.getArgument(5)));
+    }
+
+    private SpendingLimitReservationLifecycleClient.ReservationResponse reservationResponse(
+            String accountId, String operationType, BigDecimal amount, String idempotencyKey,
+            String userId, String currency, String transactionCorrelation) {
+        String normalizedCurrency = normalizeCurrency(currency);
+        String normalizedOperation = operationType.trim().toUpperCase(Locale.ROOT);
+        String normalizedKey = idempotencyKey.trim();
+        long reservationId = Integer.toUnsignedLong(normalizedKey.hashCode());
+        if (reservationId == 0L) {
+            reservationId = 1L;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        BigDecimal dailyLimit = amount.add(new BigDecimal("10000.00"));
+        return new SpendingLimitReservationLifecycleClient.ReservationResponse(
+                true,
+                false,
+                normalizedCurrency,
+                dailyLimit,
+                BigDecimal.ZERO,
+                dailyLimit.subtract(amount),
+                null,
+                reservationId,
+                transactionCorrelation,
+                amount,
+                reservationFingerprint(accountId, userId, normalizedOperation,
+                        amount, normalizedCurrency, normalizedKey),
+                "RESERVED",
+                now,
+                now,
+                now.plusMinutes(30),
+                null);
+    }
+
+    private SpendingLimitReservationLifecycleClient.ReservationResponse transitionResponse(
+            Long reservationId, String action, String transactionCorrelation, String outcome) {
+        String state = switch (action.trim().toLowerCase(Locale.ROOT)) {
+            case "consume" -> "CONSUMED";
+            case "release" -> "RELEASED";
+            case "reconciliation-required" -> "RECONCILIATION_REQUIRED";
+            default -> "RESERVED";
+        };
+        LocalDateTime now = LocalDateTime.now();
+        return new SpendingLimitReservationLifecycleClient.ReservationResponse(
+                true,
+                true,
+                "USD",
+                null,
+                null,
+                null,
+                null,
+                reservationId,
+                transactionCorrelation,
+                null,
+                null,
+                state,
+                now,
+                now,
+                now.plusMinutes(30),
+                outcome);
+    }
+
+    private String reservationFingerprint(String accountId, String userId, String operationType,
+                                          BigDecimal amount, String currency, String idempotencyKey) {
+        String canonical = String.join("|",
+                canonicalAccountId(accountId),
+                userId.trim(),
+                operationType,
+                amount.stripTrailingZeros().toPlainString(),
+                currency,
+                idempotencyKey);
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is unavailable", impossible);
+        }
+    }
+
+    private String canonicalAccountId(String accountId) {
+        String normalized = accountId == null ? "" : accountId.trim();
+        try {
+            return new BigInteger(normalized).toString();
+        } catch (NumberFormatException notNumeric) {
+            return normalized;
+        }
+    }
+
+    private String normalizeCurrency(String currency) {
+        return currency == null || currency.isBlank()
+                ? "USD" : currency.trim().toUpperCase(Locale.ROOT);
     }
 
     private void clearRedisCache() {
@@ -168,7 +303,7 @@ public abstract class BaseIntegrationTest {
     }
 
     /**
-     * Get the WireMock server instance for stubbing Account Service responses
+     * Get the WireMock server instance for stubbing Account Service integration testing.
      */
     protected WireMockServer getWireMockServer() {
         return wireMockServer;
