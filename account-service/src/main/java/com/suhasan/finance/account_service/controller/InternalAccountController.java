@@ -6,13 +6,16 @@ import com.suhasan.finance.account_service.dto.BalanceOperationResponse;
 import com.suhasan.finance.account_service.dto.DebitHoldRequest;
 import com.suhasan.finance.account_service.dto.DebitHoldResponse;
 import com.suhasan.finance.account_service.dto.LedgerProjectionUpdateRequest;
+import com.suhasan.finance.account_service.dto.SpendingLimitDtos;
 import com.suhasan.finance.account_service.service.AccountService;
+import com.suhasan.finance.account_service.service.SpendingLimitService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,30 +27,69 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/internal/accounts")
 public class InternalAccountController {
     private final AccountService accountService;
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private com.suhasan.finance.account_service.service.SpendingLimitService spendingLimitService;
+
+    @Autowired(required = false)
+    private SpendingLimitService spendingLimitService;
 
     @PostMapping("/{id}/spending-limit-reservations")
-    public ResponseEntity<com.suhasan.finance.account_service.dto.SpendingLimitDtos.ReserveResponse> reserveLimit(
+    public ResponseEntity<SpendingLimitDtos.ReserveResponse> reserveLimit(
             @PathVariable final Long id,
-            @Valid @RequestBody final com.suhasan.finance.account_service.dto.SpendingLimitDtos.ReserveRequest request) {
+            @Valid @RequestBody final SpendingLimitDtos.ReserveRequest request) {
         return ResponseEntity.ok(spendingLimitService.reserve(id, request));
     }
 
+    @GetMapping("/{id}/spending-limit-reservations/{operationType}/{idempotencyKey}")
+    public ResponseEntity<SpendingLimitDtos.ReserveResponse> lookupLimitReservation(
+            @PathVariable final Long id,
+            @PathVariable final String operationType,
+            @PathVariable final String idempotencyKey,
+            @RequestParam final String userId) {
+        return ResponseEntity.ok(spendingLimitService.lookup(id, operationType, idempotencyKey, userId));
+    }
+
+    @PostMapping("/{id}/spending-limit-reservations/{reservationId}/consume")
+    public ResponseEntity<SpendingLimitDtos.ReserveResponse> consumeLimitReservation(
+            @PathVariable final Long id,
+            @PathVariable final Long reservationId,
+            @Valid @RequestBody final SpendingLimitDtos.ReservationTransitionRequest request) {
+        return ResponseEntity.ok(spendingLimitService.consume(id, reservationId, request));
+    }
+
+    @PostMapping("/{id}/spending-limit-reservations/{reservationId}/release")
+    public ResponseEntity<SpendingLimitDtos.ReserveResponse> releaseLimitReservation(
+            @PathVariable final Long id,
+            @PathVariable final Long reservationId,
+            @Valid @RequestBody final SpendingLimitDtos.ReservationTransitionRequest request) {
+        return ResponseEntity.ok(spendingLimitService.release(id, reservationId, request));
+    }
+
+    @PostMapping("/{id}/spending-limit-reservations/{reservationId}/reconciliation-required")
+    public ResponseEntity<SpendingLimitDtos.ReserveResponse> requireLimitReservationReconciliation(
+            @PathVariable final Long id,
+            @PathVariable final Long reservationId,
+            @Valid @RequestBody final SpendingLimitDtos.ReservationTransitionRequest request) {
+        return ResponseEntity.ok(spendingLimitService.requireReconciliation(id, reservationId, request));
+    }
+
     @DeleteMapping("/{id}/spending-limit-reservations/{operationType}/{idempotencyKey}")
-    public ResponseEntity<Void> releaseLimit(@PathVariable final Long id, @PathVariable final String operationType,
-            @PathVariable final String idempotencyKey, @RequestParam final String userId) {
+    public ResponseEntity<Void> releaseLimit(
+            @PathVariable final Long id,
+            @PathVariable final String operationType,
+            @PathVariable final String idempotencyKey,
+            @RequestParam final String userId) {
         spendingLimitService.release(id, operationType, idempotencyKey, userId);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/spending-limit-audit")
-    public java.util.List<com.suhasan.finance.account_service.dto.SpendingLimitDtos.AuditResponse> spendingLimitAudit() {
+    public List<SpendingLimitDtos.AuditResponse> spendingLimitAudit() {
         return spendingLimitService.auditEvents();
     }
 

@@ -5,6 +5,8 @@ import com.suhasan.finance.account_service.entity.AccountSpendingLimit;
 import com.suhasan.finance.account_service.entity.CheckingAccount;
 import com.suhasan.finance.account_service.entity.MfaMethod;
 import com.suhasan.finance.account_service.entity.SpendingLimitAuditEvent;
+import com.suhasan.finance.account_service.entity.SpendingLimitReservation;
+import com.suhasan.finance.account_service.entity.SpendingLimitReservationState;
 import com.suhasan.finance.account_service.repository.AccountRepository;
 import com.suhasan.finance.account_service.repository.AccountSpendingLimitRepository;
 import com.suhasan.finance.account_service.repository.SpendingLimitAuditEventRepository;
@@ -23,7 +25,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -47,6 +48,8 @@ class SpendingLimitServiceAdditionalTest {
         service = new SpendingLimitService(accounts, limits, reservations, audits, mfa, notifications);
         when(limits.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(limits.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(reservations.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(reservations.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
@@ -113,12 +116,11 @@ class SpendingLimitServiceAdditionalTest {
         assertThatThrownBy(() -> service.reserve(1L, reserve("TRANSFER", "1", "alice")))
                 .isInstanceOf(IllegalArgumentException.class);
         CheckingAccount other = account("bob");
-        when(accounts.findById(1L)).thenReturn(Optional.of(other));
+        when(accounts.findByIdForUpdate(1L)).thenReturn(Optional.of(other));
         assertThatThrownBy(() -> service.reserve(1L, reserve("TRANSFER", "1", "alice")))
                 .isInstanceOf(AccessDeniedException.class);
 
         CheckingAccount owned = account("alice");
-        when(accounts.findById(1L)).thenReturn(Optional.of(owned));
         when(accounts.findByIdForUpdate(1L)).thenReturn(Optional.of(owned));
         when(limits.lock(1L)).thenReturn(Optional.of(limit("100", "50")));
         assertThatThrownBy(() -> service.reserve(1L, reserve("CARD", "1", "alice")))
@@ -128,19 +130,41 @@ class SpendingLimitServiceAdditionalTest {
         assertThat(service.reserve(1L, reserve("withdrawal", "5", "alice")).allowed()).isTrue();
         when(reservations.used(1L, "TRANSFER", LocalDate.now())).thenReturn(new BigDecimal("79"));
         assertThat(service.reserve(1L, reserve("transfer", "2", "alice")).remaining())
-                .isEqualByComparingTo("19");
+                .isEqualByComparingTo("21");
         verify(notifications).createInternal(any());
     }
 
     @Test
-    void releaseRejectsMissingAndOwnershipAndAuditEventsAreNewestFirst() {
-        assertThatThrownBy(() -> service.release(1L, "transfer", "key", "alice"))
-                .isInstanceOf(IllegalArgumentException.class);
+    void releaseIsIdempotentForMissingReservationAndRejectsPayloadMismatch() {
+        CheckingAccount owned = account("alice");
+        when(accounts.findByIdForUpdate(1L)).thenReturn(Optional.of(owned));
+        assertThat(service.release(1L, "transfer", "key", "alice")).isFalse();
+
         CheckingAccount other = account("bob");
         when(accounts.findByIdForUpdate(1L)).thenReturn(Optional.of(other));
+        SpendingLimitReservation existing = SpendingLimitReservation.builder()
+                .reservationId(9L)
+                .accountId(1L)
+                .ownerId("bob")
+                .operationType("TRANSFER")
+                .amount(BigDecimal.ONE)
+                .currency("USD")
+                .usageDate(LocalDate.now())
+                .idempotencyKey("key")
+                .state(SpendingLimitReservationState.RESERVED)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+        when(reservations.findFirstByAccountIdAndIdempotencyKeyOrderByCreatedAtAsc(1L, "key"))
+                .thenReturn(Optional.of(existing));
         assertThatThrownBy(() -> service.release(1L, "transfer", "key", "alice"))
-                .isInstanceOf(AccessDeniedException.class);
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("original reservation");
+    }
 
+    @Test
+    void auditEventsAreNewestFirst() {
         SpendingLimitAuditEvent old = SpendingLimitAuditEvent.builder()
                 .eventId(1L).createdAt(LocalDateTime.now().minusHours(1)).build();
         SpendingLimitAuditEvent newest = SpendingLimitAuditEvent.builder()
@@ -153,6 +177,7 @@ class SpendingLimitServiceAdditionalTest {
     private CheckingAccount account(String owner) {
         CheckingAccount account = new CheckingAccount();
         account.setOwnerId(owner);
+        account.setCurrency("USD");
         return account;
     }
 

@@ -59,7 +59,7 @@ test("gateway exposes only a hardened, unmistakably synthetic entry point", asyn
   expect(rejectedOrigin.status()).toBe(403);
 });
 
-test("one-time bootstrap, login, MFA seed replay, zero closure, and recovery", async ({ page, request }) => {
+test("one-time bootstrap, payload-safe reservation replay, zero closure, and recovery", async ({ page, request }) => {
   test.skip(!username || !password || !bootstrapToken, "Runtime-only operator inputs are required");
   const status = await request.get("/account-api/api/sandbox/bootstrap/status");
   expect(status.ok()).toBeTruthy();
@@ -122,6 +122,125 @@ test("one-time bootstrap, login, MFA seed replay, zero closure, and recovery", a
     fundingTransactionId: first.fundingTransactionId,
     fundedAmount: 1000
   });
+
+  const reservationKey = "spending-reservation-payload-safe-v1";
+  const withdrawalBody = {
+    accountId: String(first.fundedAccountId),
+    amount: 25,
+    currency: "USD",
+    description: "Controlled beta reservation replay",
+    reference: "reservation-payload-safe"
+  };
+  const firstWithdrawal = await request.post("/transaction-api/api/transactions/withdraw", {
+    headers: { ...headers, "Idempotency-Key": reservationKey }, data: withdrawalBody
+  });
+  expect(firstWithdrawal.status()).toBe(201);
+  const firstWithdrawalBody = await firstWithdrawal.json();
+  expect(firstWithdrawalBody).toMatchObject({
+    amount: 25,
+    currency: "USD",
+    type: "WITHDRAWAL",
+    status: "COMPLETED",
+    reference: "reservation-payload-safe"
+  });
+  expect(firstWithdrawalBody.journalId).toBeTruthy();
+
+  const identicalReplay = await request.post("/transaction-api/api/transactions/withdraw", {
+    headers: { ...headers, "Idempotency-Key": reservationKey }, data: withdrawalBody
+  });
+  expect(identicalReplay.status()).toBe(201);
+  expect(await identicalReplay.json()).toMatchObject({
+    transactionId: firstWithdrawalBody.transactionId,
+    amount: 25,
+    currency: "USD",
+    status: "COMPLETED"
+  });
+
+  const mismatchedReplay = await request.post("/transaction-api/api/transactions/withdraw", {
+    headers: { ...headers, "Idempotency-Key": reservationKey },
+    data: { ...withdrawalBody, amount: 30 }
+  });
+  expect(mismatchedReplay.status()).toBe(409);
+  expect(JSON.stringify(await mismatchedReplay.json())).toContain("different");
+
+  await expect.poll(async () => {
+    const history = await request.get(
+      `/transaction-api/api/transactions/account/${first.fundedAccountId}?size=100`, { headers }
+    );
+    expect(history.ok()).toBeTruthy();
+    const content = (await history.json()).content as Array<Record<string, unknown>>;
+    return content
+      .filter(transaction => transaction.reference === "reservation-payload-safe"
+        && transaction.type === "WITHDRAWAL")
+      .map(transaction => ({
+        transactionId: transaction.transactionId,
+        amount: Number(transaction.amount),
+        currency: transaction.currency,
+        status: transaction.status
+      }));
+  }, { timeout: 15_000 }).toEqual([{
+    transactionId: firstWithdrawalBody.transactionId,
+    amount: 25,
+    currency: "USD",
+    status: "COMPLETED"
+  }]);
+
+  const concurrentKey = "spending-reservation-concurrent-conflict-v1";
+  const concurrentReference = "reservation-concurrent-conflict";
+  const [concurrentA, concurrentB] = await Promise.all([
+    request.post("/transaction-api/api/transactions/withdraw", {
+      headers: { ...headers, "Idempotency-Key": concurrentKey },
+      data: {
+        ...withdrawalBody,
+        amount: 10,
+        description: "Controlled beta concurrent reservation conflict",
+        reference: concurrentReference
+      }
+    }),
+    request.post("/transaction-api/api/transactions/withdraw", {
+      headers: { ...headers, "Idempotency-Key": concurrentKey },
+      data: {
+        ...withdrawalBody,
+        amount: 11,
+        description: "Controlled beta concurrent reservation conflict",
+        reference: concurrentReference
+      }
+    })
+  ]);
+  expect([concurrentA.status(), concurrentB.status()].sort((left, right) => left - right))
+    .toEqual([201, 409]);
+  const concurrentWinner = concurrentA.status() === 201 ? concurrentA : concurrentB;
+  const concurrentWinnerBody = await concurrentWinner.json();
+  expect([10, 11]).toContain(Number(concurrentWinnerBody.amount));
+  expect(concurrentWinnerBody).toMatchObject({
+    currency: "USD",
+    type: "WITHDRAWAL",
+    status: "COMPLETED",
+    reference: concurrentReference
+  });
+  expect(concurrentWinnerBody.journalId).toBeTruthy();
+
+  await expect.poll(async () => {
+    const history = await request.get(
+      `/transaction-api/api/transactions/account/${first.fundedAccountId}?size=100`, { headers }
+    );
+    expect(history.ok()).toBeTruthy();
+    const content = (await history.json()).content as Array<Record<string, unknown>>;
+    return content
+      .filter(transaction => transaction.reference === concurrentReference
+        && transaction.type === "WITHDRAWAL")
+      .map(transaction => ({
+        transactionId: transaction.transactionId,
+        amount: Number(transaction.amount),
+        currency: transaction.currency,
+        status: transaction.status
+      }));
+  }, { timeout: 15_000 }).toEqual([{
+    transactionId: concurrentWinnerBody.transactionId,
+    amount: Number(concurrentWinnerBody.amount),
+    currency: "USD",
+    status: "COMPLETED"
+  }]);
 
   await page.goto("/login");
   await page.getByRole("button", { name: "Admin operations" }).click();

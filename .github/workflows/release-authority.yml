@@ -86,6 +86,7 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     env:
+      FRESH_ACCOUNT_POSTGRES_URL: jdbc:postgresql://localhost:5432/transaction_migrations
       FRESH_TRANSACTION_POSTGRES_URL: jdbc:postgresql://localhost:5432/transaction_migrations
       FRESH_POSTGRES_USER: postgres
       FRESH_POSTGRES_PASSWORD: postgres
@@ -98,7 +99,7 @@ jobs:
         include:
           - service: account-service
             command: >-
-              ./mvnw -q -Dtest=FreshPostgresIntegrationReadinessMigrationTest test &&
+              ./mvnw -q -Dtest=FreshPostgresIntegrationReadinessMigrationTest,SpendingLimitReservationMigrationTest test &&
               ./mvnw -q initialize
               -Dit.test=NotificationDeliveryMigrationIntegrationTest
               failsafe:integration-test failsafe:verify
@@ -126,9 +127,9 @@ jobs:
       matrix:
         include:
           - service: account-service
-            tests: NotificationProviderRetryDispatcherTest,NotificationServiceTest
+            tests: NotificationProviderRetryDispatcherTest,NotificationServiceTest,SpendingLimitServiceTest,SpendingLimitReservationConcurrencyTest
           - service: transaction-service
-            tests: LedgerPostingConcurrencyIntegrationTest,ScheduledTransferServiceTest,LedgerProjectionOutboxDispatcherTest
+            tests: LedgerPostingConcurrencyIntegrationTest,ScheduledTransferServiceTest,LedgerProjectionOutboxDispatcherTest,TransactionIdempotencyClaimServiceTest,WithdrawalRequestIdempotencyClaimAspectTest,SpendingLimitReservationSagaAspectTest,SpendingLimitReservationClientAspectTest,SpendingLimitRemoteEffectAspectTest,SpendingLimitReservationSagaCoordinatorTest,SpendingLimitReservationCrossServiceIntegrationTest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
