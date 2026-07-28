@@ -23,6 +23,7 @@ public class SpendingLimitReservationSagaCoordinator {
     private static final List<TransactionIdempotencyClaimState> RECONCILABLE_STATES = List.of(
             TransactionIdempotencyClaimState.CLAIMED,
             TransactionIdempotencyClaimState.RESERVED,
+            TransactionIdempotencyClaimState.COMPLETED_PENDING_CONSUME,
             TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED);
 
     private final TransactionIdempotencyClaimService claimService;

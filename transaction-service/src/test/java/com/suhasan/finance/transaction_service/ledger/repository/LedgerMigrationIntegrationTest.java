@@ -62,6 +62,31 @@ class LedgerMigrationIntegrationTest {
     }
 
     @Test
+    void spendingReservationClaimConstraintAcceptsRecoverableCompletedState() {
+        String claimId = UUID.randomUUID().toString();
+        String idempotencyKey = "migration-" + claimId;
+        jdbc.update("""
+                INSERT INTO transaction_idempotency_claims (
+                    claim_id, user_id, transaction_type, idempotency_key, request_fingerprint,
+                    account_id, operation_type, amount, currency, state,
+                    created_at, updated_at, expires_at)
+                VALUES (?, 'migration-owner', 'WITHDRAWAL', ?, ?, '7', 'WITHDRAWAL',
+                        25.00, 'USD', 'COMPLETED_PENDING_CONSUME',
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '30 minutes')
+                """, claimId, idempotencyKey, "a".repeat(64));
+
+        assertThat(jdbc.queryForObject(
+                "SELECT state FROM transaction_idempotency_claims WHERE claim_id = ?",
+                String.class, claimId)).isEqualTo("COMPLETED_PENDING_CONSUME");
+
+        jdbc.update("UPDATE transaction_idempotency_claims SET state = 'COMPLETED' WHERE claim_id = ?",
+                claimId);
+        assertThat(jdbc.queryForObject(
+                "SELECT state FROM transaction_idempotency_claims WHERE claim_id = ?",
+                String.class, claimId)).isEqualTo("COMPLETED");
+    }
+
+    @Test
     void migrationsCreateLedgerTablesAndAcceptEveryProcessingState() {
         Integer tableCount = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM information_schema.tables

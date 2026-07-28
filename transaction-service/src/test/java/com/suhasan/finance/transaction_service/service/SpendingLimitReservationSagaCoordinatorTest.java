@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -193,6 +194,36 @@ class SpendingLimitReservationSagaCoordinatorTest {
 
         verify(lifecycleClient).transition("7", 44L, "release", "alice", "claim-1",
                 "LOCAL_TRANSACTION_NOT_CREATED");
+    }
+
+    @Test
+    void completedClaimPendingConsumeIsRecoveredAfterProcessRestart() {
+        TransactionIdempotencyClaim claim = claim(
+                TransactionIdempotencyClaimState.COMPLETED_PENDING_CONSUME,
+                LocalDateTime.now().plusMinutes(20));
+        Transaction transaction = transaction(TransactionStatus.COMPLETED);
+        when(claimService.staleClaims(any(), any())).thenReturn(List.of(claim));
+        when(claimService.require("alice", "key-1")).thenReturn(claim);
+        when(transactionRepository.findFirstByCreatedByAndTypeAndIdempotencyKey(
+                "alice", TransactionType.WITHDRAWAL, "key-1"))
+                .thenReturn(Optional.of(transaction));
+        when(lifecycleClient.transition("7", 44L, "consume", "alice", "claim-1",
+                "TRANSACTION_COMPLETED"))
+                .thenReturn(reservation("CONSUMED"));
+
+        coordinator.reconcileStaleClaims();
+
+        verify(claimService).staleClaims(
+                argThat(states -> states.contains(
+                        TransactionIdempotencyClaimState.COMPLETED_PENDING_CONSUME)),
+                any());
+        verify(claimService).recordTransaction(eq("alice"), eq("key-1"),
+                argThat(response -> response.getTransactionId().equals("tx-1")
+                        && response.getStatus() == TransactionStatus.COMPLETED));
+        verify(lifecycleClient).transition("7", 44L, "consume", "alice", "claim-1",
+                "TRANSACTION_COMPLETED");
+        verify(claimService).updateState("alice", "key-1",
+                TransactionIdempotencyClaimState.COMPLETED, "CONSUMED", null);
     }
 
     private TransactionIdempotencyClaim claim(TransactionIdempotencyClaimState state,

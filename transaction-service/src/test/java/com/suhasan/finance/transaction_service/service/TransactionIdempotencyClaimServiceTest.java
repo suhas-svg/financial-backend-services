@@ -1,8 +1,10 @@
 package com.suhasan.finance.transaction_service.service;
 
+import com.suhasan.finance.transaction_service.dto.TransactionResponse;
 import com.suhasan.finance.transaction_service.dto.TransferRequest;
 import com.suhasan.finance.transaction_service.entity.TransactionIdempotencyClaim;
 import com.suhasan.finance.transaction_service.entity.TransactionIdempotencyClaimState;
+import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
 import com.suhasan.finance.transaction_service.repository.TransactionIdempotencyClaimRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -174,6 +176,25 @@ class TransactionIdempotencyClaimServiceTest {
 
         assertThat(saved.getState()).isEqualTo(TransactionIdempotencyClaimState.RELEASED);
         assertThat(saved.getFailureDetails()).contains("RELEASED");
+    }
+
+    @Test
+    void completedTransactionRemainsRecoverableUntilReservationIsConsumed() {
+        TransactionIdempotencyClaim claim = withdrawalRequestClaim("25.00", "USD", "key-1");
+        when(claims.lockByScope("alice", "key-1")).thenReturn(Optional.of(claim));
+        when(claims.save(any(TransactionIdempotencyClaim.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        TransactionIdempotencyClaim saved = service.recordTransaction(
+                "alice", "key-1", TransactionResponse.builder()
+                        .transactionId("tx-1")
+                        .type(TransactionType.WITHDRAWAL)
+                        .status(TransactionStatus.COMPLETED)
+                        .build());
+
+        assertThat(saved.getTransactionId()).isEqualTo("tx-1");
+        assertThat(saved.getState())
+                .isEqualTo(TransactionIdempotencyClaimState.COMPLETED_PENDING_CONSUME);
     }
 
     @Test

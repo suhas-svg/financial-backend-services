@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS transaction_idempotency_claims (
     version BIGINT NOT NULL DEFAULT 0,
     CONSTRAINT uk_transaction_idempotency_claim UNIQUE (user_id, idempotency_key),
     CONSTRAINT chk_transaction_idempotency_claim_state CHECK (
-        state IN ('CLAIMED', 'RESERVED', 'COMPLETED', 'RELEASED',
+        state IN ('CLAIMED', 'RESERVED', 'COMPLETED_PENDING_CONSUME',
+                  'COMPLETED', 'RELEASED',
                   'RECONCILIATION_REQUIRED', 'CLOSED_NO_RESERVATION')
     )
 );

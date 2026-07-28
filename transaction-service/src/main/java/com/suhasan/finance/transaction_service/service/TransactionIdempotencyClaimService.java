@@ -117,8 +117,9 @@ public class TransactionIdempotencyClaimService {
                 .orElseThrow(() -> new IllegalStateException("Durable transaction idempotency claim is missing"));
         if (response != null) {
             claim.setTransactionId(response.getTransactionId());
-            if (response.getStatus() == TransactionStatus.COMPLETED) {
-                claim.setState(TransactionIdempotencyClaimState.COMPLETED);
+            if (response.getStatus() == TransactionStatus.COMPLETED
+                    || response.getStatus() == TransactionStatus.REVERSED) {
+                claim.setState(TransactionIdempotencyClaimState.COMPLETED_PENDING_CONSUME);
             } else if (response.getStatus() == TransactionStatus.FAILED_REQUIRES_MANUAL_ACTION) {
                 claim.setState(TransactionIdempotencyClaimState.RECONCILIATION_REQUIRED);
             }
