@@ -4,7 +4,7 @@ Financial Backend Services is a banking-style application made of two Spring Boo
 
 The backend provides account management, authentication, transaction processing, monitoring, and reversal workflows. The frontend in `frontend/` provides the customer banking app first, then the Phase 2 admin and operations dashboard.
 
-Controlled-beta financial integrity contracts and operator controls are documented in [Controlled Beta Phase 1](docs/controlled-beta-phase1-integrity.md).
+Controlled-beta financial integrity contracts and operator controls are documented in [Controlled Beta Phase 1](docs/controlled-beta-phase1-integrity.md). Supported deployment boundaries are defined in [Deployment authority](docs/deployment-authority.md).
 
 ## Project Layout
 
@@ -13,7 +13,9 @@ financial-backend-services/
 |-- account-service/          # Spring Boot account/auth service on port 8080
 |-- transaction-service/      # Spring Boot transaction service on port 8081
 |-- frontend/                 # React + Vite + TypeScript financial console
-|-- docker-compose.codex.yml  # Local verification compose file used during this work
+|-- infrastructure/helm/      # Canonical Kubernetes templates
+|-- docker-compose.synthetic-sandbox.yml # Supported synthetic-beta runtime
+|-- financial-mcp-server/     # Archived, unsupported historical subsystem
 |-- .github/workflows/        # PR validation and CI checks
 `-- README.md
 ```
@@ -23,10 +25,10 @@ financial-backend-services/
 ### Customer App
 
 - Register, login, and logout with JWT-backed sessions.
-- Store the JWT in memory and `sessionStorage` for reload survival.
+- Store the JWT in memory only; a browser reload intentionally requires login.
 - Decode JWT roles client-side for route guards and navigation.
 - View dashboard totals, account cards, recent transactions, limits, and personal stats.
-- Create, edit, delete, and filter accounts.
+- Create, edit, close, and filter accounts while preserving financial history.
 - Create `CHECKING`, `SAVINGS`, and `CREDIT` accounts with type-specific validation.
 - See available balance as the primary spendable amount and ledger balance as secondary detail.
 - See frozen accounts with hold warnings and status reasons.
@@ -329,7 +331,7 @@ Challenges expire after five minutes and authorization proofs after two minutes 
 
 Redis is optional for manual local JVM runs of `transaction-service`. The default local configuration disables Redis health so core transaction flows can run with only PostgreSQL and account-service. Compose, E2E, and Helm deployment configs explicitly enable Redis health because those environments provision Redis.
 
-For production frontend deployment, use one of these patterns:
+For an externally approved deployment, use one of these frontend patterns:
 
 - Serve the frontend behind a reverse proxy and route `/account-api` and `/transaction-api` to the Spring services.
 - Or configure explicit CORS rules on both Spring services for the deployed frontend origin.
@@ -353,7 +355,13 @@ POST   /api/accounts
 GET    /api/accounts/{id}
 PUT    /api/accounts/{id}
 PATCH  /api/accounts/{id}/status
-DELETE /api/accounts/{id}
+```
+
+Customer hard deletion is not supported. Ledger-authoritative closure preserves
+the account and its financial history:
+
+```http
+POST /api/controlled-beta/accounts/{accountId}/close
 ```
 
 Admin account oversight uses:
@@ -375,7 +383,10 @@ GET /api/accounts?ownerId=&accountType=&status=&page=&size=
 
 ### Internal Account Balance And Holds
 
-`account-service` owns all balance state. Public account JSON keeps `balance` as a compatibility alias for `ledgerBalance`, while newer clients can read both:
+`transaction-service` owns the authoritative double-entry ledger. `account-service`
+stores a delivered projection for account views and hold enforcement. Public
+account JSON keeps `balance` as a compatibility alias for `ledgerBalance`, while
+newer clients can read both:
 
 ```json
 {
@@ -669,7 +680,7 @@ npm run e2e
 The frontend test suite covers:
 
 - API proxy/client behavior.
-- JWT session restore and role extraction.
+- In-memory JWT handling and role extraction.
 - Form schemas for auth, accounts, money movement, and reversals.
 - Login/register success and failure states.
 - Account type-specific fields.
@@ -717,29 +728,15 @@ For a disposable live Docker smoke test with step-up enabled:
 
 The script confirms that funds and journals remain unchanged before authorization, then completes a high-value transfer and verifies balances, transaction state, and ledger postings.
 
-## Verified Baseline
+## Release validation
 
-The merged `main` baseline was revalidated on 2026-06-23:
-
-- Frontend unit and component tests: 40 passed.
-- Frontend production build: passed.
-- Account service tests: 63 passed.
-- Transaction service tests: 316 passed, 52 skipped.
-- GitHub CI: configuration policy, PR build policy, Java 21/22 service tests, and secret scanning passed for the cross-console reliability PR.
-
-The live workflow exercised both consoles and their shared backend state:
-
-- Registered and authenticated a customer, created accounts, moved money, and reviewed transaction history.
-- Confirmed available and ledger balances, holds, disputes, and notifications from customer pages.
-- Confirmed the configured risk rule created an alert on the fifth qualifying transfer.
-- Reviewed accounts, transactions, monitoring, audit events, risk alerts, risk cases, disputes, and investigations from the admin console.
-- Confirmed normal users could not see or open admin routes.
-
-### Known Baseline Warnings
-
-- The frontend dependency audit reported seven npm vulnerabilities. Review `npm audit` before choosing upgrades because dependency changes may require regression testing.
-- The production build reports a Vite chunk-size warning: the minified application JavaScript bundle is approximately 786 kB before gzip. Route-level lazy loading or explicit Rollup chunking can reduce it.
-
+`main` is protected by the strict `Required Acceptance` check. The controlled-beta
+workflow validates both Java services on Java 21 and 22, fresh PostgreSQL
+migrations, replay/concurrency/recovery regressions, frontend tests/lint/build/
+accessibility, the synthetic API/browser contract, Helm/Terraform policy,
+dependency and container scans, SBOM generation, and full-history secret
+scanning. A dated local test count is not release authority; use the current
+protected PR result.
 ## Admin Testing Note
 
 The public registration flow creates normal `ROLE_USER` accounts. To test admin screens against the real backend, seed or promote a user with `ROLE_ADMIN` in the account-service database before logging in.

@@ -1316,8 +1316,14 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     private void requireReplayFingerprint(Transaction existing, String expectedFingerprint) {
+        if (existing.getRequestFingerprintStatus()
+                == com.suhasan.finance.transaction_service.entity.RequestFingerprintStatus.LEGACY_AMBIGUOUS) {
+            throw new IllegalStateException(
+                    "Legacy Idempotency-Key replay requires operator reconciliation");
+        }
         if (existing.getRequestFingerprint() == null) {
-            return;
+            throw new IllegalStateException(
+                    "Idempotency-Key replay has no verifiable request fingerprint; operator reconciliation required");
         }
         if (!Objects.equals(existing.getRequestFingerprint(), expectedFingerprint)) {
             throw new IllegalStateException(

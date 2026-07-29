@@ -215,6 +215,7 @@ class IdempotencyAndReversalTest {
                                         .description("Test deposit")
                                         .createdBy(USER_ID)
                                         .idempotencyKey("DEP-IDEM-001")
+                                        .requestFingerprint("9c83d81578df1f32f3771fc065e7a73b5954810eebdcbb9657d66e91069831f5")
                                         .build();
 
                         when(transactionRepository.findFirstByCreatedByAndTypeAndIdempotencyKey(
@@ -239,8 +240,10 @@ class IdempotencyAndReversalTest {
                                         .amount(BigDecimal.valueOf(200))
                                         .currency("USD")
                                         .toAccountId(ACCOUNT_A)
+                                        .description("Test deposit")
                                         .createdBy(USER_ID)
                                         .idempotencyKey("DEP-RACE-001")
+                                        .requestFingerprint("9c83d81578df1f32f3771fc065e7a73b5954810eebdcbb9657d66e91069831f5")
                                         .build();
 
                         when(accountServiceClient.getAccount(ACCOUNT_A))
@@ -430,6 +433,7 @@ class IdempotencyAndReversalTest {
                                         .currency("USD")
                                         .createdBy(USER_ID)
                                         .idempotencyKey("REV-IDEM-EXISTING")
+                                        .requestFingerprint("0eb29121181ccd309264c9057d158a2b21124a8596e33b7a5d7afd36af98b42d")
                                         .build();
 
                         when(transactionRepository.findFirstByCreatedByAndTypeAndIdempotencyKey(
@@ -531,6 +535,7 @@ class IdempotencyAndReversalTest {
                                 .status(TransactionStatus.COMPLETED)
                                 .createdBy(USER_ID)
                                 .idempotencyKey(idemKey)
+                                .requestFingerprint(idemKey == null ? null : "3676435d190696ba4b711cfac7d747d465b1cbb92895821af0c2b22377fa49e4")
                                 .createdAt(LocalDateTime.now().minusMinutes(5))
                                 .build();
         }

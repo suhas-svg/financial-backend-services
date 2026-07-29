@@ -441,6 +441,7 @@ class TransactionServiceImplTest {
                                 .description(description)
                                 .reference(reference)
                                 .idempotencyKey(idempotencyKey)
+                                .requestFingerprint("579fe3a48c961c4a860c872d16631ccc16a5feead1ca9a94c121545d57bbf5c7")
                                 .createdBy(userId)
                                 .createdAt(LocalDateTime.now())
                                 .build();
