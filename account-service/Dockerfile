@@ -1,5 +1,5 @@
 # ----- BUILD STAGE -----
-FROM maven:3.9-eclipse-temurin-22 AS builder
+FROM maven:3.9-eclipse-temurin-22@sha256:7cf82f62915056ec2641aec64e14eac5bcb7d718aa8a3121ad75121486fc213a AS builder
 
 # Build arguments for environment-specific configuration
 ARG BUILD_ENV=prod
@@ -39,7 +39,7 @@ FROM eclipse-temurin:21-jre-alpine-3.23@sha256:3f08b13888f595cc49edabea7250ba694
 
 # Build arguments for runtime configuration
 ARG BUILD_ENV=prod
-ARG APP_VERSION=latest
+ARG APP_VERSION=0.0.0-local
 ARG BUILD_DATE
 ARG VCS_REF
 
@@ -50,7 +50,7 @@ LABEL maintainer="Account Service Team" \
       org.opencontainers.image.version="${APP_VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.revision="${VCS_REF}" \
-      org.opencontainers.image.source="https://github.com/suhasan/account-service" \
+      org.opencontainers.image.source="https://github.com/suhas-svg/financial-backend-services" \
       environment="${BUILD_ENV}"
 
 # Install security updates and required packages

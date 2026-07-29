@@ -19,20 +19,23 @@ jobs:
     name: Acceptance Authority Policy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Verify the single acceptance authority
         shell: pwsh
         run: ./scripts/verify-release-authority.ps1
       - name: Verify repository deployment authority
         shell: pwsh
         run: ./scripts/verify-repository-authority.ps1
+      - name: Self-test Surefire retry governance
+        shell: pwsh
+        run: ./scripts/test-surefire-retry-governance.ps1
 
   frontend:
     name: Frontend Lint, Tests, Build, Accessibility
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
@@ -61,8 +64,8 @@ jobs:
         service: [account-service, transaction-service]
         java: ['21', '22']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           java-version: ${{ matrix.java }}
           distribution: temurin
@@ -70,13 +73,17 @@ jobs:
       - name: Run the complete Maven verification lifecycle
         working-directory: ${{ matrix.service }}
         run: ./mvnw -q clean verify
+      - name: Report retry-only test success and enforce the adoption deadline
+        working-directory: ${{ matrix.service }}
+        shell: pwsh
+        run: ../scripts/check-surefire-retries.ps1 -ReportRoots target/surefire-reports -EnforcementDate 2026-08-12T00:00:00Z
 
   fresh-migrations:
     name: Fresh PostgreSQL Migrations (${{ matrix.service }})
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:15-alpine
+        image: postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f
         env:
           POSTGRES_DB: transaction_migrations
           POSTGRES_USER: postgres
@@ -112,8 +119,8 @@ jobs:
               -Dtest=FreshPostgresIntegrationReadinessMigrationTest,FreshPostgresProviderActivationMigrationTest,OutcomeProtectionMigrationSmokeTest,LedgerMigrationIntegrationTest
               test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           java-version: '21'
           distribution: temurin
@@ -134,8 +141,8 @@ jobs:
           - service: transaction-service
             tests: LedgerPostingConcurrencyIntegrationTest,ScheduledTransferServiceTest,LedgerProjectionOutboxDispatcherTest,TransactionIdempotencyClaimServiceTest,WithdrawalRequestIdempotencyClaimAspectTest,SpendingLimitReservationSagaAspectTest,SpendingLimitReservationClientAspectTest,SpendingLimitRemoteEffectAspectTest,SpendingLimitReservationSagaCoordinatorTest,SpendingLimitReservationCrossServiceIntegrationTest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           java-version: '21'
           distribution: temurin
@@ -148,8 +155,8 @@ jobs:
     name: Helm and Terraform Policy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
       - name: Lint and render both Helm charts
         shell: bash
         run: |
@@ -207,8 +214,8 @@ jobs:
       MFA_ENCRYPTION_KEY: ci-${{ github.run_id }}-mfa-encryption-material-at-least-32-bytes
       SANDBOX_BOOTSTRAP_TOKEN: ci-${{ github.run_id }}-bootstrap-token-at-least-32-bytes
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
@@ -253,7 +260,7 @@ jobs:
             context: infrastructure/synthetic-sandbox/gateway
             dockerfile: infrastructure/synthetic-sandbox/gateway/Dockerfile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build the exact checkout image
         run: >-
           docker build
@@ -276,7 +283,7 @@ jobs:
           output-file: ${{ matrix.image }}.spdx.json
           upload-artifact: false
       - name: Upload the bounded SBOM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sbom-${{ matrix.image }}
           path: ${{ matrix.image }}.spdx.json
@@ -287,14 +294,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           java-version: '21'
           distribution: temurin
           cache: maven
       - name: Cache OWASP dependency data
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.m2/repository/org/owasp/dependency-check-data
           key: dependency-check-data-${{ runner.os }}-${{ github.run_id }}
@@ -332,10 +339,10 @@ jobs:
     name: Full-History Secret Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
