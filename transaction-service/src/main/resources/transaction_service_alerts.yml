@@ -55,6 +55,32 @@ groups:
           description: "Projection outbox backlog is {{ $value }} for more than ten minutes."
           runbook_url: "docs/operations/ledger-cutover-runbook.md"
 
+      - alert: FinancialEvidenceOutboxBacklogSustained
+        expr: financial_evidence_outbox_oldest_age_seconds > 600
+        for: 5m
+        labels:
+          severity: warning
+          service: transaction-service
+          team: platform
+          component: financial-evidence
+        annotations:
+          summary: "Financial evidence delivery backlog is stale"
+          description: "The oldest generic evidence intent has waited {{ $value }} seconds."
+          runbook_url: "docs/operations/ledger-cutover-runbook.md"
+
+      - alert: FinancialEvidenceOutboxTerminalFailure
+        expr: financial_evidence_outbox_terminal_failures > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: transaction-service
+          team: platform
+          component: financial-evidence
+        annotations:
+          summary: "Financial evidence delivery reached terminal failure"
+          description: "One or more evidence intents exhausted bounded retries and require replay review."
+          runbook_url: "docs/operations/ledger-cutover-runbook.md"
+
       - alert: LedgerCriticalReconciliationExceptions
         expr: ledger_reconciliation_exceptions{severity="CRITICAL",status!~"RESOLVED|WAIVED"} > 0
         for: 0m

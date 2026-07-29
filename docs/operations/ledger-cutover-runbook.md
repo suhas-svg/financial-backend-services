@@ -153,3 +153,18 @@ All corrections after this boundary must be forward fixes or compensating entrie
 - Use reversal or correction journals for financial repair.
 - Use reconciliation exception notes to link operator decisions to evidence.
 - Keep account-service as the identity/status service and ledger projection mirror.
+
+## Generic financial evidence outbox
+
+Every journal lifecycle transition commits one `financial_evidence_outbox` intent in the
+same database transaction as its immutable `journal_state_events` row. The dispatcher
+creates idempotent, per-event receipts for `AUDIT_ENRICHMENT`, `RISK_NOTIFICATION`,
+`ANALYTICS`, and `NONCRITICAL_METRICS`; a replay skips receipts that already exist.
+
+Monitor `financial_evidence_outbox_backlog`,
+`financial_evidence_outbox_oldest_age_seconds`, and
+`financial_evidence_outbox_terminal_failures`. Retries use bounded exponential backoff
+and stop after eight failed attempts. Before replaying a terminal row, diagnose the
+database/destination fault and compare existing receipts by `event_id`; never delete
+receipts or fabricate a replacement lifecycle event. An approved replay resets only the
+same outbox row to `RETRY_SCHEDULED` with its original idempotency key and source event.

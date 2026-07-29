@@ -1,5 +1,6 @@
 package com.suhasan.finance.transaction_service.ledger.service;
 
+import com.suhasan.finance.transaction_service.evidence.FinancialEvidenceOutboxService;
 import com.suhasan.finance.transaction_service.ledger.domain.*;
 import com.suhasan.finance.transaction_service.ledger.repository.*;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ public class LedgerPostingService {
     private final LedgerBalanceProjectionRepository projectionRepository;
     private final LedgerIdempotencyLock idempotencyLock;
     private final LedgerProjectionOutboxService projectionOutboxService;
+    private final FinancialEvidenceOutboxService evidenceOutboxService;
     private final LedgerOperationsMetrics ledgerOperationsMetrics;
 
     public LedgerPostingService(
@@ -32,6 +34,7 @@ public class LedgerPostingService {
             LedgerBalanceProjectionRepository projectionRepository,
             LedgerIdempotencyLock idempotencyLock,
             LedgerProjectionOutboxService projectionOutboxService,
+            FinancialEvidenceOutboxService evidenceOutboxService,
             LedgerOperationsMetrics ledgerOperationsMetrics) {
         this.accountRepository = accountRepository;
         this.journalRepository = journalRepository;
@@ -40,6 +43,7 @@ public class LedgerPostingService {
         this.projectionRepository = projectionRepository;
         this.idempotencyLock = idempotencyLock;
         this.projectionOutboxService = projectionOutboxService;
+        this.evidenceOutboxService = evidenceOutboxService;
         this.ledgerOperationsMetrics = ledgerOperationsMetrics;
     }
 
@@ -114,6 +118,7 @@ public class LedgerPostingService {
         projectionRepository.saveAll(projections.values());
         JournalStateEvent stateEvent = state(journalId, 1, JournalState.PENDING, command.createdBy(), null);
         stateRepository.save(stateEvent);
+        evidenceOutboxService.enqueueLedgerLifecycle(journal, stateEvent);
         enqueueCustomerProjectionChanges(accounts, projections, stateEvent.getEventId());
         ledgerOperationsMetrics.recordPosting(command.journalType().name(), command.currency(), "pending", Duration.between(startedAt, Instant.now()));
         return new JournalResult(journal.getJournalId(), JournalState.PENDING, false);
@@ -181,12 +186,14 @@ public class LedgerPostingService {
                 originalJournalId);
         JournalResult pending = createPending(command);
         JournalResult posted = post(pending.journalId(), actor);
-        stateRepository.save(state(
+        JournalStateEvent reversalState = state(
                 originalJournalId,
                 originalState.getEventSequence() + 1,
                 JournalState.REVERSED,
                 actor,
-                reason));
+                reason);
+        stateRepository.save(reversalState);
+        evidenceOutboxService.enqueueLedgerLifecycle(original, reversalState);
         return posted;
     }
 
@@ -232,6 +239,7 @@ public class LedgerPostingService {
         JournalStateEvent stateEvent = state(
                 journalId, latest.getEventSequence() + 1, targetState, actor, reason);
         stateRepository.save(stateEvent);
+        evidenceOutboxService.enqueueLedgerLifecycle(journal, stateEvent);
         enqueueCustomerProjectionChanges(accounts, projections, stateEvent.getEventId());
         ledgerOperationsMetrics.recordPosting(
                 journal.getJournalType().name(),
