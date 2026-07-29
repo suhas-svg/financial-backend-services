@@ -1,5 +1,6 @@
 package com.suhasan.finance.transaction_service.ledger.service;
 
+import com.suhasan.finance.transaction_service.evidence.FinancialEvidenceOutboxService;
 import com.suhasan.finance.transaction_service.ledger.domain.*;
 import com.suhasan.finance.transaction_service.ledger.repository.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +35,7 @@ class LedgerPostingServiceTest {
     @Mock private LedgerBalanceProjectionRepository projectionRepository;
     @Mock private LedgerIdempotencyLock idempotencyLock;
     @Mock private LedgerProjectionOutboxService projectionOutboxService;
+    @Mock private FinancialEvidenceOutboxService evidenceOutboxService;
     @Mock private LedgerOperationsMetrics ledgerOperationsMetrics;
 
     private LedgerPostingService service;
@@ -46,7 +48,7 @@ class LedgerPostingServiceTest {
     void setUp() {
         service = new LedgerPostingService(
                 accountRepository, journalRepository, postingRepository, stateRepository, projectionRepository,
-                idempotencyLock, projectionOutboxService, ledgerOperationsMetrics);
+                idempotencyLock, projectionOutboxService, evidenceOutboxService, ledgerOperationsMetrics);
         sourceId = UUID.randomUUID();
         destinationId = UUID.randomUUID();
         sourceProjection = LedgerBalanceProjection.open(sourceId, new BigDecimal("100.00"));
@@ -92,6 +94,7 @@ class LedgerPostingServiceTest {
         verify(ledgerOperationsMetrics).recordIdempotentReplay("TRANSFER", "USD");
         verifyNoInteractions(projectionRepository);
         verifyNoInteractions(projectionOutboxService);
+        verifyNoInteractions(evidenceOutboxService);
     }
 
     @Test

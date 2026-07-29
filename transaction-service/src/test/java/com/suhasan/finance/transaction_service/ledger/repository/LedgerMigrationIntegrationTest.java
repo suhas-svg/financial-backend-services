@@ -93,9 +93,10 @@ class LedgerMigrationIntegrationTest {
                 WHERE table_schema = 'public'
                   AND table_name IN ('ledger_accounts', 'journal_transactions', 'journal_postings',
                                      'journal_state_events', 'ledger_balance_projections',
-                                     'ledger_projection_outbox')
+                                     'ledger_projection_outbox', 'financial_evidence_outbox',
+                                     'financial_evidence_deliveries')
                 """, Integer.class);
-        assertThat(tableCount).isEqualTo(6);
+        assertThat(tableCount).isEqualTo(8);
 
         String transactionId = UUID.randomUUID().toString();
         jdbc.update("""
