@@ -23,6 +23,9 @@ jobs:
       - name: Verify the single acceptance authority
         shell: pwsh
         run: ./scripts/verify-release-authority.ps1
+      - name: Verify repository deployment authority
+        shell: pwsh
+        run: ./scripts/verify-repository-authority.ps1
 
   frontend:
     name: Frontend Lint, Tests, Build, Accessibility

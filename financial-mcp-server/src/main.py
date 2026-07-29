@@ -4,6 +4,7 @@ Main entry point for the MCP Financial Server.
 
 import asyncio
 import logging
+import os
 import signal
 import sys
 from typing import Optional
@@ -84,6 +85,10 @@ class MCPServerRunner:
 
 async def main():
     """Main application entry point."""
+    if os.getenv("ALLOW_ARCHIVED_MCP_EXECUTION") != "I_UNDERSTAND_THIS_IS_UNSUPPORTED":
+        raise RuntimeError(
+            "financial-mcp-server is archived and unsupported; see ARCHIVED.md"
+        )
     runner = MCPServerRunner()
 
     try:

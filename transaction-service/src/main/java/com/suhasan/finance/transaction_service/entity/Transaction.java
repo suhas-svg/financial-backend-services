@@ -68,6 +68,11 @@ public class Transaction {
     @Column(name = "request_fingerprint", length = 64)
     private String requestFingerprint;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "request_fingerprint_status", nullable = false, length = 32)
+    @Builder.Default
+    private RequestFingerprintStatus requestFingerprintStatus = RequestFingerprintStatus.CURRENT;
+
     @Column(name = "journal_id")
     private UUID journalId;
 
