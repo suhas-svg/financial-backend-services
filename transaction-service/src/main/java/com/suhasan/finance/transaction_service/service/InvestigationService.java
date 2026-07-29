@@ -20,6 +20,7 @@ import com.suhasan.finance.transaction_service.repository.AuditLogEntryRepositor
 import com.suhasan.finance.transaction_service.repository.RiskAlertRepository;
 import com.suhasan.finance.transaction_service.repository.RiskCaseRepository;
 import com.suhasan.finance.transaction_service.repository.TransactionDisputeRepository;
+import com.suhasan.finance.transaction_service.repository.TransactionDisputeNoteRepository;
 import com.suhasan.finance.transaction_service.repository.TransactionRepository;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +48,7 @@ import java.util.Set;
 public class InvestigationService {
 
     private static final int EXPORT_LIMIT = 10_000;
+    private static final int MAX_TIMELINE_WINDOW = 10_000;
     private static final String CSV_HEADER = "itemId,itemType,title,description,severity,status,userId,transactionId,accountId,alertId,caseId,amount,currency,createdAt,metadataJson\n";
 
     private final TransactionRepository transactionRepository;
@@ -54,6 +56,7 @@ public class InvestigationService {
     private final RiskAlertRepository riskAlertRepository;
     private final RiskCaseRepository riskCaseRepository;
     private final TransactionDisputeRepository disputeRepository;
+    private final TransactionDisputeNoteRepository disputeNoteRepository;
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
@@ -62,7 +65,8 @@ public class InvestigationService {
         if (!context.hasCriteria()) {
             return Page.empty(pageable);
         }
-        List<InvestigationTimelineItemResponse> items = collectItems(context);
+        int sourceLimit = (int) Math.min(MAX_TIMELINE_WINDOW, pageable.getOffset() + pageable.getPageSize());
+        List<InvestigationTimelineItemResponse> items = collectItems(context, sourceLimit);
         items.sort(Comparator.comparing(InvestigationTimelineItemResponse::getCreatedAt,
                 Comparator.nullsLast(Comparator.naturalOrder())).reversed());
         int start = (int) Math.min(pageable.getOffset(), items.size());
@@ -76,21 +80,27 @@ public class InvestigationService {
         if (!context.hasCriteria()) {
             return new InvestigationSummaryResponse(0, 0, 0, 0, 0, 0, 0, 0, 0);
         }
-        List<Transaction> transactions = transactionRepository.findAll(transactionSpec(context));
-        List<AuditLogEntry> audits = auditLogEntryRepository.findAll(auditSpec(context));
-        List<RiskAlert> alerts = riskAlertRepository.findAll(alertSpec(context));
-        List<RiskCase> cases = riskCaseRepository.findAll(caseSpec(context));
-        List<TransactionDispute> disputes = disputeRepository.findAll(disputeSpec(context));
+        long transactions = transactionRepository.count(transactionSpec(context));
+        long audits = auditLogEntryRepository.count(auditSpec(context));
+        long alerts = riskAlertRepository.count(alertSpec(context));
+        long cases = riskCaseRepository.count(caseSpec(context));
+        long disputes = disputeRepository.count(disputeSpec(context));
+        long disputeNotes = disputeNoteRepository.count(disputeNoteSpec(context));
+        long failures = transactionRepository.count(transactionSpec(context).and(
+                (root, query, cb) -> cb.equal(root.get("status"), TransactionStatus.FAILED)))
+                + auditLogEntryRepository.count(auditSpec(context).and(
+                (root, query, cb) -> cb.equal(cb.upper(root.get("outcome")), "FAILURE")));
+        long reversals = transactionRepository.count(transactionSpec(context).and(
+                (root, query, cb) -> cb.equal(root.get("type"), TransactionType.REVERSAL)));
+        long highSeverity = riskAlertRepository.count(alertSpec(context).and(
+                (root, query, cb) -> cb.equal(root.get("severity"), RiskAlertSeverity.HIGH)))
+                + riskCaseRepository.count(caseSpec(context).and(
+                (root, query, cb) -> root.get("priority").in(
+                        RiskCasePriority.HIGH, RiskCasePriority.CRITICAL)));
 
-        long failures = transactions.stream().filter(transaction -> transaction.getStatus() == TransactionStatus.FAILED).count()
-                + audits.stream().filter(audit -> "FAILURE".equalsIgnoreCase(audit.getOutcome())).count();
-        long reversals = transactions.stream().filter(transaction -> transaction.getType() == TransactionType.REVERSAL).count();
-        long highSeverity = alerts.stream().filter(alert -> alert.getSeverity() == RiskAlertSeverity.HIGH).count()
-                + cases.stream().filter(riskCase -> riskCase.getPriority() == RiskCasePriority.HIGH || riskCase.getPriority() == RiskCasePriority.CRITICAL).count();
-        long disputeNotes = disputes.stream().mapToLong(dispute -> dispute.getNotes().size()).sum();
-
-        return new InvestigationSummaryResponse(transactions.size(), audits.size(), alerts.size(), cases.size(), disputes.size(), disputeNotes, failures, reversals, highSeverity);
-    }
+        return new InvestigationSummaryResponse(
+                transactions, audits, alerts, cases, disputes, disputeNotes,
+                failures, reversals, highSeverity);    }
 
     @Transactional(readOnly = true)
     public String exportTimelineCsv(InvestigationFilter filter) {
@@ -103,16 +113,17 @@ public class InvestigationService {
         return csv.toString();
     }
 
-    private List<InvestigationTimelineItemResponse> collectItems(InvestigationContext context) {
+    private List<InvestigationTimelineItemResponse> collectItems(InvestigationContext context, int sourceLimit) {
         List<InvestigationTimelineItemResponse> items = new ArrayList<>();
-        transactionRepository.findAll(transactionSpec(context)).forEach(transaction -> items.add(toTransactionItem(transaction)));
-        auditLogEntryRepository.findAll(auditSpec(context)).forEach(audit -> items.add(toAuditItem(audit)));
-        riskAlertRepository.findAll(alertSpec(context)).forEach(alert -> items.add(toAlertItem(alert)));
-        riskCaseRepository.findAll(caseSpec(context)).forEach(riskCase -> {
+        Pageable sourcePage = PageRequest.of(0, sourceLimit, Sort.by(Sort.Direction.DESC, "createdAt"));
+        transactionRepository.findAll(transactionSpec(context), sourcePage).forEach(transaction -> items.add(toTransactionItem(transaction)));
+        auditLogEntryRepository.findAll(auditSpec(context), sourcePage).forEach(audit -> items.add(toAuditItem(audit)));
+        riskAlertRepository.findAll(alertSpec(context), sourcePage).forEach(alert -> items.add(toAlertItem(alert)));
+        riskCaseRepository.findAll(caseSpec(context), sourcePage).forEach(riskCase -> {
             items.add(toCaseItem(riskCase));
             riskCase.getNotes().forEach(note -> items.add(toCaseNoteItem(riskCase, note)));
         });
-        disputeRepository.findAll(disputeSpec(context)).forEach(dispute -> {
+        disputeRepository.findAll(disputeSpec(context), sourcePage).forEach(dispute -> {
             items.add(toDisputeItem(dispute));
             dispute.getNotes().forEach(note -> items.add(toDisputeNoteItem(dispute, note)));
         });
@@ -225,6 +236,18 @@ public class InvestigationService {
         };
     }
 
+    private Specification<TransactionDisputeNote> disputeNoteSpec(InvestigationContext context) {
+        return (root, query, cb) -> {
+            List<Predicate> criteria = new ArrayList<>();
+            if (!context.userIds.isEmpty()) {
+                criteria.add(root.get("dispute").get("userId").in(context.userIds));
+            }
+            if (!context.transactionIds.isEmpty()) {
+                criteria.add(root.get("dispute").get("transactionId").in(context.transactionIds));
+            }
+            return withDateRange(context, anyMatch(criteria, cb), root.get("createdAt"), cb);
+        };
+    }
     private Predicate anyMatch(List<Predicate> criteria, jakarta.persistence.criteria.CriteriaBuilder cb) {
         if (criteria.isEmpty()) {
             return cb.disjunction();

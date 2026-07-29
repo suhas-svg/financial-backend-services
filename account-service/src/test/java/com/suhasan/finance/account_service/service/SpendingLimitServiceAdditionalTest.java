@@ -13,6 +13,8 @@ import com.suhasan.finance.account_service.repository.SpendingLimitAuditEventRep
 import com.suhasan.finance.account_service.repository.SpendingLimitReservationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
@@ -24,6 +26,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -58,7 +61,8 @@ class SpendingLimitServiceAdditionalTest {
         owned.setId(1L);
         CheckingAccount other = account("bob");
         other.setId(2L);
-        when(accounts.findAll()).thenReturn(List.of(owned, other));
+        when(accounts.findByOwnerId(eq("alice"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(owned)));
         when(limits.findById(1L)).thenReturn(Optional.empty());
         when(reservations.used(any(), any(), any())).thenReturn(BigDecimal.ZERO);
         assertThat(service.list("alice")).singleElement().satisfies(view -> {
@@ -169,7 +173,8 @@ class SpendingLimitServiceAdditionalTest {
                 .eventId(1L).createdAt(LocalDateTime.now().minusHours(1)).build();
         SpendingLimitAuditEvent newest = SpendingLimitAuditEvent.builder()
                 .eventId(2L).createdAt(LocalDateTime.now()).build();
-        when(audits.findAll()).thenReturn(List.of(old, newest));
+        when(audits.findAll(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(newest, old)));
         assertThat(service.auditEvents()).extracting(SpendingLimitDtos.AuditResponse::eventId)
                 .containsExactly(2L, 1L);
     }

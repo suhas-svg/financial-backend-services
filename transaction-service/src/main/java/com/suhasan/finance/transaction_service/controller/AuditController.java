@@ -3,6 +3,7 @@ package com.suhasan.finance.transaction_service.controller;
 import com.suhasan.finance.transaction_service.dto.AuditEventFilter;
 import com.suhasan.finance.transaction_service.dto.AuditLogEntryResponse;
 import com.suhasan.finance.transaction_service.dto.AuditSummaryResponse;
+import com.suhasan.finance.transaction_service.dto.PageResponse;
 import com.suhasan.finance.transaction_service.service.AuditQueryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -27,7 +28,7 @@ public class AuditController {
     private final AuditQueryService auditQueryService;
 
     @GetMapping("/events")
-    public ResponseEntity<Page<AuditLogEntryResponse>> listEvents(
+    public ResponseEntity<PageResponse<AuditLogEntryResponse>> listEvents(
             @RequestParam(required = false) String eventType,
             @RequestParam(required = false) String action,
             @RequestParam(required = false) String outcome,
@@ -45,7 +46,7 @@ public class AuditController {
                 .from(from)
                 .to(to)
                 .build();
-        return ResponseEntity.ok(auditQueryService.searchEvents(filter, pageable));
+        return ResponseEntity.ok(PageResponse.from(auditQueryService.searchEvents(filter, pageable)));
     }
 
     @GetMapping("/events/{eventId}")

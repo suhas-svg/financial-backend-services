@@ -1,6 +1,8 @@
 package com.suhasan.finance.transaction_service.ledger.repository;
 
 import com.suhasan.finance.transaction_service.ledger.domain.CustomerMonthlyStatement;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDate;
@@ -16,8 +18,8 @@ public interface CustomerMonthlyStatementRepository extends JpaRepository<Custom
             LocalDate periodStart,
             LocalDate periodEnd);
 
-    List<CustomerMonthlyStatement> findByOwnerIdOrderByPeriodStartDescExternalAccountIdAscStatementVersionDesc(
-            String ownerId);
+    Page<CustomerMonthlyStatement> findByOwnerIdOrderByPeriodStartDescExternalAccountIdAscStatementVersionDesc(
+            String ownerId, Pageable pageable);
 
     default Optional<CustomerMonthlyStatement> findLatestByOwnerAndAccountAndPeriod(
             String ownerId,

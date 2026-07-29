@@ -17,6 +17,8 @@ import com.suhasan.finance.account_service.repository.SpendingLimitReservationRe
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -53,8 +55,7 @@ public class SpendingLimitService {
 
     @Transactional(readOnly = true)
     public List<SpendingLimitDtos.LimitResponse> list(final String user) {
-        return accounts.findAll().stream()
-                .filter(account -> user.equals(account.getOwnerId()))
+        return accounts.findByOwnerId(user, PageRequest.of(0, 100, Sort.by(Sort.Direction.ASC, "id"))).stream()
                 .map(account -> view(account, limits.findById(account.getId()).orElse(null)))
                 .toList();
     }
@@ -286,9 +287,7 @@ public class SpendingLimitService {
 
     @Transactional(readOnly = true)
     public List<SpendingLimitDtos.AuditResponse> auditEvents() {
-        return audits.findAll().stream()
-                .sorted((left, right) -> right.getCreatedAt().compareTo(left.getCreatedAt()))
-                .limit(200)
+        return audits.findAll(PageRequest.of(0, 200, Sort.by(Sort.Direction.DESC, "createdAt"))).stream()
                 .map(event -> new SpendingLimitDtos.AuditResponse(event.getEventId(), event.getAccountId(),
                         event.getUserId(), event.getEventType(), event.getOperationType(), event.getAmount(),
                         event.getDailyLimit(), event.getDailyUsed(), event.getDetails(), event.getCreatedAt()))

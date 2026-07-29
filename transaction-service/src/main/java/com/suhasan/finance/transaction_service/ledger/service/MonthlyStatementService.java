@@ -4,6 +4,7 @@ import com.suhasan.finance.transaction_service.client.ResilientAccountServiceCli
 import com.suhasan.finance.transaction_service.dto.AccountDto;
 import com.suhasan.finance.transaction_service.ledger.domain.*;
 import com.suhasan.finance.transaction_service.ledger.repository.*;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,9 +26,7 @@ public class MonthlyStatementService {
     private final LedgerBalanceProjectionRepository projectionRepository;
     private final ResilientAccountServiceClient accountServiceClient;
     private final AccountLedgerResolver accountLedgerResolver;
-    private final JournalTransactionRepository journalRepository;
     private final JournalPostingRepository postingRepository;
-    private final JournalStateEventRepository stateEventRepository;
 
     public MonthlyStatementService(
             CustomerMonthlyStatementRepository statementRepository,
@@ -36,18 +35,14 @@ public class MonthlyStatementService {
             LedgerBalanceProjectionRepository projectionRepository,
             ResilientAccountServiceClient accountServiceClient,
             AccountLedgerResolver accountLedgerResolver,
-            JournalTransactionRepository journalRepository,
-            JournalPostingRepository postingRepository,
-            JournalStateEventRepository stateEventRepository) {
+            JournalPostingRepository postingRepository) {
         this.statementRepository = statementRepository;
         this.lineRepository = lineRepository;
         this.ledgerAccountRepository = ledgerAccountRepository;
         this.projectionRepository = projectionRepository;
         this.accountServiceClient = accountServiceClient;
         this.accountLedgerResolver = accountLedgerResolver;
-        this.journalRepository = journalRepository;
         this.postingRepository = postingRepository;
-        this.stateEventRepository = stateEventRepository;
     }
 
     @Transactional
@@ -62,7 +57,8 @@ public class MonthlyStatementService {
 
     @Transactional(readOnly = true)
     public List<CustomerMonthlyStatementResult> listForOwner(String ownerId) {
-        return statementRepository.findByOwnerIdOrderByPeriodStartDescExternalAccountIdAscStatementVersionDesc(ownerId)
+        return statementRepository.findByOwnerIdOrderByPeriodStartDescExternalAccountIdAscStatementVersionDesc(
+                        ownerId, PageRequest.of(0, 100))
                 .stream()
                 .map(this::toResult)
                 .toList();
@@ -90,37 +86,13 @@ public class MonthlyStatementService {
             LocalDate periodEnd) {
         LedgerAccount account = resolveLedgerAccount(ownerId, externalAccountId);
 
-        BigDecimal bootstrapBalance = projectionRepository.findById(account.getLedgerAccountId())
+        BigDecimal currentBalance = projectionRepository.findById(account.getLedgerAccountId())
                 .orElseThrow(() -> new IllegalArgumentException("Ledger projection not found"))
                 .getPostedBalance();
-        BigDecimal openingMovement = BigDecimal.ZERO;
-        List<StatementMovement> movements = new ArrayList<>();
-
-        for (JournalTransaction journal : journalRepository.findAll().stream()
-                .sorted(Comparator
-                        .comparing(JournalTransaction::getEffectiveDate)
-                        .thenComparing(JournalTransaction::getCreatedAt)
-                        .thenComparing(JournalTransaction::getJournalReference))
-                .toList()) {
-            if (!isPosted(journal.getJournalId())) {
-                continue;
-            }
-            BigDecimal amount = signedAmountForAccount(journal.getJournalId(), account.getLedgerAccountId());
-            if (amount.compareTo(BigDecimal.ZERO) == 0) {
-                continue;
-            }
-            bootstrapBalance = bootstrapBalance.subtract(amount);
-            if (!journal.getEffectiveDate().isBefore(periodEnd)) {
-                continue;
-            }
-            if (journal.getEffectiveDate().isBefore(periodStart)) {
-                openingMovement = openingMovement.add(amount);
-            } else {
-                movements.add(new StatementMovement(journal, amount));
-            }
-        }
-
-        BigDecimal openingBalance = bootstrapBalance.add(openingMovement);
+        BigDecimal openingBalance = currentBalance.subtract(postingRepository.postedMovementFrom(
+                account.getLedgerAccountId(), periodStart));
+        List<StatementMovementProjection> movements = postingRepository.findPostedStatementMovements(
+                account.getLedgerAccountId(), periodStart, periodEnd);
         BigDecimal runningBalance = openingBalance;
         List<CustomerMonthlyStatementLine> lines = new ArrayList<>();
         CustomerMonthlyStatement statement = CustomerMonthlyStatement.create(
@@ -129,20 +101,20 @@ public class MonthlyStatementService {
                 periodEnd,
                 openingBalance,
                 openingBalance.add(movements.stream()
-                        .map(StatementMovement::amount)
+                        .map(StatementMovementProjection::getAmount)
                         .reduce(BigDecimal.ZERO, BigDecimal::add)));
         statementRepository.save(statement);
 
         int sequence = 1;
-        for (StatementMovement movement : movements) {
-            runningBalance = runningBalance.add(movement.amount());
+        for (StatementMovementProjection movement : movements) {
+            runningBalance = runningBalance.add(movement.getAmount());
             lines.add(CustomerMonthlyStatementLine.create(
                     statement.getStatementId(),
-                    movement.journal().getJournalId(),
+                    movement.getJournalId(),
                     sequence++,
-                    movement.journal().getEffectiveDate(),
-                    movement.journal().getDescription(),
-                    movement.amount(),
+                    movement.getEffectiveDate(),
+                    movement.getDescription(),
+                    movement.getAmount(),
                     runningBalance,
                     account.getCurrency()));
         }
@@ -163,21 +135,6 @@ public class MonthlyStatementService {
                             .filter(candidate -> ownerId.equals(candidate.getOwnerId()))
                             .orElseThrow(() -> new IllegalArgumentException("Ledger account not found"));
                 });
-    }
-
-    private boolean isPosted(UUID journalId) {
-        return stateEventRepository.findFirstByJournalIdOrderByEventSequenceDesc(journalId)
-                .map(event -> event.getState() == JournalState.POSTED)
-                .orElse(false);
-    }
-
-    private BigDecimal signedAmountForAccount(UUID journalId, UUID ledgerAccountId) {
-        return postingRepository.findByJournalIdOrderByPostingSequence(journalId).stream()
-                .filter(posting -> ledgerAccountId.equals(posting.getLedgerAccountId()))
-                .map(posting -> posting.getDirection() == PostingDirection.CREDIT
-                        ? posting.getAmount()
-                        : posting.getAmount().negate())
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private CustomerMonthlyStatementResult toResult(CustomerMonthlyStatement statement) {
@@ -237,6 +194,4 @@ public class MonthlyStatementService {
         return safe;
     }
 
-    private record StatementMovement(JournalTransaction journal, BigDecimal amount) {
-    }
 }

@@ -2,6 +2,7 @@ package com.suhasan.finance.account_service.controller;
 
 import com.suhasan.finance.account_service.dto.NotificationCreateRequest;
 import com.suhasan.finance.account_service.dto.NotificationFilter;
+import com.suhasan.finance.account_service.dto.PageResponse;
 import com.suhasan.finance.account_service.entity.Notification;
 import com.suhasan.finance.account_service.entity.NotificationSeverity;
 import com.suhasan.finance.account_service.entity.NotificationSourceType;
@@ -39,7 +40,7 @@ public class NotificationController {
     private final NotificationService notificationService;
 
     @GetMapping("/notifications")
-    public ResponseEntity<Page<Notification>> list(
+    public ResponseEntity<PageResponse<Notification>> list(
             @RequestParam(required = false) final NotificationStatus status,
             @RequestParam(required = false) final NotificationType type,
             @RequestParam(required = false) final NotificationSeverity severity,
@@ -50,7 +51,7 @@ public class NotificationController {
             final Authentication authentication
     ) {
         final NotificationFilter filter = new NotificationFilter(status, type, severity, sourceType, from, to);
-        return ResponseEntity.ok(notificationService.listForUser(authentication.getName(), filter, pageable));
+        return ResponseEntity.ok(PageResponse.from(notificationService.listForUser(authentication.getName(), filter, pageable)));
     }
 
     @GetMapping("/notifications/summary")

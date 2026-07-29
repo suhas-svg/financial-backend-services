@@ -6,6 +6,7 @@ import com.suhasan.finance.transaction_service.dto.RiskCaseNoteRequest;
 import com.suhasan.finance.transaction_service.dto.RiskCaseResponse;
 import com.suhasan.finance.transaction_service.dto.RiskCaseStatusUpdateRequest;
 import com.suhasan.finance.transaction_service.dto.RiskCaseSummaryResponse;
+import com.suhasan.finance.transaction_service.dto.PageResponse;
 import com.suhasan.finance.transaction_service.entity.RiskCasePriority;
 import com.suhasan.finance.transaction_service.entity.RiskCaseStatus;
 import com.suhasan.finance.transaction_service.service.RiskCaseService;
@@ -36,7 +37,7 @@ public class RiskCaseController {
     private final RiskCaseService riskCaseService;
 
     @GetMapping("/cases")
-    public ResponseEntity<Page<RiskCaseResponse>> listCases(
+    public ResponseEntity<PageResponse<RiskCaseResponse>> listCases(
             @RequestParam(required = false) RiskCaseStatus status,
             @RequestParam(required = false) RiskCasePriority priority,
             @RequestParam(required = false) String assignedTo,
@@ -56,7 +57,7 @@ public class RiskCaseController {
                 .from(from)
                 .to(to)
                 .build();
-        return ResponseEntity.ok(riskCaseService.searchCases(filter, pageable));
+        return ResponseEntity.ok(PageResponse.from(riskCaseService.searchCases(filter, pageable)));
     }
 
     @GetMapping("/cases/summary")

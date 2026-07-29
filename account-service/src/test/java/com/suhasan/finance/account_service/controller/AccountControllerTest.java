@@ -9,6 +9,7 @@ import com.suhasan.finance.account_service.entity.CheckingAccount;
 import com.suhasan.finance.account_service.service.AccountService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
@@ -47,9 +48,13 @@ class AccountControllerTest {
         when(service.listAccounts("customer", null, null, page))
                 .thenReturn(new PageImpl<>(List.of(new AccountResponse())));
         assertThat(controller.listAccounts("someone-else", null, null, page, auth("customer", "ROLE_USER"))
-                .getBody()).hasSize(1);
+                .getBody().content()).hasSize(1);
         verify(service).listAccounts("customer", null, null, page);
 
+        when(service.listAccounts("chosen", "CHECKING", AccountStatus.ACTIVE, page))
+                .thenReturn(Page.empty(page));
+        when(service.listAccounts("chosen", null, null, page))
+                .thenReturn(Page.empty(page));
         controller.listAccounts("chosen", "CHECKING", AccountStatus.ACTIVE, page, auth("admin", "ROLE_ADMIN"));
         verify(service).listAccounts("chosen", "CHECKING", AccountStatus.ACTIVE, page);
         controller.listAccounts("chosen", null, null, page, auth("service", "ROLE_INTERNAL_SERVICE"));

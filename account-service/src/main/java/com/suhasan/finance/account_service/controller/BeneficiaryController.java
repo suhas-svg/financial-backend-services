@@ -2,6 +2,7 @@ package com.suhasan.finance.account_service.controller;
 
 import com.suhasan.finance.account_service.dto.BeneficiaryCreateRequest;
 import com.suhasan.finance.account_service.dto.BeneficiaryResponse;
+import com.suhasan.finance.account_service.dto.PageResponse;
 import com.suhasan.finance.account_service.dto.BeneficiaryUpdateRequest;
 import com.suhasan.finance.account_service.entity.BeneficiaryStatus;
 import com.suhasan.finance.account_service.service.BeneficiaryService;
@@ -42,11 +43,11 @@ public class BeneficiaryController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<BeneficiaryResponse>> list(
+    public ResponseEntity<PageResponse<BeneficiaryResponse>> list(
             @RequestParam(required = false) final BeneficiaryStatus status,
             @PageableDefault(size = 20, sort = "displayName") final Pageable pageable,
             final Authentication authentication) {
-        return ResponseEntity.ok(beneficiaryService.list(authentication.getName(), status, pageable));
+        return ResponseEntity.ok(PageResponse.from(beneficiaryService.list(authentication.getName(), status, pageable)));
     }
 
     @GetMapping("/{beneficiaryId}")

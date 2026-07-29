@@ -3,6 +3,7 @@ package com.suhasan.finance.account_service.controller;
 import com.suhasan.finance.account_service.dto.AccountCreateRequest;
 import com.suhasan.finance.account_service.dto.AccountMetadataUpdateRequest;
 import com.suhasan.finance.account_service.dto.AccountResponse;
+import com.suhasan.finance.account_service.dto.PageResponse;
 import com.suhasan.finance.account_service.dto.AccountStatusUpdateRequest;
 import com.suhasan.finance.account_service.entity.Account;
 import com.suhasan.finance.account_service.entity.AccountStatus;
@@ -40,7 +41,7 @@ public class AccountController {
     private final AccountService service;
 
     @GetMapping
-    public ResponseEntity<Page<AccountResponse>> listAccounts(
+    public ResponseEntity<PageResponse<AccountResponse>> listAccounts(
             @RequestParam(required = false) final String ownerId,
             @RequestParam(required = false) final String accountType,
             @RequestParam(required = false) final AccountStatus status,
@@ -52,7 +53,7 @@ public class AccountController {
             effectiveOwnerId = authentication.getName();
         }
         final Page<AccountResponse> page = service.listAccounts(effectiveOwnerId, accountType, status, pageable);
-        return ResponseEntity.ok(page);
+        return ResponseEntity.ok(PageResponse.from(page));
     }
 
     @GetMapping("/{id}")

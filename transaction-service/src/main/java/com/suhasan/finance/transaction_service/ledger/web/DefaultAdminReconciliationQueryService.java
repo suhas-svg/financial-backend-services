@@ -7,6 +7,9 @@ import com.suhasan.finance.transaction_service.ledger.repository.ReconciliationR
 import com.suhasan.finance.transaction_service.ledger.repository.LedgerAccountRepository;
 import com.suhasan.finance.transaction_service.ledger.service.LedgerReconciliationService;
 import com.suhasan.finance.transaction_service.ledger.service.ReconciliationRunResult;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,8 +43,7 @@ public class DefaultAdminReconciliationQueryService implements AdminReconciliati
     @Override
     @Transactional(readOnly = true)
     public List<ReconciliationRunResponse> listRuns() {
-        return runRepository.findAll().stream()
-                .sorted(Comparator.comparing(ReconciliationRun::getStartedAt).reversed())
+        return runRepository.findAll(PageRequest.of(0, 200, Sort.by(Sort.Direction.DESC, "startedAt"))).stream()
                 .map(this::toRunResponse)
                 .toList();
     }
@@ -57,10 +59,19 @@ public class DefaultAdminReconciliationQueryService implements AdminReconciliati
     @Override
     @Transactional(readOnly = true)
     public List<ReconciliationExceptionResponse> listExceptions(String status, String severity) {
-        return exceptionRepository.findAll().stream()
-                .filter(exception -> status == null || exception.getStatus().name().equals(status))
-                .filter(exception -> severity == null || exception.getSeverity().name().equals(severity))
-                .sorted(Comparator.comparing(ReconciliationException::getUpdatedAt).reversed())
+        PageRequest page = PageRequest.of(0, 200, Sort.by(Sort.Direction.DESC, "updatedAt"));
+        Page<ReconciliationException> exceptions;
+        if (status != null && severity != null) {
+            exceptions = exceptionRepository.findByStatusAndSeverity(
+                    ReconciliationExceptionStatus.valueOf(status), ReconciliationSeverity.valueOf(severity), page);
+        } else if (status != null) {
+            exceptions = exceptionRepository.findByStatus(ReconciliationExceptionStatus.valueOf(status), page);
+        } else if (severity != null) {
+            exceptions = exceptionRepository.findBySeverity(ReconciliationSeverity.valueOf(severity), page);
+        } else {
+            exceptions = exceptionRepository.findAll(page);
+        }
+        return exceptions.stream()
                 .map(this::toExceptionResponse)
                 .toList();
     }
@@ -137,7 +148,9 @@ public class DefaultAdminReconciliationQueryService implements AdminReconciliati
                 exception.getCreatedAt(),
                 exception.getAssignedTo(),
                 exception.getResolutionNote(),
-                noteRepository.findByExceptionIdOrderByCreatedAtDesc(exception.getExceptionId()).stream()
+                noteRepository.findByExceptionIdOrderByCreatedAtDesc(
+                                exception.getExceptionId(), PageRequest.of(0, 100, Sort.by(Sort.Direction.DESC, "createdAt")))
+                        .stream()
                         .map(note -> new ReconciliationExceptionNoteResponse(
                                 note.getNoteId(),
                                 note.getAuthor(),

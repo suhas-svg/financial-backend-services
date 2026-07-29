@@ -6,6 +6,7 @@ import com.suhasan.finance.transaction_service.dto.DisputeNoteRequest;
 import com.suhasan.finance.transaction_service.dto.DisputeSummaryResponse;
 import com.suhasan.finance.transaction_service.dto.DisputeStatusUpdateRequest;
 import com.suhasan.finance.transaction_service.dto.TransactionDisputeResponse;
+import com.suhasan.finance.transaction_service.dto.PageResponse;
 import com.suhasan.finance.transaction_service.entity.DisputeReasonCode;
 import com.suhasan.finance.transaction_service.entity.DisputeStatus;
 import com.suhasan.finance.transaction_service.service.TransactionDisputeService;
@@ -45,10 +46,10 @@ public class TransactionDisputeController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<TransactionDisputeResponse>> listCustomerDisputes(
+    public ResponseEntity<PageResponse<TransactionDisputeResponse>> listCustomerDisputes(
             Authentication authentication,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(disputeService.listCustomerDisputes(currentUser(authentication), pageable));
+        return ResponseEntity.ok(PageResponse.from(disputeService.listCustomerDisputes(currentUser(authentication), pageable)));
     }
 
     @GetMapping("/{disputeId}")
@@ -59,7 +60,7 @@ public class TransactionDisputeController {
     }
 
     @GetMapping("/admin")
-    public ResponseEntity<Page<TransactionDisputeResponse>> searchAdminDisputes(
+    public ResponseEntity<PageResponse<TransactionDisputeResponse>> searchAdminDisputes(
             @RequestParam(required = false) DisputeStatus status,
             @RequestParam(required = false) DisputeReasonCode reasonCode,
             @RequestParam(required = false) String assignedTo,
@@ -77,7 +78,7 @@ public class TransactionDisputeController {
                 .from(from)
                 .to(to)
                 .build();
-        return ResponseEntity.ok(disputeService.searchAdminDisputes(filter, pageable));
+        return ResponseEntity.ok(PageResponse.from(disputeService.searchAdminDisputes(filter, pageable)));
     }
 
     @GetMapping("/admin/summary")

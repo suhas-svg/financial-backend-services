@@ -30,9 +30,7 @@ class MonthlyStatementServiceTest {
     @Mock private LedgerBalanceProjectionRepository projectionRepository;
     @Mock private ResilientAccountServiceClient accountServiceClient;
     @Mock private AccountLedgerResolver accountLedgerResolver;
-    @Mock private JournalTransactionRepository journalRepository;
     @Mock private JournalPostingRepository postingRepository;
-    @Mock private JournalStateEventRepository stateEventRepository;
 
     private MonthlyStatementService service;
 
@@ -45,9 +43,7 @@ class MonthlyStatementServiceTest {
                 projectionRepository,
                 accountServiceClient,
                 accountLedgerResolver,
-                journalRepository,
-                postingRepository,
-                stateEventRepository);
+                postingRepository);
     }
 
     @Test
@@ -68,28 +64,14 @@ class MonthlyStatementServiceTest {
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(existingStatement(accountId, periodStart, periodEnd)));
         when(ledgerAccountRepository.findByExternalAccountId("1001")).thenReturn(Optional.of(account));
-        when(journalRepository.findAll())
-                .thenReturn(List.of(opening, debit, pendingCredit, feeRefund, lateCorrection));
-        when(projectionRepository.findById(accountId))
-                .thenReturn(Optional.of(LedgerBalanceProjection.open(accountId, new BigDecimal("990.00"))));
-        when(stateEventRepository.findFirstByJournalIdOrderByEventSequenceDesc(opening.getJournalId()))
-                .thenReturn(Optional.of(state(opening.getJournalId(), JournalState.POSTED)));
-        when(stateEventRepository.findFirstByJournalIdOrderByEventSequenceDesc(debit.getJournalId()))
-                .thenReturn(Optional.of(state(debit.getJournalId(), JournalState.POSTED)));
-        when(stateEventRepository.findFirstByJournalIdOrderByEventSequenceDesc(pendingCredit.getJournalId()))
-                .thenReturn(Optional.of(state(pendingCredit.getJournalId(), JournalState.PENDING)));
-        when(stateEventRepository.findFirstByJournalIdOrderByEventSequenceDesc(feeRefund.getJournalId()))
-                .thenReturn(Optional.of(state(feeRefund.getJournalId(), JournalState.POSTED)));
-        when(stateEventRepository.findFirstByJournalIdOrderByEventSequenceDesc(lateCorrection.getJournalId()))
-                .thenReturn(Optional.of(state(lateCorrection.getJournalId(), JournalState.POSTED)));
-        when(postingRepository.findByJournalIdOrderByPostingSequence(opening.getJournalId()))
-                .thenReturn(List.of(posting(opening.getJournalId(), accountId, PostingDirection.CREDIT, "1000.00")));
-        when(postingRepository.findByJournalIdOrderByPostingSequence(debit.getJournalId()))
-                .thenReturn(List.of(posting(debit.getJournalId(), accountId, PostingDirection.DEBIT, "25.00")));
-        when(postingRepository.findByJournalIdOrderByPostingSequence(feeRefund.getJournalId()))
-                .thenReturn(List.of(posting(feeRefund.getJournalId(), accountId, PostingDirection.CREDIT, "10.00")));
-        when(postingRepository.findByJournalIdOrderByPostingSequence(lateCorrection.getJournalId()))
-                .thenReturn(List.of(posting(lateCorrection.getJournalId(), accountId, PostingDirection.CREDIT, "5.00")));
+        when(projectionRepository.findById(accountId)).thenReturn(Optional.of(
+                LedgerBalanceProjection.open(accountId, new BigDecimal("990.00"))));
+        when(postingRepository.postedMovementFrom(accountId, periodStart))
+                .thenReturn(new BigDecimal("-10.00"));
+        StatementMovementProjection debitMovement = movement(debit, "-25.00");
+        StatementMovementProjection refundMovement = movement(feeRefund, "10.00");
+        when(postingRepository.findPostedStatementMovements(accountId, periodStart, periodEnd))
+                .thenReturn(List.of(debitMovement, refundMovement));
         when(statementRepository.save(any(CustomerMonthlyStatement.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(lineRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -120,13 +102,14 @@ class MonthlyStatementServiceTest {
                 "customer-2", "2002", LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1)))
                 .thenReturn(Optional.empty());
         when(ledgerAccountRepository.findByExternalAccountId("2002")).thenReturn(Optional.of(account));
-        when(projectionRepository.findById(accountId))
-                .thenReturn(Optional.of(LedgerBalanceProjection.open(accountId, new BigDecimal("525.00"))));
-        when(journalRepository.findAll()).thenReturn(List.of(deposit));
-        when(stateEventRepository.findFirstByJournalIdOrderByEventSequenceDesc(deposit.getJournalId()))
-                .thenReturn(Optional.of(state(deposit.getJournalId(), JournalState.POSTED)));
-        when(postingRepository.findByJournalIdOrderByPostingSequence(deposit.getJournalId()))
-                .thenReturn(List.of(posting(deposit.getJournalId(), accountId, PostingDirection.CREDIT, "25.00")));
+        when(projectionRepository.findById(accountId)).thenReturn(Optional.of(
+                LedgerBalanceProjection.open(accountId, new BigDecimal("500.00"))));
+        when(postingRepository.postedMovementFrom(accountId, LocalDate.of(2026, 7, 1)))
+                .thenReturn(BigDecimal.ZERO);
+        StatementMovementProjection depositMovement = movement(deposit, "25.00");
+        when(postingRepository.findPostedStatementMovements(
+                accountId, LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1)))
+                .thenReturn(List.of(depositMovement));
         when(statementRepository.save(any(CustomerMonthlyStatement.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(lineRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -162,9 +145,13 @@ class MonthlyStatementServiceTest {
         when(accountServiceClient.getAccount("3003")).thenReturn(account);
         when(accountLedgerResolver.resolveCustomerAccount("3003", account)).thenReturn(accountId);
         when(ledgerAccountRepository.findById(accountId)).thenReturn(Optional.of(ledgerAccount));
-        when(projectionRepository.findById(accountId))
-                .thenReturn(Optional.of(LedgerBalanceProjection.open(accountId, new BigDecimal("500.00"))));
-        when(journalRepository.findAll()).thenReturn(List.of());
+        when(projectionRepository.findById(accountId)).thenReturn(Optional.of(
+                LedgerBalanceProjection.open(accountId, new BigDecimal("500.00"))));
+        when(postingRepository.postedMovementFrom(accountId, LocalDate.of(2026, 7, 1)))
+                .thenReturn(BigDecimal.ZERO);
+        when(postingRepository.findPostedStatementMovements(
+                accountId, LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1)))
+                .thenReturn(List.of());
         when(statementRepository.save(any(CustomerMonthlyStatement.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(lineRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -207,29 +194,14 @@ class MonthlyStatementServiceTest {
                 .build();
     }
 
-    private JournalStateEvent state(UUID journalId, JournalState state) {
-        return JournalStateEvent.builder()
-                .eventId(UUID.randomUUID())
-                .journalId(journalId)
-                .eventSequence(2)
-                .state(state)
-                .actor("system")
-                .createdAt(LocalDateTime.parse("2026-05-01T00:00:00"))
-                .build();
+    private StatementMovementProjection movement(JournalTransaction journal, String amount) {
+        StatementMovementProjection projection = mock(StatementMovementProjection.class);
+        when(projection.getJournalId()).thenReturn(journal.getJournalId());
+        when(projection.getEffectiveDate()).thenReturn(journal.getEffectiveDate());
+        when(projection.getDescription()).thenReturn(journal.getDescription());
+        when(projection.getAmount()).thenReturn(new BigDecimal(amount));
+        return projection;
     }
-
-    private JournalPosting posting(UUID journalId, UUID accountId, PostingDirection direction, String amount) {
-        return JournalPosting.builder()
-                .postingId(UUID.randomUUID())
-                .journalId(journalId)
-                .ledgerAccountId(accountId)
-                .postingSequence(1)
-                .direction(direction)
-                .amount(new BigDecimal(amount))
-                .currency("USD")
-                .build();
-    }
-
     private CustomerMonthlyStatement existingStatement(UUID accountId, LocalDate periodStart, LocalDate periodEnd) {
         return CustomerMonthlyStatement.builder()
                 .statementId(UUID.fromString("99999999-9999-9999-9999-999999999999"))
