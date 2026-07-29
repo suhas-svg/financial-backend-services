@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "External real-money production readiness evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["manifestVersion", "manifestId", "scope", "changeReference", "gates"],
+  "properties": {
+    "manifestVersion": { "const": 1 },
+    "manifestId": { "type": "string", "minLength": 1 },
+    "scope": { "const": "REAL_MONEY_PRODUCTION" },
+    "changeReference": { "type": "string", "minLength": 1 },
+    "gates": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "gate", "status", "reference", "evidenceSha256",
+          "owner", "reviewer", "approvedAt", "expiresAt"
+        ],
+        "properties": {
+          "gate": {
+            "enum": [
+              "PROVIDERS_PAYMENT_RAILS",
+              "IDP_KMS",
+              "WEBHOOK_VERIFICATION",
+              "LEGAL_PRIVACY_JURISDICTION",
+              "BACKUP_RESTORE",
+              "ALERTING_INCIDENT",
+              "LOAD_SOAK",
+              "CHANGE_GOVERNANCE"
+            ]
+          },
+          "status": { "const": "APPROVED" },
+          "reference": { "type": "string", "minLength": 1 },
+          "evidenceSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$"
+          },
+          "owner": { "type": "string", "minLength": 1 },
+          "reviewer": { "type": "string", "minLength": 1 },
+          "approvedAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}
