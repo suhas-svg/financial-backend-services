@@ -6,6 +6,7 @@ import com.suhasan.finance.transaction_service.dto.ReversalRequest;
 import com.suhasan.finance.transaction_service.dto.TransactionResponse;
 import com.suhasan.finance.transaction_service.dto.TransactionFilterRequest;
 import com.suhasan.finance.transaction_service.dto.TransactionStatsResponse;
+import com.suhasan.finance.transaction_service.dto.PageResponse;
 import com.suhasan.finance.transaction_service.dto.StepUpClientDtos;
 import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
@@ -107,21 +108,21 @@ public class TransactionController {
      * Get transaction history for an account
      */
     @GetMapping("/account/{accountId}")
-    public ResponseEntity<Page<TransactionResponse>> getAccountTransactions(
+    public ResponseEntity<PageResponse<TransactionResponse>> getAccountTransactions(
             @PathVariable String accountId,
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
 
         log.debug("Retrieving transactions for account: {}", accountId);
 
         Page<TransactionResponse> transactions = transactionService.getAccountTransactions(accountId, pageable);
-        return ResponseEntity.ok(transactions);
+        return ResponseEntity.ok(PageResponse.from(transactions));
     }
 
     /**
      * Get transaction history for the authenticated user
      */
     @GetMapping
-    public ResponseEntity<Page<TransactionResponse>> getUserTransactions(
+    public ResponseEntity<PageResponse<TransactionResponse>> getUserTransactions(
             Authentication authentication,
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
 
@@ -129,14 +130,14 @@ public class TransactionController {
         log.debug("Retrieving transactions for user: {}", userId);
 
         Page<TransactionResponse> transactions = transactionService.getUserTransactions(userId, pageable);
-        return ResponseEntity.ok(transactions);
+        return ResponseEntity.ok(PageResponse.from(transactions));
     }
 
     /**
      * Get transaction history for the authenticated user (alternative endpoint)
      */
     @GetMapping("/user")
-    public ResponseEntity<Page<TransactionResponse>> getUserTransactionsAlternative(
+    public ResponseEntity<PageResponse<TransactionResponse>> getUserTransactionsAlternative(
             Authentication authentication,
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
 
@@ -144,7 +145,7 @@ public class TransactionController {
         log.debug("Retrieving transactions for user: {}", userId);
 
         Page<TransactionResponse> transactions = transactionService.getUserTransactions(userId, pageable);
-        return ResponseEntity.ok(transactions);
+        return ResponseEntity.ok(PageResponse.from(transactions));
     }
 
     /**
@@ -224,7 +225,7 @@ public class TransactionController {
      * Search transactions with filters
      */
     @GetMapping("/search")
-    public ResponseEntity<Page<TransactionResponse>> searchTransactions(
+    public ResponseEntity<PageResponse<TransactionResponse>> searchTransactions(
             @RequestParam(required = false) String accountId,
             @RequestParam(required = false) TransactionType type,
             @RequestParam(required = false) TransactionStatus status,
@@ -259,7 +260,7 @@ public class TransactionController {
                 .build();
 
         Page<TransactionResponse> transactions = transactionService.searchTransactions(filter, pageable);
-        return ResponseEntity.ok(transactions);
+        return ResponseEntity.ok(PageResponse.from(transactions));
     }
 
     private boolean isPrivileged(Authentication authentication) {

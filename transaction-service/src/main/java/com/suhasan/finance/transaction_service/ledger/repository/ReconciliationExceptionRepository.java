@@ -1,6 +1,8 @@
 package com.suhasan.finance.transaction_service.ledger.repository;
 
 import com.suhasan.finance.transaction_service.ledger.domain.ReconciliationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.Modifying;
@@ -11,6 +13,13 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface ReconciliationExceptionRepository extends JpaRepository<ReconciliationException, UUID> {
+    Page<ReconciliationException> findByStatus(
+            com.suhasan.finance.transaction_service.ledger.domain.ReconciliationExceptionStatus status, Pageable pageable);
+    Page<ReconciliationException> findBySeverity(
+            com.suhasan.finance.transaction_service.ledger.domain.ReconciliationSeverity severity, Pageable pageable);
+    Page<ReconciliationException> findByStatusAndSeverity(
+            com.suhasan.finance.transaction_service.ledger.domain.ReconciliationExceptionStatus status,
+            com.suhasan.finance.transaction_service.ledger.domain.ReconciliationSeverity severity, Pageable pageable);
     @Query("""
             select exception from ReconciliationException exception
             where exception.fingerprint = :fingerprint

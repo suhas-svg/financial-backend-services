@@ -24,6 +24,7 @@ import com.suhasan.finance.transaction_service.repository.AuditLogEntryRepositor
 import com.suhasan.finance.transaction_service.repository.RiskAlertRepository;
 import com.suhasan.finance.transaction_service.repository.RiskCaseRepository;
 import com.suhasan.finance.transaction_service.repository.TransactionDisputeRepository;
+import com.suhasan.finance.transaction_service.repository.TransactionDisputeNoteRepository;
 import com.suhasan.finance.transaction_service.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -65,6 +68,9 @@ class InvestigationServiceTest {
     @Mock
     private TransactionDisputeRepository disputeRepository;
 
+    @Mock
+    private TransactionDisputeNoteRepository disputeNoteRepository;
+
     private InvestigationService investigationService;
 
     @BeforeEach
@@ -75,6 +81,7 @@ class InvestigationServiceTest {
                 riskAlertRepository,
                 riskCaseRepository,
                 disputeRepository,
+                disputeNoteRepository,
                 new ObjectMapper());
     }
 
@@ -83,11 +90,11 @@ class InvestigationServiceTest {
         RiskAlert alert = alert();
         RiskCase riskCase = riskCase(alert);
         when(riskCaseRepository.findById("case-1")).thenReturn(Optional.of(riskCase));
-        when(transactionRepository.findAll(any(Specification.class))).thenReturn(List.of(transaction()));
-        when(auditLogEntryRepository.findAll(any(Specification.class))).thenReturn(List.of(audit()));
-        when(riskAlertRepository.findAll(any(Specification.class))).thenReturn(List.of(alert));
-        when(riskCaseRepository.findAll(any(Specification.class))).thenReturn(List.of(riskCase));
-        when(disputeRepository.findAll(any(Specification.class))).thenReturn(List.of(dispute()));
+        when(transactionRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(transaction())));
+        when(auditLogEntryRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(audit())));
+        when(riskAlertRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(alert)));
+        when(riskCaseRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(riskCase)));
+        when(disputeRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(dispute())));
 
         Page<InvestigationTimelineItemResponse> result = investigationService.getTimeline(
                 InvestigationFilter.builder().caseId("case-1").build(),
@@ -101,16 +108,16 @@ class InvestigationServiceTest {
         assertThat(result.getContent().get(4).getAlertId()).isEqualTo("alert-1");
 
         ArgumentCaptor<Specification<Transaction>> transactionSpec = ArgumentCaptor.forClass(Specification.class);
-        verify(transactionRepository).findAll(transactionSpec.capture());
+        verify(transactionRepository).findAll(transactionSpec.capture(), any(Pageable.class));
     }
 
     @Test
     void getTimeline_EmptySearchReturnsEmptyPage() {
-        when(transactionRepository.findAll(any(Specification.class))).thenReturn(List.of());
-        when(auditLogEntryRepository.findAll(any(Specification.class))).thenReturn(List.of());
-        when(riskAlertRepository.findAll(any(Specification.class))).thenReturn(List.of());
-        when(riskCaseRepository.findAll(any(Specification.class))).thenReturn(List.of());
-        when(disputeRepository.findAll(any(Specification.class))).thenReturn(List.of());
+        when(transactionRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(Page.empty());
+        when(auditLogEntryRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(Page.empty());
+        when(riskAlertRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(Page.empty());
+        when(riskCaseRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(Page.empty());
+        when(disputeRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(Page.empty());
 
         Page<InvestigationTimelineItemResponse> result = investigationService.getTimeline(
                 InvestigationFilter.builder().userId("missing").build(),
@@ -125,11 +132,12 @@ class InvestigationServiceTest {
         RiskAlert alert = alert();
         RiskCase riskCase = riskCase(alert);
         when(riskAlertRepository.findById("alert-1")).thenReturn(Optional.of(alert));
-        when(transactionRepository.findAll(any(Specification.class))).thenReturn(List.of(transaction(), reversal()));
-        when(auditLogEntryRepository.findAll(any(Specification.class))).thenReturn(List.of(audit(), failedAudit()));
-        when(riskAlertRepository.findAll(any(Specification.class))).thenReturn(List.of(alert));
-        when(riskCaseRepository.findAll(any(Specification.class))).thenReturn(List.of(riskCase));
-        when(disputeRepository.findAll(any(Specification.class))).thenReturn(List.of(dispute()));
+        when(transactionRepository.count(any(Specification.class))).thenReturn(2L, 1L, 1L);
+        when(auditLogEntryRepository.count(any(Specification.class))).thenReturn(2L, 1L);
+        when(riskAlertRepository.count(any(Specification.class))).thenReturn(1L, 1L);
+        when(riskCaseRepository.count(any(Specification.class))).thenReturn(1L, 1L);
+        when(disputeRepository.count(any(Specification.class))).thenReturn(1L);
+        when(disputeNoteRepository.count(any(Specification.class))).thenReturn(1L);
 
         InvestigationSummaryResponse summary = investigationService.getSummary(
                 InvestigationFilter.builder().alertId("alert-1").build());
@@ -150,11 +158,11 @@ class InvestigationServiceTest {
         RiskAlert alert = alert();
         RiskCase riskCase = riskCase(alert);
         when(riskCaseRepository.findById("case-1")).thenReturn(Optional.of(riskCase));
-        when(transactionRepository.findAll(any(Specification.class))).thenReturn(List.of(transactionWithCsvCharacters()));
-        when(auditLogEntryRepository.findAll(any(Specification.class))).thenReturn(List.of(audit()));
-        when(riskAlertRepository.findAll(any(Specification.class))).thenReturn(List.of(alert));
-        when(riskCaseRepository.findAll(any(Specification.class))).thenReturn(List.of(riskCase));
-        when(disputeRepository.findAll(any(Specification.class))).thenReturn(List.of(dispute()));
+        when(transactionRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(transactionWithCsvCharacters())));
+        when(auditLogEntryRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(audit())));
+        when(riskAlertRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(alert)));
+        when(riskCaseRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(riskCase)));
+        when(disputeRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(dispute())));
 
         String csv = investigationService.exportTimelineCsv(
                 InvestigationFilter.builder().caseId("case-1").build());

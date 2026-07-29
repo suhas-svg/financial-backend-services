@@ -5,6 +5,8 @@ import com.suhasan.finance.transaction_service.ledger.repository.*;
 import com.suhasan.finance.transaction_service.ledger.service.LedgerReconciliationService;
 import com.suhasan.finance.transaction_service.ledger.service.ReconciliationRunResult;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -15,6 +17,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,7 +35,7 @@ class DefaultAdminReconciliationQueryServiceTest {
     void listsAndRunsReconciliationInNewestFirstOrder() {
         ReconciliationRun older = run(LocalDateTime.parse("2026-07-25T00:00:00"));
         ReconciliationRun newer = run(LocalDateTime.parse("2026-07-26T00:00:00"));
-        when(runs.findAll()).thenReturn(List.of(older, newer));
+        when(runs.findAll(any(Pageable.class))).thenReturn(new PageImpl<>(List.of(newer, older)));
         assertThat(service.listRuns()).extracting(ReconciliationRunResponse::startedAt)
                 .containsExactly(newer.getStartedAt(), older.getStartedAt());
 
@@ -61,11 +64,16 @@ class DefaultAdminReconciliationQueryServiceTest {
         ReconciliationExceptionNote note = ReconciliationExceptionNote.builder()
                 .noteId(UUID.randomUUID()).exceptionId(exception.getExceptionId())
                 .author("operator").note("reviewed").createdAt(LocalDateTime.now()).build();
-        when(exceptions.findAll()).thenReturn(List.of(exception));
+        when(exceptions.findByStatusAndSeverity(any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(exception)));
+        when(exceptions.findByStatus(any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
         when(exceptions.findById(exception.getExceptionId())).thenReturn(Optional.of(exception));
         when(exceptions.findLatestRunId(exception.getExceptionId())).thenReturn(Optional.of(UUID.randomUUID()));
         when(accounts.findById(accountId)).thenReturn(Optional.of(account));
-        when(notes.findByExceptionIdOrderByCreatedAtDesc(exception.getExceptionId())).thenReturn(List.of(note));
+        when(notes.findByExceptionIdOrderByCreatedAtDesc(
+                org.mockito.ArgumentMatchers.eq(exception.getExceptionId()), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(note)));
 
         assertThat(service.listExceptions("OPEN", "CRITICAL")).singleElement()
                 .extracting(ReconciliationExceptionResponse::externalAccountId).isEqualTo("customer-account");

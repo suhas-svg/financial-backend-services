@@ -4,6 +4,7 @@ import com.suhasan.finance.transaction_service.dto.RiskAlertFilter;
 import com.suhasan.finance.transaction_service.dto.RiskAlertResponse;
 import com.suhasan.finance.transaction_service.dto.RiskAlertStatusUpdateRequest;
 import com.suhasan.finance.transaction_service.dto.RiskSummaryResponse;
+import com.suhasan.finance.transaction_service.dto.PageResponse;
 import com.suhasan.finance.transaction_service.entity.RiskAlertSeverity;
 import com.suhasan.finance.transaction_service.entity.RiskAlertStatus;
 import com.suhasan.finance.transaction_service.entity.RiskAlertType;
@@ -34,7 +35,7 @@ public class RiskAlertController {
     private final RiskAlertQueryService riskAlertQueryService;
 
     @GetMapping("/alerts")
-    public ResponseEntity<Page<RiskAlertResponse>> listAlerts(
+    public ResponseEntity<PageResponse<RiskAlertResponse>> listAlerts(
             @RequestParam(required = false) RiskAlertStatus status,
             @RequestParam(required = false) RiskAlertSeverity severity,
             @RequestParam(required = false) RiskAlertType alertType,
@@ -52,7 +53,7 @@ public class RiskAlertController {
                 .from(from)
                 .to(to)
                 .build();
-        return ResponseEntity.ok(riskAlertQueryService.searchAlerts(filter, pageable));
+        return ResponseEntity.ok(PageResponse.from(riskAlertQueryService.searchAlerts(filter, pageable)));
     }
 
     @GetMapping("/alerts/{alertId}")

@@ -3,6 +3,7 @@ package com.suhasan.finance.transaction_service.controller;
 import com.suhasan.finance.transaction_service.dto.InvestigationFilter;
 import com.suhasan.finance.transaction_service.dto.InvestigationSummaryResponse;
 import com.suhasan.finance.transaction_service.dto.InvestigationTimelineItemResponse;
+import com.suhasan.finance.transaction_service.dto.PageResponse;
 import com.suhasan.finance.transaction_service.service.InvestigationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -28,7 +29,7 @@ public class InvestigationController {
     private final InvestigationService investigationService;
 
     @GetMapping("/timeline")
-    public ResponseEntity<Page<InvestigationTimelineItemResponse>> getTimeline(
+    public ResponseEntity<PageResponse<InvestigationTimelineItemResponse>> getTimeline(
             @RequestParam(required = false) String userId,
             @RequestParam(required = false) String transactionId,
             @RequestParam(required = false) String accountId,
@@ -37,7 +38,7 @@ public class InvestigationController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
             @PageableDefault(size = 50, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(investigationService.getTimeline(toFilter(userId, transactionId, accountId, alertId, caseId, from, to), pageable));
+        return ResponseEntity.ok(PageResponse.from(investigationService.getTimeline(toFilter(userId, transactionId, accountId, alertId, caseId, from, to), pageable)));
     }
 
     @GetMapping("/summary")
