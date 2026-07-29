@@ -22,7 +22,9 @@ The controlled synthetic sandbox:
 - never activates the `prod` or `production` Spring profiles;
 - does not activate providers, payment rails, or real credentials.
 
-Production requires the external evidence and approvals listed in
+Production requires both the external evidence gate in
+`docs/operations/real-money-production-readiness-gate.md` and the provider
+activation approvals in
 `docs/operations/production-provider-activation-runbook.md`. No convenience
 Compose file or repository script may claim to make the platform production
 ready.

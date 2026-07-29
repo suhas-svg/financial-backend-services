@@ -18,6 +18,10 @@ to all applicable evidence:
 | FX/legal | Licensed market-data entitlement, authentication reference, quote provenance, market calendar, staleness rule, reconciliation, usage rights, jurisdiction decision, and approved disclosure |
 | Legal/compliance | Approved consent/disclosure version and hash, product classification, jurisdiction eligibility, accessibility review, retention schedule, withdrawal and complaint handling, and customer/operator wording |
 
+Before enabling any production activation, independently pass the global
+real-money evidence gate in `real-money-production-readiness-gate.md`. It covers
+restore drills, external incident exercises, sustained load, and change
+governance in addition to the provider-specific controls below.
 Never paste credentials, signing secrets, private keys, tokens, or raw customer
 data into an API request, chat, evidence record, or repository. Store only an
 external reference such as `vault://...`, `secret://...`, or `kms://...` and a

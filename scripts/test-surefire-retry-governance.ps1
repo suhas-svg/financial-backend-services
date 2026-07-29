@@ -25,17 +25,16 @@ try {
 </testsuite>
 '@ | Set-Content -LiteralPath (Join-Path $flaky "TEST-flaky.xml")
 
-    & $checker -ReportRoots $clean -EnforcementDate "2026-01-01T00:00:00Z" -AsOf "2026-07-29T00:00:00Z"
-    & $checker -ReportRoots $flaky -EnforcementDate "2026-08-12T00:00:00Z" -AsOf "2026-07-29T00:00:00Z"
+    & $checker -ReportRoots $clean
 
-    $failedAfterWindow = $false
+    $failedImmediately = $false
     try {
-        & $checker -ReportRoots $flaky -EnforcementDate "2026-08-12T00:00:00Z" -AsOf "2026-08-12T00:00:00Z"
+        & $checker -ReportRoots $flaky
     } catch {
-        $failedAfterWindow = $true
+        $failedImmediately = $true
     }
-    if (-not $failedAfterWindow) {
-        throw "Retry-only success did not fail after the adoption window."
+    if (-not $failedImmediately) {
+        throw "Retry-only success did not fail immediately."
     }
 } finally {
     Remove-Item -LiteralPath $fixtureRoot -Recurse -Force

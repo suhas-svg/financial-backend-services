@@ -1,9 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [string[]]$ReportRoots,
-    [datetime]$EnforcementDate = [datetime]"2026-08-12T00:00:00Z",
-    [datetime]$AsOf = [datetime]::UtcNow
+    [string[]]$ReportRoots
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,8 +34,7 @@ foreach ($root in $ReportRoots) {
 $summary = [pscustomobject]@{
     reportsScanned = $reportsScanned
     retryOnlySuccessCount = $retryOnlySuccesses.Count
-    enforcementDateUtc = $EnforcementDate.ToUniversalTime().ToString("o")
-    asOfUtc = $AsOf.ToUniversalTime().ToString("o")
+    enforcement = "IMMEDIATE"
     retryOnlySuccesses = @($retryOnlySuccesses)
 }
 $json = $summary | ConvertTo-Json -Depth 5
@@ -49,7 +46,7 @@ if ($env:GITHUB_STEP_SUMMARY) {
         ""
         "- Reports scanned: $reportsScanned"
         "- Retry-only successes: $($retryOnlySuccesses.Count)"
-        "- Enforcement begins: $($EnforcementDate.ToUniversalTime().ToString('yyyy-MM-dd')) UTC"
+        "- Enforcement: immediate"
     ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
     foreach ($item in $retryOnlySuccesses) {
         "- ``$($item.class).$($item.test)`` passed only after $($item.retries) retry attempt(s)." |
@@ -62,8 +59,4 @@ if ($retryOnlySuccesses.Count -eq 0) {
     return
 }
 
-if ($AsOf.ToUniversalTime() -ge $EnforcementDate.ToUniversalTime()) {
-    throw "$($retryOnlySuccesses.Count) test(s) passed only after Surefire retry; retry-only success is forbidden after the adoption window."
-}
-
-Write-Warning "$($retryOnlySuccesses.Count) test(s) passed only after Surefire retry. Reporting-only adoption window remains open."
+throw "$($retryOnlySuccesses.Count) test(s) passed only after Surefire retry; retry-only success is forbidden."

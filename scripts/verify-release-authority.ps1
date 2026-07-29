@@ -106,6 +106,30 @@ if (-not $workflow.Contains("check-surefire-retries.ps1") -or
     -not (Test-Path (Join-Path $repoRoot "scripts/test-surefire-retry-governance.ps1"))) {
     throw "Surefire retry-only success governance is not wired into acceptance."
 }
+$retryChecker = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/check-surefire-retries.ps1") -Raw
+if ($retryChecker.Contains("EnforcementDate") -or
+    $retryChecker.Contains("adoption window") -or
+    $workflow.Contains("EnforcementDate")) {
+    throw "Retry-only test success must fail acceptance immediately; delayed enforcement is forbidden."
+}
+$retryGatePattern = [regex]::Escape("check-surefire-retries.ps1 -ReportRoots target/surefire-reports")
+if ([regex]::Matches($workflow, $retryGatePattern).Count -lt 2) {
+    throw "Retry-only success must be rejected in both service verification and fresh migration jobs."
+}
+$readinessContracts = @(
+    "scripts/verify-production-readiness-evidence.ps1",
+    "scripts/test-production-readiness-evidence.ps1",
+    "docs/operations/production-readiness-evidence.schema.json"
+)
+foreach ($contract in $readinessContracts) {
+    if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $contract) -PathType Leaf)) {
+        throw "Production-readiness evidence gate is missing required contract: $contract"
+    }
+}
+if (-not $workflow.Contains("test-production-readiness-evidence.ps1")) {
+    throw "The production-readiness evidence gate self-test is not wired into acceptance."
+}
 
-Write-Host "Supply-chain policy passed: actions and release images are immutable; retry-only test success is governed."
+Write-Host "Supply-chain policy passed: actions and release images are immutable; retry-only test success fails immediately."
+Write-Host "Production-readiness evidence policy passed: external manifest verification is fail-closed and self-tested."
 Write-Host "Release authority policy passed: one workflow, one stable required check, legacy E2E quarantined."

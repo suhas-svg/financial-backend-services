@@ -29,6 +29,9 @@ jobs:
       - name: Self-test Surefire retry governance
         shell: pwsh
         run: ./scripts/test-surefire-retry-governance.ps1
+      - name: Self-test production readiness evidence gate
+        shell: pwsh
+        run: ./scripts/test-production-readiness-evidence.ps1
 
   frontend:
     name: Frontend Lint, Tests, Build, Accessibility
@@ -73,10 +76,10 @@ jobs:
       - name: Run the complete Maven verification lifecycle
         working-directory: ${{ matrix.service }}
         run: ./mvnw -q clean verify
-      - name: Report retry-only test success and enforce the adoption deadline
+      - name: Reject retry-only test success
         working-directory: ${{ matrix.service }}
         shell: pwsh
-        run: ../scripts/check-surefire-retries.ps1 -ReportRoots target/surefire-reports -EnforcementDate 2026-08-12T00:00:00Z
+        run: ../scripts/check-surefire-retries.ps1 -ReportRoots target/surefire-reports
 
   fresh-migrations:
     name: Fresh PostgreSQL Migrations (${{ matrix.service }})
@@ -128,6 +131,10 @@ jobs:
       - name: Apply every migration to a disposable fresh PostgreSQL database
         working-directory: ${{ matrix.service }}
         run: ${{ matrix.command }}
+      - name: Reject retry-only migration test success
+        working-directory: ${{ matrix.service }}
+        shell: pwsh
+        run: ../scripts/check-surefire-retries.ps1 -ReportRoots target/surefire-reports
 
   duplicate-concurrency-recovery:
     name: Duplicate, Concurrency, Worker Recovery (${{ matrix.service }})

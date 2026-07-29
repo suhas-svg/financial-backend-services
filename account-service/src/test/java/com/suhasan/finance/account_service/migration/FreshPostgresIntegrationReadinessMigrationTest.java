@@ -22,13 +22,19 @@ class FreshPostgresIntegrationReadinessMigrationTest {
 
         try (var connection = DriverManager.getConnection(url, user, password);
              var statement = connection.createStatement()) {
-            assertThat(statement.executeQuery("""
+            try (var columns = statement.executeQuery("""
                     SELECT COUNT(*) FROM information_schema.columns
-                    WHERE table_name='user_mfa_methods' AND column_name='secret_key_id'
-                    """).next()).isTrue();
+                    WHERE table_schema = current_schema()
+                      AND table_name = 'user_mfa_methods'
+                      AND column_name = 'secret_key_id'
+                    """)) {
+                assertThat(columns.next()).isTrue();
+                assertThat(columns.getInt(1)).isEqualTo(1);
+            }
             try (var rows = statement.executeQuery("""
                     SELECT COUNT(*) FROM information_schema.tables
-                    WHERE table_name IN ('notification_provider_receipts','mfa_key_rotation_runs')
+                    WHERE table_schema = current_schema()
+                      AND table_name IN ('notification_provider_receipts','mfa_key_rotation_runs')
                     """)) {
                 rows.next();
                 assertThat(rows.getInt(1)).isEqualTo(2);

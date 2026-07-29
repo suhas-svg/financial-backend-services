@@ -5,7 +5,7 @@ This runbook verifies technical readiness only. It is not a legal, regulatory, v
 ## Release gate
 
 1. Deploy migrations `account-service V11-V12` and `transaction-service V26` to a fresh PostgreSQL validation environment.
-2. Configure production with `docker-compose.production-readiness.yml` or equivalent secret-managed Kubernetes values. Never place bearer tokens, KMS material, customer data, or raw provider responses in Git.
+2. Configure production only through the secret-managed Helm deployment described in `docs/deployment-authority.md`. Never place bearer tokens, KMS material, customer data, or raw provider responses in Git.
 3. Confirm both services stop during startup when any required production integration property is missing, a local adapter is selected, or provider health is unavailable.
 4. Confirm the IdP token has the exact issuer and service audience, a stable subject, an allowlisted `operator_roles` value, a recent `access_reviewed_at`, and `revoked=false`. Unknown claims must not grant `ROLE_ADMIN`.
 5. Read account-service `GET /api/integration-readiness` and transaction-service `GET /api/admin/outcome-protection/integration-readiness` with a short-lived operator token. Preserve the response with the change record.
