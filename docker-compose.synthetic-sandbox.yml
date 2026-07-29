@@ -2,7 +2,7 @@ name: financial-synthetic-sandbox
 
 services:
   redis:
-    image: redis:7.4.5-alpine3.21
+    image: redis:7.4.5-alpine3.21@sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
@@ -16,7 +16,7 @@ services:
     networks: [data]
 
   account-postgres:
-    image: postgres:15.13-alpine3.21
+    image: postgres:15.13-alpine3.21@sha256:cb5801891df505a6e2bf2438f7af1b5c04cacff4c1207309d3cb38e5a3c796bc
     environment:
       POSTGRES_DB: account_sandbox
       POSTGRES_USER: account_app
@@ -31,7 +31,7 @@ services:
     networks: [data]
 
   transaction-postgres:
-    image: postgres:15.13-alpine3.21
+    image: postgres:15.13-alpine3.21@sha256:cb5801891df505a6e2bf2438f7af1b5c04cacff4c1207309d3cb38e5a3c796bc
     environment:
       POSTGRES_DB: transaction_sandbox
       POSTGRES_USER: transaction_app

@@ -1,4 +1,4 @@
-FROM openjdk:22-jdk-slim
+FROM openjdk:22-jdk-slim@sha256:5a6e9da3cdeaa179421f7ad98b32af0e52b6ef46261e3bf090d7e2f72e6df766
 
 # Install required tools
 RUN apt-get update && apt-get install -y \
