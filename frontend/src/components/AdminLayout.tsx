@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "../routing";
 import { Activity, Bell, ChevronLeft, ChevronRight, CircleHelp, ClipboardList, FolderKanban, Gauge, Landmark, LogOut, Menu, Moon, RefreshCw, Search, Shield, ShieldAlert, Sun, X } from "lucide-react";
 import clsx from "clsx";
@@ -57,6 +57,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const { session, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const mainRef = useRef<HTMLElement>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -70,7 +71,10 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     return term ? adminItems.filter((item) => item.label.toLowerCase().includes(term)).slice(0, 5) : [];
   }, [search]);
 
-  useEffect(() => setDrawerOpen(false), [location.pathname]);
+  useEffect(() => {
+    setDrawerOpen(false);
+    mainRef.current?.focus({ preventScroll: true });
+  }, [location.pathname]);
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
     window.localStorage.setItem("operations-theme", darkMode ? "dark" : "light");
@@ -126,7 +130,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           <div className="hidden border-l border-slate-200 pl-4 md:block"><p className="text-sm font-semibold">{session?.username}</p><p className="text-xs text-muted">Operations admin</p></div>
           <Button variant="ghost" onClick={logout} aria-label="Logout"><LogOut className="h-4 w-4" /><span className="hidden xl:inline">Logout</span></Button>
         </header>
-        <main className="mx-auto max-w-[1600px] p-4 sm:p-6 lg:p-8">
+        <main ref={mainRef} id="main-content" tabIndex={-1} className="mx-auto max-w-[1600px] p-4 sm:p-6 lg:p-8">
           {children}
         </main>
       </div>

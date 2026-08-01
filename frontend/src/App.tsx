@@ -4,6 +4,7 @@ import { Navigate } from "./routing";
 import { AdminLayout } from "./components/AdminLayout";
 import { CustomerLayout } from "./components/CustomerLayout";
 import { RequireAuth } from "./components/RequireAuth";
+import { RouteAccessibility } from "./components/RouteAccessibility";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
@@ -38,7 +39,9 @@ export function App() {
   );
 
   return (
-    <Suspense fallback={<main className="p-6 text-sm text-muted">Loading...</main>}>
+    <>
+    <RouteAccessibility />
+    <Suspense fallback={<main id="main-content" className="p-6 text-sm text-muted" role="status" aria-live="polite">Loading...</main>}>
       <Switch>
         <Route path="/login"><LoginPage /></Route>
         <Route path="/register"><RegisterPage /></Route>
@@ -66,5 +69,6 @@ export function App() {
         <Route><Navigate to="/" replace /></Route>
       </Switch>
     </Suspense>
+    </>
   );
 }

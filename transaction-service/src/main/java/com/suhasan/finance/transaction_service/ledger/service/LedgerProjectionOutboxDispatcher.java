@@ -29,6 +29,7 @@ public class LedgerProjectionOutboxDispatcher {
     private final Clock clock;
     private final AtomicLong backlogGauge = new AtomicLong();
     private final AtomicLong oldestAgeSecondsGauge = new AtomicLong();
+    private final AtomicLong terminalFailuresGauge = new AtomicLong();
 
     @Autowired
     public LedgerProjectionOutboxDispatcher(
@@ -49,6 +50,7 @@ public class LedgerProjectionOutboxDispatcher {
         this.clock = clock;
         meterRegistry.gauge("ledger.projection_outbox.backlog", backlogGauge);
         meterRegistry.gauge("ledger.projection_outbox.oldest_age_seconds", oldestAgeSecondsGauge);
+        meterRegistry.gauge("ledger.projection_outbox.terminal_failures.current", terminalFailuresGauge);
     }
 
     @Scheduled(fixedDelayString = "${ledger.projection-outbox.dispatch-interval-ms:5000}")
@@ -116,6 +118,7 @@ public class LedgerProjectionOutboxDispatcher {
 
     private void recordBacklogMetrics(LocalDateTime now) {
         backlogGauge.set(outboxRepository.countByDeliveredAtIsNull());
+        terminalFailuresGauge.set(outboxRepository.countByLastErrorStartingWith("TERMINAL:"));
         oldestAgeSecondsGauge.set(outboxRepository.findOldestUndeliveredCreatedAt()
                 .map(createdAt -> Math.max(0L, Duration.between(createdAt, now).getSeconds()))
                 .orElse(0L));

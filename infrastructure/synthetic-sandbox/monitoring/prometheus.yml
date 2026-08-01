@@ -1,0 +1,38 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: synthetic-sandbox
+    real_money: "false"
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: [alertmanager:9093]
+rule_files:
+  - /etc/prometheus/transaction_service_alerts.yml
+  - /etc/prometheus/phase4_operational_alerts.yml
+  - /etc/prometheus/account_service_alerts.yml
+scrape_configs:
+  - job_name: transaction-service
+    metrics_path: /actuator/prometheus
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/internal_scrape_token
+    static_configs:
+      - targets: [transaction-service:8081]
+  - job_name: account-service
+    metrics_path: /actuator/prometheus
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/internal_scrape_token
+    static_configs:
+      - targets: [account-service:8080]
+  - job_name: account-postgres-exporter
+    static_configs:
+      - targets: [account-postgres-exporter:9187]
+  - job_name: transaction-postgres-exporter
+    static_configs:
+      - targets: [transaction-postgres-exporter:9187]
+  - job_name: redis-exporter
+    static_configs:
+      - targets: [redis-exporter:9121]

@@ -49,6 +49,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/ledger/bootstrap", "/api/admin/ledger/bootstrap/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/ledger/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
                         .requestMatchers("/api/admin/reconciliation/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
+                        .requestMatchers("/api/admin/financial-operations/**").hasRole("ADMIN")
                         .requestMatchers("/api/disputes/admin/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
                         .requestMatchers("/api/disputes/**").authenticated()
 

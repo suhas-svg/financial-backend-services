@@ -102,6 +102,8 @@ services:
       SECURITY_STEP_UP_ENABLED: "true"
       LEDGER_AUTHORITATIVE: "true"
       LEDGER_BOOTSTRAP_STARTUP_ENABLED: "false"
+      FINANCIAL_OPERATIONS_ENABLED: "true"
+      FINANCIAL_OPERATIONS_ZONE: UTC
       APP_TIME_ZONE: UTC
       TZ: UTC
       JAVA_OPTS: -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Duser.timezone=UTC
