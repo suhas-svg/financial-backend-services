@@ -26,4 +26,10 @@ describe("session", () => {
     expect(getSession()?.username).toBe("ops");
     expect(isAdmin()).toBe(true);
   });
+
+  it("fails closed when the jwt expiry is in the past", () => {
+    saveSession(tokenFor({ sub: "alex", roles: ["ROLE_USER"], exp: 1 }));
+
+    expect(getSession()).toBeNull();
+  });
 });

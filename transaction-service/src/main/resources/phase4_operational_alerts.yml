@@ -1,0 +1,68 @@
+groups:
+  - name: controlled_synthetic_beta_operations
+    interval: 30s
+    rules:
+      - alert: ScheduledTransferWorkStuck
+        expr: scheduled_transfer_stuck_processing > 0 or scheduled_transfer_due_oldest_age_seconds > 300
+        for: 2m
+        labels: { severity: critical, service: transaction-service, component: scheduled-transfer }
+        annotations:
+          summary: Scheduled-transfer work is stuck
+          description: Durable scheduled work exceeded the bounded recovery window.
+          runbook_url: docs/operations/controlled-beta-phase4-operations.md
+      - alert: FinancialOperationFailed
+        expr: financial_operations_failed_current > 0 or financial_operations_stale_claims > 0
+        for: 0m
+        labels: { severity: critical, service: transaction-service, component: financial-operations }
+        annotations:
+          summary: Automated financial operation requires recovery
+          description: A daily reconciliation or monthly close failed or lost its lease.
+          runbook_url: docs/operations/controlled-beta-phase4-operations.md
+      - alert: LedgerProjectionOutboxTerminalFailure
+        expr: ledger_projection_outbox_terminal_failures_current > 0
+        for: 0m
+        labels: { severity: critical, service: transaction-service, component: immutable-ledger }
+        annotations:
+          summary: Ledger projection delivery reached terminal failure
+          description: A ledger projection intent exhausted bounded retries; ledger history remains authoritative.
+          runbook_url: docs/operations/controlled-beta-phase4-operations.md
+      - alert: TransactionPostgreSQLDependencyLost
+        expr: up{job="transaction-postgres-exporter"} == 0 or absent(up{job="transaction-postgres-exporter"})
+        for: 1m
+        labels: { severity: critical, service: transaction-service, component: postgresql }
+        annotations:
+          summary: Transaction PostgreSQL dependency is unavailable
+          description: Stop operations and preserve durable evidence until the database is healthy.
+          runbook_url: docs/operations/controlled-beta-phase4-operations.md
+      - alert: RedisDependencyLost
+        expr: up{job="redis-exporter"} == 0 or absent(up{job="redis-exporter"})
+        for: 1m
+        labels: { severity: critical, service: transaction-service, component: redis }
+        annotations:
+          summary: Redis dependency is unavailable
+          description: Scheduled and idempotent operations must fail closed until Redis health is restored.
+          runbook_url: docs/operations/controlled-beta-phase4-operations.md
+      - alert: NotificationProviderBacklogOld
+        expr: notification_provider_backlog > 100 or notification_provider_oldest_age_seconds > 600
+        for: 5m
+        labels: { severity: warning, service: account-service, component: notifications }
+        annotations:
+          summary: Notification provider backlog is old
+          description: Notification delivery receipts are delayed beyond the bounded beta threshold.
+          runbook_url: docs/operations/controlled-beta-phase4-operations.md
+      - alert: NotificationProviderTerminalFailure
+        expr: notification_provider_terminal_failures_current > 0
+        for: 0m
+        labels: { severity: critical, service: account-service, component: notifications }
+        annotations:
+          summary: Notification provider delivery reached terminal failure
+          description: Bounded retries were exhausted and operator replay review is required.
+          runbook_url: docs/operations/controlled-beta-phase4-operations.md
+      - alert: AccountPostgreSQLDependencyLost
+        expr: up{job="account-postgres-exporter"} == 0 or absent(up{job="account-postgres-exporter"})
+        for: 1m
+        labels: { severity: critical, service: account-service, component: postgresql }
+        annotations:
+          summary: Account PostgreSQL dependency is unavailable
+          description: Account and notification operations must fail closed until database health is restored.
+          runbook_url: docs/operations/controlled-beta-phase4-operations.md

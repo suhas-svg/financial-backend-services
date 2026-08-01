@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
 import { addRiskCaseNote, cancelScheduledTransfer, claimRiskCase, createBeneficiary, createRiskCaseFromAlert, createScheduledTransfer, disableBeneficiary, exportInvestigationTimelineCsv, getCustomerJournal, getInvestigationSummary, getInvestigationTimeline, getScheduledTransfer, listBeneficiaries, listLedgerAccounts, listScheduledTransferRuns, listScheduledTransfers, pauseScheduledTransfer, resumeScheduledTransfer, searchAuditEvents, searchRiskAlerts, searchRiskCases, selectOutcomeRepairDraft, updateAccountStatus, updateBeneficiary, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
-import { clearSession, saveSession } from "./session";
+import { clearSession, saveSession, SESSION_EXPIRED_EVENT } from "./session";
 
 function tokenFor(payload: object) {
   const encoded = btoa(JSON.stringify(payload)).replace(/=/g, "");
@@ -313,5 +313,21 @@ describe("apiRequest", () => {
     expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers/schedule-1", expect.objectContaining({ method: "DELETE" }));
     expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/scheduled-transfers/schedule-1/runs", expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith("/transaction-api/api/outcome-protection/repairs/guardrail-1/select", expect.objectContaining({ method: "POST", headers: expect.objectContaining({ "idempotency-key": "repair-select-test" }) }));
+  });
+
+  it("announces an authenticated 401 through the centralized expiry channel", async () => {
+    saveSession(tokenFor({ sub: "alex", roles: ["ROLE_USER"] }));
+    const listener = vi.fn();
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ message: "expired" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+
+    await expect(apiRequest("account", "/api/accounts")).rejects.toMatchObject({ status: 401 });
+    expect(listener).toHaveBeenCalledOnce();
+    window.removeEventListener(SESSION_EXPIRED_EVENT, listener);
   });
 });

@@ -269,7 +269,7 @@ groups:
           component: database
         annotations:
           summary: "Database connection pool exhausted"
-          description: "All database connections are in use ({{ $value }}/{{ hikaricp_connections_max }})"
+          description: "Active database connections reached the configured pool maximum (active={{ $value }})."
           runbook_url: "https://wiki.company.com/runbooks/transaction-service/db-connection-pool"
 
       # Insufficient funds errors spike

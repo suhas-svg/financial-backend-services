@@ -1,6 +1,7 @@
 import type { Role } from "../types";
 
 const SESSION_KEY = "financial-console-token";
+export const SESSION_EXPIRED_EVENT = "financial-console:session-expired";
 let activeToken: string | null = null;
 
 function isTestRuntime() {
@@ -66,11 +67,19 @@ export function getSession(): Session | null {
     return null;
   }
   const payload = decodeJwtPayload(token);
+  if (typeof payload.exp === "number" && payload.exp * 1000 <= Date.now()) {
+    clearSession();
+    return null;
+  }
   return {
     token,
     username: payload.sub ?? "unknown",
     roles: Array.isArray(payload.roles) ? payload.roles : []
   };
+}
+
+export function notifySessionExpired() {
+  window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
 }
 
 export function isAdmin() {

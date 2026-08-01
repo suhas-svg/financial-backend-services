@@ -34,6 +34,7 @@ export function CustomerLayout({ children }: { children: ReactNode }) {
   const { session, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const mainRef = useRef<HTMLElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("customer-nav-collapsed") === "true");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -49,7 +50,11 @@ export function CustomerLayout({ children }: { children: ReactNode }) {
     return term ? navItems.filter((item) => `${item.label} ${item.keywords}`.toLowerCase().includes(term)).slice(0, 5) : [];
   }, [search]);
 
-  useEffect(() => { setDrawerOpen(false); setSearch(""); }, [location.pathname]);
+  useEffect(() => {
+    setDrawerOpen(false);
+    setSearch("");
+    mainRef.current?.focus({ preventScroll: true });
+  }, [location.pathname]);
   useEffect(() => { localStorage.setItem("customer-nav-collapsed", String(collapsed)); }, [collapsed]);
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
@@ -92,7 +97,7 @@ export function CustomerLayout({ children }: { children: ReactNode }) {
         <div className="hidden items-center gap-3 border-l border-line pl-4 md:flex dark:border-slate-700"><span className="grid h-9 w-9 place-items-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100">{initials}</span><span><span className="block max-w-32 truncate text-sm font-semibold">{session?.username}</span><span className="block text-xs text-muted">Customer</span><span className="sr-only">{session?.roles.join(", ") || "ROLE_USER"}</span></span></div>
         <Button variant="ghost" onClick={logout} aria-label="Logout"><LogOut className="h-4 w-4" /><span className="hidden xl:inline">Logout</span></Button>
       </header>
-      <main className="customer-page mx-auto max-w-[1500px] p-4 sm:p-6 lg:p-8">{children}</main>
+      <main ref={mainRef} id="main-content" tabIndex={-1} className="customer-page mx-auto max-w-[1500px] p-4 sm:p-6 lg:p-8">{children}</main>
     </div>
   </div>;
 }

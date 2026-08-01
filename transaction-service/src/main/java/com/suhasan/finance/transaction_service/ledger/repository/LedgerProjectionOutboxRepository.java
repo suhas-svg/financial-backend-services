@@ -24,6 +24,8 @@ public interface LedgerProjectionOutboxRepository extends JpaRepository<LedgerPr
 
     long countByDeliveredAtIsNull();
 
+    long countByLastErrorStartingWith(String prefix);
+
     long countByExternalAccountIdAndDeliveredAtIsNull(String externalAccountId);
 
     @Query("""

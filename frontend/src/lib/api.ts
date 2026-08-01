@@ -1,4 +1,4 @@
-import { getRawToken } from "./session";
+import { getRawToken, notifySessionExpired } from "./session";
 
 export type ServiceName = "account" | "transaction";
 
@@ -62,6 +62,9 @@ export async function apiRequest<T>(service: ServiceName, path: string, options:
   const payload = await readResponse(response);
 
   if (!response.ok) {
+    if (response.status === 401 && token) {
+      notifySessionExpired();
+    }
     const message =
       typeof payload === "object" && payload && "message" in payload
         ? String((payload as { message: unknown }).message)

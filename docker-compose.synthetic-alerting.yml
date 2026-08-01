@@ -1,0 +1,45 @@
+name: financial-synthetic-sandbox
+services:
+  account-postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    environment:
+      DATA_SOURCE_NAME: postgresql://account_app:${ACCOUNT_DB_PASSWORD:?ACCOUNT_DB_PASSWORD is required}@account-postgres:5432/account_sandbox?sslmode=disable
+    networks: [data]
+  transaction-postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    environment:
+      DATA_SOURCE_NAME: postgresql://transaction_app:${TRANSACTION_DB_PASSWORD:?TRANSACTION_DB_PASSWORD is required}@transaction-postgres:5432/transaction_sandbox?sslmode=disable
+    networks: [data]
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.75.0
+    environment:
+      REDIS_ADDR: redis://redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    networks: [data]
+  alert-certification-receiver:
+    image: python:3.13.5-alpine3.22
+    command: [python, /app/alert-certification-receiver.py]
+    volumes:
+      - ./scripts/alert-certification-receiver.py:/app/alert-certification-receiver.py:ro
+      - sandbox_alert_evidence:/evidence
+    networks: [services]
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    command: [--config.file=/etc/alertmanager/alertmanager.yml]
+    volumes:
+      - ./transaction-service/monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    depends_on: [alert-certification-receiver]
+    networks: [services]
+  prometheus:
+    image: prom/prometheus:v3.4.1
+    command: [--config.file=/etc/prometheus/prometheus.yml]
+    volumes:
+      - ./infrastructure/synthetic-sandbox/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./transaction-service/src/main/resources/transaction_service_alerts.yml:/etc/prometheus/transaction_service_alerts.yml:ro
+      - ./transaction-service/src/main/resources/phase4_operational_alerts.yml:/etc/prometheus/phase4_operational_alerts.yml:ro
+      - ./account-service/monitoring/alert_rules.yml:/etc/prometheus/account_service_alerts.yml:ro
+      - ${PROMETHEUS_INTERNAL_TOKEN_FILE:?PROMETHEUS_INTERNAL_TOKEN_FILE must reference a runtime token file}:/run/secrets/internal_scrape_token:ro
+    depends_on: [alertmanager, account-postgres-exporter, transaction-postgres-exporter, redis-exporter]
+    networks: [services, data]
+volumes:
+  sandbox_alert_evidence:

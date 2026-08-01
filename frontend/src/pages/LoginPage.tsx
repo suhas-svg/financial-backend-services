@@ -36,6 +36,7 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [portalError, setPortalError] = useState<string>();
   const portal: Portal = searchParams.get("portal") === "admin" ? "admin" : "customer";
+  const sessionExpired = searchParams.get("reason") === "expired";
   const content = portalContent[portal];
   const form = useForm<LoginValues>({ resolver: zodResolver(loginSchema), defaultValues: { username: "", password: "" } });
   const mutation = useMutation({
@@ -54,7 +55,13 @@ export function LoginPage() {
       }
 
       loginWithToken(token);
-      navigate(portal === "admin" ? "/admin" : "/");
+      const returnTo = window.sessionStorage.getItem("financial-console-return-to");
+      const safeReturnTo = returnTo?.startsWith("/") && !returnTo.startsWith("//")
+        && (portal === "admin" ? returnTo.startsWith("/admin") : !returnTo.startsWith("/admin"))
+        ? returnTo
+        : portal === "admin" ? "/admin" : "/";
+      window.sessionStorage.removeItem("financial-console-return-to");
+      navigate(safeReturnTo);
     }
   });
 
@@ -138,6 +145,7 @@ export function LoginPage() {
             </div>
 
             <form className="grid gap-5" onSubmit={form.handleSubmit((values) => { setPortalError(undefined); mutation.mutate(values); })}>
+              {sessionExpired ? <div role="status" aria-live="polite" className="rounded-xl border border-amber-400/30 bg-amber-950/30 p-3 text-sm text-amber-100">Your session expired. Sign in again to continue.</div> : null}
               <ErrorNotice message={portalError ?? (mutation.error instanceof Error ? mutation.error.message : undefined)} />
 
               <div className="grid gap-2 text-sm">
