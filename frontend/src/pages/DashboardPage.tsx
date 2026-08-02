@@ -7,10 +7,11 @@ import { compactDate, money, percent } from "../lib/format";
 import { availableBalance, ledgerBalance, pendingBalance, projectionFor, projectionMap } from "../lib/accountBalances";
 import { EmptyState, ErrorNotice, Panel, Skeleton } from "../components/ui";
 import { StatusBadge } from "../components/StatusBadge";
+import { MONEY_STATE_REFRESH_INTERVAL_MS } from "../lib/queryInvalidation";
 
 export function DashboardPage() {
-  const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => listAccounts() });
-  const ledgerAccounts = useQuery({ queryKey: ["ledger", "accounts"], queryFn: listLedgerAccounts, retry: false });
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => listAccounts(), refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
+  const ledgerAccounts = useQuery({ queryKey: ["ledger", "accounts"], queryFn: listLedgerAccounts, retry: false, refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
   const transactions = useQuery({ queryKey: ["transactions", 0], queryFn: () => getTransactions(0) });
   const stats = useQuery({ queryKey: ["stats", "user"], queryFn: getUserStats });
   const notifications = useQuery({ queryKey: ["notification-summary"], queryFn: getNotificationSummary });

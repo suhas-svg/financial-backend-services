@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, FlaskConical, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
-import type { LedgerAccountProjection, OutcomeAssumptionType, OutcomeScenario, OutcomeScenarioRequest, OutcomeShockType } from "../types";
+import type { LedgerAccountProjection, OutcomeAssumptionType, OutcomeScenario, OutcomeScenarioRequest, OutcomeShockType, ScheduledTransfer } from "../types";
 import { acceptOutcomeGuardrail, acknowledgeOutcomeWarning, createOutcomeScenario, getOutcomeScenario, listLedgerAccounts, listOutcomeScenarios, listScheduledTransfers, refreshOutcomeScenario, selectOutcomeRepairDraft } from "../lib/queries";
 import { createIdempotencyKey } from "../lib/idempotency";
+import { invalidateInBackground } from "../lib/queryInvalidation";
 import { compactDate, money } from "../lib/format";
 import { Badge, Button, EmptyState, ErrorNotice, Field, Input, PageHeader, Panel, Select, StatusNotice } from "../components/ui";
 import { OutcomeGuardrailCard } from "../components/OutcomeGuardrailCard";
@@ -58,6 +59,9 @@ export function OutcomeProtectionPage() {
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>();
   const [confirmedGuardrails, setConfirmedGuardrails] = useState<Record<string, boolean>>({});
   const [formError, setFormError] = useState<string>();
+  const [freshSourceSnapshot, setFreshSourceSnapshot] = useState<OutcomeScenario["sourceSnapshot"]>();
+  const [freshSourceSnapshotScenarioId, setFreshSourceSnapshotScenarioId] = useState<string>();
+  const [autoRefreshedScenarioId, setAutoRefreshedScenarioId] = useState<string>();
 
   const ledger = useQuery({ queryKey: ["ledger-accounts"], queryFn: listLedgerAccounts });
   const schedules = useQuery({ queryKey: ["outcome-protection", "active-schedules"], queryFn: () => listScheduledTransfers({ status: "ACTIVE", size: 100 }) });
@@ -76,24 +80,32 @@ export function OutcomeProtectionPage() {
     mutationFn: (request: OutcomeScenarioRequest) => createOutcomeScenario(request, createIdempotencyKey("outcome-scenario")),
     onSuccess: (scenario) => {
       setSelectedScenarioId(scenario.scenarioId);
+      setFreshSourceSnapshot(undefined);
+      setFreshSourceSnapshotScenarioId(undefined);
+      setAutoRefreshedScenarioId(undefined);
       queryClient.setQueryData(["outcome-scenario", scenario.scenarioId], scenario);
-      queryClient.invalidateQueries({ queryKey: ["outcome-scenarios"] });
+      invalidateInBackground(queryClient, ["outcome-scenarios"]);
     }
   });
   const refresh = useMutation({
     mutationFn: refreshOutcomeScenario,
-    onSuccess: (_result, scenarioId) => queryClient.invalidateQueries({ queryKey: ["outcome-scenario", scenarioId] })
+    onSuccess: (result, scenarioId) => {
+      setFreshSourceSnapshot(result.freshSourceSnapshot);
+      setFreshSourceSnapshotScenarioId(scenarioId);
+      invalidateInBackground(queryClient, ["outcome-scenario", scenarioId]);
+    }
   });
+  const refreshScenario = refresh.mutate;
   const accept = useMutation({
     mutationFn: (guardrailId: string) => acceptOutcomeGuardrail(guardrailId, createIdempotencyKey("guardrail-accept")),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["outcome-scenario", selectedScenarioId] })
+    onSuccess: () => invalidateInBackground(queryClient, ["outcome-scenario", selectedScenarioId])
   });
   const acknowledge = useMutation({
     mutationFn: (eventId: string) => acknowledgeOutcomeWarning(eventId, createIdempotencyKey("outcome-warning-ack"))
   });
   const selectDraft = useMutation({
     mutationFn: (guardrailId: string) => selectOutcomeRepairDraft(guardrailId, createIdempotencyKey("repair-draft-select")),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["outcome-scenario", selectedScenarioId] })
+    onSuccess: () => invalidateInBackground(queryClient, ["outcome-scenario", selectedScenarioId])
   });
 
   const selectedCurrency = currency;
@@ -162,8 +174,24 @@ export function OutcomeProtectionPage() {
   };
 
   const scenario = detail.data;
+  useEffect(() => {
+    setFreshSourceSnapshot(undefined);
+    setFreshSourceSnapshotScenarioId(undefined);
+    setAutoRefreshedScenarioId(undefined);
+  }, [selectedScenarioId]);
+  useEffect(() => {
+    if (!scenario || !schedules.data || freshSourceSnapshot || refresh.isPending
+      || autoRefreshedScenarioId === scenario.scenarioId) {
+      return;
+    }
+    if (hasMissingScheduledCashflow(scenario, schedules.data.content ?? [])) {
+      setAutoRefreshedScenarioId(scenario.scenarioId);
+      refreshScenario(scenario.scenarioId);
+    }
+  }, [autoRefreshedScenarioId, freshSourceSnapshot, refresh.isPending, refreshScenario, schedules.data, scenario]);
+  const displayedScenario = scenario && freshSourceSnapshot && freshSourceSnapshotScenarioId === scenario.scenarioId ? { ...scenario, sourceSnapshot: freshSourceSnapshot } : scenario;
   const error = formError || errorMessage(create.error) || errorMessage(detail.error) || errorMessage(accept.error) || errorMessage(refresh.error) || errorMessage(acknowledge.error);
-  const freshForecast = refresh.data?.freshSimulation.baseline;
+  const freshForecast = refresh.data && freshSourceSnapshotScenarioId === scenario?.scenarioId ? refresh.data.freshSimulation.baseline : undefined;
   const freshScheduledEventCount = freshForecast?.timeline.reduce(
     (count, day) => count + day.events.filter((event) => event.source === "SCHEDULED_TRANSFER").length,
     0
@@ -256,7 +284,7 @@ export function OutcomeProtectionPage() {
       </div>
 
       <div className="grid content-start gap-6">
-        {scenario ? <ScenarioProof scenario={scenario} accounts={ledger.data ?? []} onChanged={() => queryClient.invalidateQueries({ queryKey: ["outcome-scenario", scenario.scenarioId] })} onRefresh={() => refresh.mutate(scenario.scenarioId)} refreshing={refresh.isPending} confirmed={confirmedGuardrails} setConfirmed={setConfirmedGuardrails} onAccept={(id) => accept.mutate(id)} accepting={accept.isPending} onSelectDraft={(id) => selectDraft.mutate(id)} selectingDraft={selectDraft.isPending} /> : <Panel><EmptyState title="No outcome selected" detail="Run a scenario or select a saved outcome to inspect its causal proof and guardrail drafts." /></Panel>}
+        {scenario ? <ScenarioProof scenario={displayedScenario ?? scenario} accounts={ledger.data ?? []} onChanged={() => invalidateInBackground(queryClient, ["outcome-scenario", scenario.scenarioId])} onRefresh={() => refresh.mutate(scenario.scenarioId)} refreshing={refresh.isPending} confirmed={confirmedGuardrails} setConfirmed={setConfirmedGuardrails} onAccept={(id) => accept.mutate(id)} accepting={accept.isPending} onSelectDraft={(id) => selectDraft.mutate(id)} selectingDraft={selectDraft.isPending} /> : <Panel><EmptyState title="No outcome selected" detail="Run a scenario or select a saved outcome to inspect its causal proof and guardrail drafts." /></Panel>}
       </div>
     </div>
   </div>;
@@ -352,6 +380,34 @@ function shockLabel(item: CashflowDraft) {
   if (item.shockType === "INCOME_REDUCTION") return `${item.label} is reduced by ${item.shockValue}%`;
   if (item.shockType === "PAYMENT_TIMING_SHIFT") return `${item.label} is charged ${item.shockValue} days earlier`;
   return `${item.label} increases by ${item.shockValue}`;
+}
+
+function hasMissingScheduledCashflow(scenario: OutcomeScenario, schedules: ScheduledTransfer[]) {
+  const selectedAccounts = new Set(scenario.sourceSnapshot.ledgerAccounts.map((account) => account.accountId));
+  const start = scenario.horizonStart;
+  const end = addDays(start, scenario.horizonDays - 1);
+  return schedules.some((schedule) => {
+    if (schedule.status !== "ACTIVE"
+      || (!selectedAccounts.has(schedule.fromAccountId) && !selectedAccounts.has(schedule.toAccountId))) {
+      return false;
+    }
+    const dueDate = localDateForTimeZone(schedule.nextRunAt, scenario.timeZone);
+    if (dueDate < start || dueDate > end) {
+      return false;
+    }
+    return !scenario.sourceSnapshot.scheduledCashflows.some((flow) =>
+      flow.scheduleId === schedule.scheduleId
+      && flow.scheduleVersion === schedule.version
+      && Math.abs(Date.parse(flow.scheduledFor) - Date.parse(schedule.nextRunAt)) < 1000);
+  });
+}
+
+function localDateForTimeZone(instant: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(new Date(instant));
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+  return [part("year"), part("month"), part("day")].join("-");
 }
 
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : undefined; }

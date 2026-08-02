@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { createAccount, listAccounts, listLedgerAccounts, updateAccount } from "../lib/queries";
 import { accountSchema, type AccountValues } from "../lib/schemas";
 import { compactDate, money } from "../lib/format";
+import { invalidateInBackground, MONEY_STATE_REFRESH_INTERVAL_MS } from "../lib/queryInvalidation";
 import { availableBalance, ledgerBalance, pendingBalance, projectionFor, projectionMap } from "../lib/accountBalances";
 import type { Account } from "../types";
 import { Button, EmptyState, ErrorNotice, Field, Input, Panel, Select } from "../components/ui";
@@ -16,8 +17,8 @@ export function AccountsPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [editing, setEditing] = useState<Account | null>(null);
   const [selected, setSelected] = useState<Account | null>(null);
-  const accounts = useQuery({ queryKey: ["accounts", typeFilter], queryFn: () => listAccounts({ accountType: typeFilter || undefined }) });
-  const ledgerAccounts = useQuery({ queryKey: ["ledger", "accounts"], queryFn: listLedgerAccounts, retry: false });
+  const accounts = useQuery({ queryKey: ["accounts", typeFilter], queryFn: () => listAccounts({ accountType: typeFilter || undefined }), refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
+  const ledgerAccounts = useQuery({ queryKey: ["ledger", "accounts"], queryFn: listLedgerAccounts, retry: false, refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
   const projections = projectionMap(ledgerAccounts.data);
   const form = useForm<AccountValues>({
     resolver: zodResolver(accountSchema),
@@ -28,7 +29,7 @@ export function AccountsPage() {
     mutationFn: createAccount,
     onSuccess: () => {
       form.reset({ accountType: "CHECKING", currency: "USD", interestRate: 0 });
-      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      invalidateInBackground(queryClient, ["accounts"]);
     }
   });
   const updateMutation = useMutation({
@@ -36,7 +37,7 @@ export function AccountsPage() {
     onSuccess: () => {
       setEditing(null);
       form.reset({ accountType: "CHECKING", currency: "USD", interestRate: 0 });
-      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      invalidateInBackground(queryClient, ["accounts"]);
     }
   });
 

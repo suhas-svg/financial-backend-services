@@ -7,11 +7,12 @@ import { authorizeTransfer, cancelTransferAuthorization, listAccounts, listBenef
 import { createIdempotencyKey } from "../lib/idempotency";
 import { availableBalance, canDebit } from "../lib/accountBalances";
 import { moneyMovementSchema, transferSchema, type MoneyMovementValues, type TransferValues } from "../lib/schemas";
+import { invalidateMoneyMovementQueries, MONEY_STATE_REFRESH_INTERVAL_MS } from "../lib/queryInvalidation";
 import { Button, ErrorNotice, Field, Input, Panel, Select, StatusNotice } from "../components/ui";
 import type { Beneficiary, Transaction } from "../types";
 
 function AccountSelect({ field, debitSource = false, amount = 0 }: { field: UseFormRegisterReturn; debitSource?: boolean; amount?: number }) {
-  const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => listAccounts() });
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => listAccounts(), refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
   return (
     <Select {...field}>
       <option value="">Select account</option>
@@ -37,9 +38,7 @@ export function MoveMoneyPage() {
   const transferAmount = Number(transferForm.watch("amount") || 0);
   const destinationField = transferForm.register("toAccountId");
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ["accounts"] });
-    queryClient.invalidateQueries({ queryKey: ["transactions"] });
-    queryClient.invalidateQueries({ queryKey: ["stats"] });
+    invalidateMoneyMovementQueries(queryClient);
   };
   const withdrawMutation = useMutation({
     mutationFn: (values: MoneyMovementValues) => withdraw(values, createIdempotencyKey("withdraw")),

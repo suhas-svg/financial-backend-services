@@ -38,9 +38,10 @@ public class OutcomeScheduledTransferForecaster {
             BigDecimal signedAmount = (outgoing ? schedule.getAmount().negate() : BigDecimal.ZERO)
                     .add(incoming ? schedule.getAmount() : BigDecimal.ZERO)
                     .setScale(2, RoundingMode.HALF_UP);
-            if (signedAmount.signum() == 0) {
+            if (!outgoing && !incoming) {
                 continue;
             }
+            boolean netZeroSelectedImpact = signedAmount.signum() == 0;
 
             Instant occurrence = schedule.getNextRunAt();
             int occurrenceGuard = 0;
@@ -57,7 +58,12 @@ public class OutcomeScheduledTransferForecaster {
                             ? "ONE_TIME" : schedule.getFrequency().name();
                     String flexibility = schedule.getReference() == null
                             ? "" : schedule.getReference().trim().toUpperCase(java.util.Locale.ROOT);
-                    boolean repairEligible = flexibility.equals("FLEXIBLE") || flexibility.equals("OPTIONAL");
+                    boolean repairEligible = !netZeroSelectedImpact
+                            && (flexibility.equals("FLEXIBLE") || flexibility.equals("OPTIONAL"));
+                    String repairIneligibilityReason = repairEligible ? null
+                            : netZeroSelectedImpact
+                            ? "Internal transfer nets to zero across the selected accounts"
+                            : "Schedule reference is not explicitly FLEXIBLE or OPTIONAL";
                     String sourceTimeZone = schedule.getSourceTimeZone() == null || schedule.getSourceTimeZone().isBlank()
                             ? "UTC" : schedule.getSourceTimeZone();
                     events.add(new ScheduledCashflowSnapshot(
@@ -67,11 +73,11 @@ public class OutcomeScheduledTransferForecaster {
                             schedule.getDescription() == null || schedule.getDescription().isBlank()
                                     ? "Scheduled transfer" : schedule.getDescription(),
                             schedule.getFromAccountId(), schedule.getToAccountId(),
-                            signedAmount, schedule.getCurrency(), null,
+                            netZeroSelectedImpact ? schedule.getAmount() : signedAmount, schedule.getCurrency(), null,
                             schedule.getVersion(), schedule.getUserId(), schedule.getSourceTimeZone(),
                             occurrence.atZone(ZoneId.of(sourceTimeZone)).toLocalDate(),
                             true, false, repairEligible,
-                            repairEligible ? null : "Schedule reference is not explicitly FLEXIBLE or OPTIONAL"));
+                            repairIneligibilityReason));
                 }
                 if (schedule.getScheduleType() == ScheduledTransferType.ONE_TIME) {
                     break;

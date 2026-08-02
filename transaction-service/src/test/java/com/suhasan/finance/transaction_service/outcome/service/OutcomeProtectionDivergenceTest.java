@@ -138,6 +138,13 @@ class OutcomeProtectionDivergenceTest {
         var first = service.refresh("scenario-1", "customer-1");
         var second = service.refresh("scenario-1", "customer-1");
 
+        assertThat(first.freshSourceSnapshot()).isNotNull();
+        assertThat(first.freshSourceSnapshot().scheduledCashflows()).singleElement().satisfies(schedule -> {
+            assertThat(schedule.scheduleId()).isEqualTo("schedule-1");
+            assertThat(schedule.sourceAmount()).isEqualByComparingTo("-2000.00");
+            assertThat(schedule.amount()).isEqualByComparingTo("-2000.00");
+            assertThat(schedule.date()).isEqualTo(LocalDate.of(2026, 7, 17));
+        });
         assertThat(first.protectionAtRisk()).isTrue();
         assertThat(first.notificationEmitted()).isFalse();
         assertThat(first.warningEventId()).isNotBlank();

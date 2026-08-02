@@ -301,7 +301,7 @@ public final class OutcomeProtectionDtos {
             String evaluationEventId, String warningEventId,
             boolean diverged, boolean protectionAtRisk, boolean warningAcknowledged, boolean notificationEmitted,
             NotificationDeliveryEvidence notificationDelivery,
-            SimulationProof freshSimulation, Instant checkedAt) {}
+            SimulationProof freshSimulation, SourceSnapshot freshSourceSnapshot, Instant checkedAt) {}
 
     public record WarningAcknowledgementResponse(
             String acknowledgementEventId, String warningEventId,

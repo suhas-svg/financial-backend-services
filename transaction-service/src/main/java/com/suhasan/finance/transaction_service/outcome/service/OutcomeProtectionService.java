@@ -279,10 +279,23 @@ public class OutcomeProtectionService {
         scenario.setLastProtectionState(atRisk ? "AT_RISK" : "SAFE");
         scenario.setLastCheckedAt(Instant.now());
         scenarioRepository.save(scenario);
+        List<FxRateQuote> freshFxQuotes = new ArrayList<>();
+        fresh.ledgerAccounts().stream().map(LedgerAccountSnapshot::fxQuote)
+                .filter(Objects::nonNull).forEach(freshFxQuotes::add);
+        fresh.scheduledCashflows().stream().map(ScheduledCashflowSnapshot::fxQuote)
+                .filter(Objects::nonNull).forEach(freshFxQuotes::add);
         return new DivergenceResponse(scenario.getScenarioId(), previousFingerprint, fresh.sourceFingerprint(),
                 evaluation.getEventId(), warning == null ? null : warning.getEventId(),
                 diverged, atRisk, warningAcknowledged, notificationEmitted, notificationDelivery,
-                simulation, scenario.getLastCheckedAt());
+                simulation, new SourceSnapshot(
+                        fresh.ledgerAccounts().stream()
+                                .map(account -> account.baseAvailableBalance() == null
+                                        ? account.availableBalance() : account.baseAvailableBalance())
+                                .reduce(BigDecimal.ZERO, BigDecimal::add),
+                        request.currency(), fresh.ledgerAccounts(), fresh.scheduledCashflows(),
+                        fresh.protectedObligation(), freshFxQuotes.stream().distinct().toList(),
+                        false, fresh.sourceFingerprint()),
+                scenario.getLastCheckedAt());
     }
 
     private ScenarioResponse persistVersionAndResult(OutcomeScenario scenario, int number, ScenarioRequest request,
@@ -412,7 +425,7 @@ public class OutcomeProtectionService {
             return new ScheduledCashflowSnapshot(schedule.eventId(), schedule.scheduleId(), schedule.scheduledFor(),
                     schedule.date(), conversion.convertedAmount(), request.currency(), schedule.status(),
                     schedule.cadence(), schedule.evaluationTimeZone(), schedule.label(), schedule.fromAccountId(),
-                    schedule.toAccountId(), conversion.sourceAmount(), conversion.sourceCurrency(), conversion.quote(),
+                    schedule.toAccountId(), schedule.sourceAmount(), schedule.sourceCurrency(), conversion.quote(),
                     schedule.scheduleVersion(), schedule.scheduleOwnerId(), schedule.sourceTimeZone(),
                     schedule.dueLocalDate(), sourceOwned, destinationOwned, repairEligible, ineligibleReason);
         }).toList();

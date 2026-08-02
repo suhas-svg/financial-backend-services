@@ -542,6 +542,7 @@ export type OutcomeDivergence = {
   protectionAtRisk: boolean;
   notificationEmitted: boolean;
   freshSimulation: OutcomeSimulation;
+  freshSourceSnapshot?: OutcomeScenario["sourceSnapshot"];
   checkedAt: string;
   evaluationEventId: string;
   warningEventId?: string;
