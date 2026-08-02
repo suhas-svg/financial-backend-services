@@ -58,6 +58,16 @@ public class CustomerMonthlyStatement {
             LocalDate periodEnd,
             BigDecimal openingBalance,
             BigDecimal closingBalance) {
+        return create(account, periodStart, periodEnd, 1, openingBalance, closingBalance);
+    }
+
+    public static CustomerMonthlyStatement create(
+            LedgerAccount account,
+            LocalDate periodStart,
+            LocalDate periodEnd,
+            int statementVersion,
+            BigDecimal openingBalance,
+            BigDecimal closingBalance) {
         return CustomerMonthlyStatement.builder()
                 .statementId(UUID.randomUUID())
                 .ledgerAccountId(account.getLedgerAccountId())
@@ -66,7 +76,7 @@ public class CustomerMonthlyStatement {
                 .currency(account.getCurrency())
                 .periodStart(periodStart)
                 .periodEnd(periodEnd)
-                .statementVersion(1)
+                .statementVersion(statementVersion)
                 .openingBalance(openingBalance)
                 .closingBalance(closingBalance)
                 .generatedAt(LocalDateTime.now())

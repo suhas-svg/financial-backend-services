@@ -5,6 +5,7 @@ This runbook applies only to the environment visibly labelled `SYNTHETIC ENVIRON
 ## Automated financial operations
 
 `financial-operations.enabled` defaults to `false` and is enabled only in an approved synthetic profile. The daily job reconciles the prior business date and the monthly job generates statements for the closed prior month. `financial-operations.zone` is an explicit IANA zone (UTC in the canonical sandbox). Each operation first acquires a durable `(operation_type, business_date)` claim. Completed dates are immutable/idempotent; failed or expired claims can be recovered with a new attempt and preserved attempt count. Jobs read immutable posted-ledger history and never mutate a balance or move money.
+Statement regeneration is source-set aware: a later posted reversal or correction is represented by a new immutable statement version, while an unchanged posted journal set replays the latest version.
 
 Operators use the admin-only endpoints under `/api/admin/financial-operations`, with an `Idempotency-Key`, authenticated operator identity, and bounded reason. Existing MFA and role controls remain in force. Pause all automation by setting `financial-operations.enabled=false` and recreating only transaction-service. Investigate `financial_operation_runs`, reconciliation exceptions, and outbox evidence before replay. Never delete an operation row to force a replay.
 

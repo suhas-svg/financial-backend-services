@@ -637,6 +637,9 @@ describe("customer statements", () => {
     };
 
     const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/ledger/accounts")) {
+        return jsonResponse([{ ...sampleLedgerAccount, externalAccountId: "1001" }]);
+      }
       if (url.includes("/api/ledger/statements/statement-1/csv")) {
         return new Response("statementId,description\nstatement-1,\"ATM withdrawal\"\n", {
           status: 200,
@@ -660,8 +663,7 @@ describe("customer statements", () => {
     expect(screen.getByText("ATM withdrawal")).toBeInTheDocument();
     expect(screen.getByText("Fee refund")).toBeInTheDocument();
 
-    await user.clear(screen.getByLabelText("Account"));
-    await user.type(screen.getByLabelText("Account"), "1001");
+    await user.selectOptions(screen.getByLabelText("Account"), "1001");
     await user.clear(screen.getByLabelText("Statement month"));
     await user.type(screen.getByLabelText("Statement month"), "2026-05");
     await user.click(screen.getByRole("button", { name: "Generate statement" }));
@@ -680,6 +682,43 @@ describe("customer statements", () => {
       expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob));
     });
     expect(revokeObjectUrl).toHaveBeenCalledWith("blob:statement-export");
+  });
+
+  it("defaults statement generation to an owned ledger account when no statement exists", async () => {
+    const user = userEvent.setup();
+    let generatedStatement: Record<string, unknown> | null = null;
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/ledger/accounts")) {
+        return jsonResponse([sampleLedgerAccount]);
+      }
+      if (url.includes("/api/ledger/statements") && init?.method === "POST") {
+        generatedStatement = { statementId: "statement-2", externalAccountId: "101", currency: "USD", periodStart: "2026-06-01", periodEnd: "2026-07-01", statementVersion: 1, openingBalance: 250, closingBalance: 250, generatedAt: "2026-07-01T00:00:00", lines: [] };
+        return jsonResponse(generatedStatement);
+      }
+      if (url.includes("/api/ledger/statements")) {
+        return jsonResponse(generatedStatement ? [generatedStatement] : []);
+      }
+      return undefined;
+    });
+
+    renderApp("/statements", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    expect(await screen.findByRole("heading", { name: "Statements" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Account")).toHaveValue("101");
+    });
+    await user.clear(screen.getByLabelText("Statement month"));
+    await user.type(screen.getByLabelText("Statement month"), "2026-06");
+    await user.click(screen.getByRole("button", { name: "Generate statement" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url, init }) =>
+        url.includes("/transaction-api/api/ledger/statements")
+        && init?.method === "POST"
+        && String(init.body).includes('"externalAccountId":"101"')
+      )).toBe(true);
+    });
+    expect(await screen.findByText("Balance $250.00")).toBeInTheDocument();
   });
 });
 

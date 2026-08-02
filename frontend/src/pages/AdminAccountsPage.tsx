@@ -7,6 +7,7 @@ import { closeAccount, createAccount, listAccounts, syntheticFundAccount, update
 import { accountSchema, type AccountValues } from "../lib/schemas";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { compactDate, money } from "../lib/format";
+import { invalidateInBackground, MONEY_STATE_REFRESH_INTERVAL_MS } from "../lib/queryInvalidation";
 import { availableBalance, ledgerBalance } from "../lib/accountBalances";
 import type { Account } from "../types";
 import { Button, ErrorNotice, Field, Input, PageHeader, Panel, Select } from "../components/ui";
@@ -25,13 +26,13 @@ export function AdminAccountsPage() {
   const [actionAmount, setActionAmount] = useState("");
   const [actionReason, setActionReason] = useState("");
   const [actionError, setActionError] = useState("");
-  const accounts = useQuery({ queryKey: ["admin-accounts", ownerId, accountType, status], queryFn: () => listAccounts({ ownerId, accountType, status: status as "" | "ACTIVE" | "FROZEN" | "CLOSED" }) });
+  const accounts = useQuery({ queryKey: ["admin-accounts", ownerId, accountType, status], queryFn: () => listAccounts({ ownerId, accountType, status: status as "" | "ACTIVE" | "FROZEN" | "CLOSED" }), refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
   const form = useForm<AccountValues>({
     resolver: zodResolver(accountSchema),
     defaultValues: { accountType: "CHECKING", ownerId: "", interestRate: 0 }
   });
   const watchedType = form.watch("accountType");
-  const invalidateAccounts = () => queryClient.invalidateQueries({ queryKey: ["admin-accounts"] });
+  const invalidateAccounts = () => invalidateInBackground(queryClient, ["admin-accounts"]);
   const clearAccountAction = () => {
     setAccountAction(null);
     setActionAmount("");

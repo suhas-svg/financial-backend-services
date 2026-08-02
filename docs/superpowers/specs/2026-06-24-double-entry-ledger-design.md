@@ -341,7 +341,8 @@ Resolving an exception never edits ledger history. Financial repair requires a c
 
 ## 13. Monthly statements
 
-On the first day of each UTC month, `transaction-service` closes the preceding period for each eligible customer ledger account. Generation is idempotent by `(ledger_account_id, period_start, period_end)`.
+On the first day of each UTC month, `transaction-service` closes the preceding period for each eligible customer ledger account. Repeated generation returns the latest immutable version while its linked posted journal set is unchanged.
+If a later posted correction or reversal changes that journal set, generation preserves the prior snapshot and creates the next immutable statement version for the same `(ledger_account_id, period_start, period_end)` period.
 
 Each immutable statement stores:
 

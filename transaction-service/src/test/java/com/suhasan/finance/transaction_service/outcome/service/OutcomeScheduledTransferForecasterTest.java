@@ -42,7 +42,7 @@ class OutcomeScheduledTransferForecasterTest {
 
         var events = forecaster.forecast(request, "customer-1", Set.of("10", "11"), schedules);
 
-        assertThat(events).hasSize(4);
+        assertThat(events).hasSize(5);
         assertThat(events).filteredOn(event -> event.scheduleId().equals("active")).allSatisfy(event -> {
             assertThat(event.scheduleId()).isEqualTo("active");
             assertThat(event.amount()).isEqualByComparingTo("-2500.05");
@@ -52,7 +52,15 @@ class OutcomeScheduledTransferForecasterTest {
             assertThat(event.evaluationTimeZone()).isEqualTo("Asia/Kolkata");
         });
         assertThat(events).extracting(event -> event.date().toString())
-                .containsExactly("2026-07-16", "2026-07-16", "2026-07-23", "2026-07-30");
+                .containsExactly("2026-07-16", "2026-07-16", "2026-07-16", "2026-07-23", "2026-07-30");
+        assertThat(events).filteredOn(event -> event.scheduleId().equals("net-zero"))
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.amount()).isEqualByComparingTo("0.00");
+                    assertThat(event.sourceAmount()).isEqualByComparingTo("99.00");
+                    assertThat(event.repairEligible()).isFalse();
+                    assertThat(event.repairIneligibilityReason()).contains("nets to zero");
+                });
         assertThat(events).filteredOn(event -> event.scheduleId().equals("other-currency"))
                 .singleElement()
                 .satisfies(event -> {
@@ -62,6 +70,27 @@ class OutcomeScheduledTransferForecasterTest {
         assertThat(events.getFirst().scheduledFor()).isEqualTo(Instant.parse("2026-07-15T18:30:00Z"));
     }
 
+    @Test
+    void retainsInternalMonthlyTransferWhenBothSelectedAccountsAreInScope() {
+        ScenarioRequest request = new ScenarioRequest("USD protection", List.of("10", "11"), "USD", "America/New_York",
+                LocalDate.of(2026, 8, 1), 30, new BigDecimal("500.00"), List.of(), List.of());
+        ScheduledTransfer schedule = schedule("monthly-internal", "customer-1", "10", "11", "50.00", "USD",
+                ScheduledTransferStatus.ACTIVE, ScheduledTransferType.RECURRING, ScheduledTransferFrequency.MONTHLY,
+                "2026-08-03T14:00:00Z", null);
+
+        var events = forecaster.forecast(request, "customer-1", Set.of("10", "11"), List.of(schedule));
+
+        assertThat(events).singleElement().satisfies(event -> {
+            assertThat(event.date()).isEqualTo(LocalDate.of(2026, 8, 3));
+            assertThat(event.amount()).isEqualByComparingTo("0.00");
+            assertThat(event.sourceAmount()).isEqualByComparingTo("50.00");
+            assertThat(event.sourceCurrency()).isEqualTo("USD");
+            assertThat(event.fromAccountId()).isEqualTo("10");
+            assertThat(event.toAccountId()).isEqualTo("11");
+            assertThat(event.repairEligible()).isFalse();
+            assertThat(event.repairIneligibilityReason()).contains("nets to zero");
+        });
+    }
     @Test
     void honorsInclusiveEndInstantAndMonthlyCadence() {
         ScenarioRequest request = request(LocalDate.of(2026, 7, 31), 32);

@@ -49,10 +49,23 @@ public class MonthlyStatementService {
     public CustomerMonthlyStatementResult generate(String ownerId, String externalAccountId, YearMonth period) {
         LocalDate periodStart = period.atDay(1);
         LocalDate periodEnd = period.plusMonths(1).atDay(1);
-        return statementRepository
-                .findLatestByOwnerAndAccountAndPeriod(ownerId, externalAccountId, periodStart, periodEnd)
-                .map(this::toResult)
-                .orElseGet(() -> generateNew(ownerId, externalAccountId, periodStart, periodEnd));
+        var latest = statementRepository.findLatestByOwnerAndAccountAndPeriod(
+                ownerId, externalAccountId, periodStart, periodEnd);
+        LedgerAccount account = resolveLedgerAccount(ownerId, externalAccountId);
+        List<StatementMovementProjection> movements = postingRepository.findPostedStatementMovements(
+                account.getLedgerAccountId(), periodStart, periodEnd);
+
+        if (latest.isPresent()) {
+            CustomerMonthlyStatement existing = latest.get();
+            List<CustomerMonthlyStatementLine> existingLines =
+                    lineRepository.findByStatementIdOrderByLineSequence(existing.getStatementId());
+            if (matchesPostedMovements(existingLines, movements)) {
+                return toResult(existing, existingLines);
+            }
+        }
+
+        int nextVersion = latest.map(statement -> statement.getStatementVersion() + 1).orElse(1);
+        return generateNew(account, periodStart, periodEnd, nextVersion, movements);
     }
 
     @Transactional(readOnly = true)
@@ -80,25 +93,24 @@ public class MonthlyStatementService {
     }
 
     private CustomerMonthlyStatementResult generateNew(
-            String ownerId,
-            String externalAccountId,
+            LedgerAccount account,
             LocalDate periodStart,
-            LocalDate periodEnd) {
-        LedgerAccount account = resolveLedgerAccount(ownerId, externalAccountId);
+            LocalDate periodEnd,
+            int statementVersion,
+            List<StatementMovementProjection> movements) {
 
         BigDecimal currentBalance = projectionRepository.findById(account.getLedgerAccountId())
                 .orElseThrow(() -> new IllegalArgumentException("Ledger projection not found"))
                 .getPostedBalance();
         BigDecimal openingBalance = currentBalance.subtract(postingRepository.postedMovementFrom(
                 account.getLedgerAccountId(), periodStart));
-        List<StatementMovementProjection> movements = postingRepository.findPostedStatementMovements(
-                account.getLedgerAccountId(), periodStart, periodEnd);
         BigDecimal runningBalance = openingBalance;
         List<CustomerMonthlyStatementLine> lines = new ArrayList<>();
         CustomerMonthlyStatement statement = CustomerMonthlyStatement.create(
                 account,
                 periodStart,
                 periodEnd,
+                statementVersion,
                 openingBalance,
                 openingBalance.add(movements.stream()
                         .map(StatementMovementProjection::getAmount)
@@ -120,6 +132,17 @@ public class MonthlyStatementService {
         }
         List<CustomerMonthlyStatementLine> savedLines = lineRepository.saveAll(lines);
         return toResult(statement, savedLines);
+    }
+
+    private boolean matchesPostedMovements(
+            List<CustomerMonthlyStatementLine> existingLines,
+            List<StatementMovementProjection> currentMovements) {
+        if (existingLines.size() != currentMovements.size()) {
+            return false;
+        }
+        return existingLines.stream().allMatch(line -> currentMovements.stream().anyMatch(movement ->
+                line.getJournalId().equals(movement.getJournalId())
+                        && line.getAmount().compareTo(movement.getAmount()) == 0));
     }
 
     private LedgerAccount resolveLedgerAccount(String ownerId, String externalAccountId) {

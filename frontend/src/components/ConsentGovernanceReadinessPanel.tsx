@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
+import { invalidateInBackground } from "../lib/queryInvalidation";
 import { Badge, Button, ErrorNotice, Panel, StatusNotice } from "./ui";
 
 type Governance = {
@@ -21,7 +22,7 @@ export function ConsentGovernanceReadinessPanel() {
       body: { jurisdiction: Intl.DateTimeFormat().resolvedOptions().locale, detail: "Customer requested evidence export" },
       idempotencyKey: createIdempotencyKey("consent-evidence-export")
     }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["outcome-protection", "consent-governance"] })
+    onSuccess: () => invalidateInBackground(queryClient, ["outcome-protection", "consent-governance"])
   });
   const data = governance.data;
   const versions = Array.isArray(data?.versions) ? data.versions : [];

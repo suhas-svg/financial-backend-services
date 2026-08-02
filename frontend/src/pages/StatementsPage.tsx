@@ -1,17 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { Button, EmptyState, ErrorNotice, Field, Input, Panel, Stat } from "../components/ui";
+import { Button, EmptyState, ErrorNotice, Field, Input, Panel, Select, Stat } from "../components/ui";
 import { compactDate, money } from "../lib/format";
-import { exportStatementCsv, generateStatement, listStatements } from "../lib/queries";
+import { exportStatementCsv, generateStatement, listLedgerAccounts, listStatements } from "../lib/queries";
+import { invalidateInBackground } from "../lib/queryInvalidation";
 import type { CustomerStatement } from "../types";
 
 export function StatementsPage() {
   const queryClient = useQueryClient();
-  const [accountId, setAccountId] = useState("1001");
+  const [accountId, setAccountId] = useState("");
   const [statementMonth, setStatementMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const statements = useQuery({ queryKey: ["statements"], queryFn: listStatements });
+  const ledgerAccounts = useQuery({ queryKey: ["ledger", "accounts"], queryFn: listLedgerAccounts, retry: false });
   const selected = useMemo(
     () => statements.data?.find((statement) => statement.statementId === selectedId) ?? statements.data?.[0] ?? null,
     [selectedId, statements.data]
@@ -22,8 +24,10 @@ export function StatementsPage() {
       setSelectedId(selected.statementId);
       setAccountId(selected.externalAccountId);
       setStatementMonth(selected.periodStart.slice(0, 7));
+    } else if (!selected && !accountId && ledgerAccounts.data?.length) {
+      setAccountId(ledgerAccounts.data[0].externalAccountId);
     }
-  }, [selected, selectedId]);
+  }, [accountId, ledgerAccounts.data, selected, selectedId]);
 
   const generateMutation = useMutation({
     mutationFn: () => generateStatement({ externalAccountId: accountId.trim(), yearMonth: statementMonth }),
@@ -31,7 +35,13 @@ export function StatementsPage() {
       setSelectedId(statement.statementId);
       setAccountId(statement.externalAccountId);
       setStatementMonth(statement.periodStart.slice(0, 7));
-      queryClient.invalidateQueries({ queryKey: ["statements"] });
+      queryClient.setQueryData<CustomerStatement[]>(["statements"], (current) => {
+        const withoutReturnedStatement = (current ?? []).filter(
+          (candidate) => candidate.statementId !== statement.statementId
+        );
+        return [statement, ...withoutReturnedStatement];
+      });
+      invalidateInBackground(queryClient, ["statements"]);
     }
   });
 
@@ -65,18 +75,25 @@ export function StatementsPage() {
           }}
         >
           <Field label="Account">
-            <Input value={accountId} onChange={(event) => setAccountId(event.target.value)} />
+            <Select value={accountId} onChange={(event) => setAccountId(event.target.value)} disabled={ledgerAccounts.isLoading || !ledgerAccounts.data?.length}>
+              <option value="">Select an owned account</option>
+              {ledgerAccounts.data?.map((account) => (
+                <option key={account.externalAccountId} value={account.externalAccountId}>
+                  Account {account.externalAccountId} · {account.currency}
+                </option>
+              ))}
+            </Select>
           </Field>
           <Field label="Statement month">
             <Input type="month" value={statementMonth} onChange={(event) => setStatementMonth(event.target.value)} />
           </Field>
-          <Button className="self-end" type="submit" disabled={generateMutation.isPending || !accountId.trim() || !statementMonth}>
+          <Button className="self-end" type="submit" disabled={generateMutation.isPending || ledgerAccounts.isLoading || !accountId.trim() || !statementMonth}>
             Generate statement
           </Button>
         </form>
       </div>
 
-      <ErrorNotice message={errorMessage(statements.error) || errorMessage(generateMutation.error) || errorMessage(csvMutation.error)} />
+      <ErrorNotice message={errorMessage(statements.error) || errorMessage(ledgerAccounts.error) || errorMessage(generateMutation.error) || errorMessage(csvMutation.error)} />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
         <Panel title="Monthly statements">
@@ -131,7 +148,12 @@ function StatementTable({
             <tr key={statement.statementId} className="border-b border-line last:border-0">
               <td className="py-3 font-medium">{statement.externalAccountId}</td>
               <td>{compactDate(statement.periodStart)} - {compactDate(statement.periodEnd)}</td>
-              <td>{statement.statementVersion}</td>
+              <td>
+                <span>v{statement.statementVersion}</span>
+                <span className="ml-2 text-xs text-muted">
+                  {statement.statementVersion === latestVersion(statements, statement) ? "Latest" : "Superseded"}
+                </span>
+              </td>
               <td>{money(statement.openingBalance, statement.currency)}</td>
               <td>{money(statement.closingBalance, statement.currency)}</td>
               <td className="text-right">
@@ -150,6 +172,7 @@ function StatementTable({
 function StatementDetail({ statement }: { statement: CustomerStatement }) {
   return (
     <div className="grid gap-4">
+      <p className="text-xs text-muted">Immutable posted-ledger snapshot generated {new Date(statement.generatedAt).toLocaleString()}. Later posted activity is preserved as a new version; the highest version is the latest snapshot for this period.</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <Stat label="Account" value={`Account ${statement.externalAccountId}`} />
         <Stat label="Currency" value={statement.currency} />
@@ -176,6 +199,16 @@ function StatementDetail({ statement }: { statement: CustomerStatement }) {
         )}
       </div>
     </div>
+  );
+}
+
+function latestVersion(statements: CustomerStatement[], statement: CustomerStatement) {
+  return Math.max(
+    ...statements
+      .filter((candidate) => candidate.externalAccountId === statement.externalAccountId
+        && candidate.periodStart === statement.periodStart
+        && candidate.periodEnd === statement.periodEnd)
+      .map((candidate) => candidate.statementVersion)
   );
 }
 

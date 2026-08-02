@@ -72,6 +72,11 @@ class MonthlyStatementServiceTest {
         StatementMovementProjection refundMovement = movement(feeRefund, "10.00");
         when(postingRepository.findPostedStatementMovements(accountId, periodStart, periodEnd))
                 .thenReturn(List.of(debitMovement, refundMovement));
+        when(lineRepository.findByStatementIdOrderByLineSequence(
+                UUID.fromString("99999999-9999-9999-9999-999999999999")))
+                .thenReturn(List.of(
+                        statementLine(UUID.fromString("99999999-9999-9999-9999-999999999999"), debit, 1, "-25.00", "975.00"),
+                        statementLine(UUID.fromString("99999999-9999-9999-9999-999999999999"), feeRefund, 2, "10.00", "985.00")));
         when(statementRepository.save(any(CustomerMonthlyStatement.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(lineRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -90,6 +95,51 @@ class MonthlyStatementServiceTest {
         assertThat(replay.statementId()).isEqualTo(UUID.fromString("99999999-9999-9999-9999-999999999999"));
 
         verify(statementRepository, times(1)).save(any(CustomerMonthlyStatement.class));
+    }
+
+    @Test
+    void createsNextImmutableStatementVersionWhenAReversalIsPostedAfterGeneration() {
+        UUID accountId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        LedgerAccount account = ledgerAccount(accountId, "customer-1", "1001", "USD");
+        YearMonth period = YearMonth.of(2026, 5);
+        LocalDate periodStart = LocalDate.of(2026, 5, 1);
+        LocalDate periodEnd = LocalDate.of(2026, 6, 1);
+        JournalTransaction debit = journal("22222222-2222-2222-2222-222222222222", LocalDate.of(2026, 5, 10), "ATM withdrawal");
+        JournalTransaction refund = journal("44444444-4444-4444-4444-444444444444", LocalDate.of(2026, 5, 12), "Fee refund");
+        JournalTransaction reversal = journal("55555555-5555-5555-5555-555555555555", LocalDate.of(2026, 5, 20), "Late reversal");
+
+        when(statementRepository.findLatestByOwnerAndAccountAndPeriod(
+                "customer-1", "1001", periodStart, periodEnd))
+                .thenReturn(Optional.of(existingStatement(accountId, periodStart, periodEnd)));
+        when(ledgerAccountRepository.findByExternalAccountId("1001")).thenReturn(Optional.of(account));
+        when(projectionRepository.findById(accountId)).thenReturn(Optional.of(
+                LedgerBalanceProjection.open(accountId, new BigDecimal("1110.00"))));
+        when(postingRepository.postedMovementFrom(accountId, periodStart))
+                .thenReturn(new BigDecimal("110.00"));
+        StatementMovementProjection debitMovement = movement(debit, "-25.00");
+        StatementMovementProjection refundMovement = movement(refund, "10.00");
+        StatementMovementProjection reversalMovement = movement(reversal, "125.00");
+        when(postingRepository.findPostedStatementMovements(accountId, periodStart, periodEnd))
+                .thenReturn(List.of(debitMovement, refundMovement, reversalMovement));
+        when(lineRepository.findByStatementIdOrderByLineSequence(any()))
+                .thenReturn(List.of(
+                        statementLine(UUID.fromString("99999999-9999-9999-9999-999999999999"), debit, 1, "-25.00", "975.00"),
+                        statementLine(UUID.fromString("99999999-9999-9999-9999-999999999999"), refund, 2, "10.00", "985.00")));
+        when(statementRepository.save(any(CustomerMonthlyStatement.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(lineRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var regenerated = service.generate("customer-1", "1001", period);
+
+        assertThat(regenerated.statementVersion()).isEqualTo(2);
+        assertThat(regenerated.closingBalance()).isEqualByComparingTo("1110.00");
+        assertThat(regenerated.lines()).extracting(CustomerMonthlyStatementLineResult::description)
+                .containsExactly("ATM withdrawal", "Fee refund", "Late reversal");
+        assertThat(regenerated.lines()).extracting(CustomerMonthlyStatementLineResult::amount)
+                .containsExactly(new BigDecimal("-25.00"), new BigDecimal("10.00"), new BigDecimal("125.00"));
+        verify(statementRepository).save(argThat(statement ->
+                statement.getStatementVersion() == 2
+                        && statement.getClosingBalance().compareTo(new BigDecimal("1110.00")) == 0));
     }
 
     @Test
@@ -202,6 +252,13 @@ class MonthlyStatementServiceTest {
         when(projection.getAmount()).thenReturn(new BigDecimal(amount));
         return projection;
     }
+    private CustomerMonthlyStatementLine statementLine(
+            UUID statementId, JournalTransaction journal, int sequence, String amount, String runningBalance) {
+        return CustomerMonthlyStatementLine.create(
+                statementId, journal.getJournalId(), sequence, journal.getEffectiveDate(), journal.getDescription(),
+                new BigDecimal(amount), new BigDecimal(runningBalance), "USD");
+    }
+
     private CustomerMonthlyStatement existingStatement(UUID accountId, LocalDate periodStart, LocalDate periodEnd) {
         return CustomerMonthlyStatement.builder()
                 .statementId(UUID.fromString("99999999-9999-9999-9999-999999999999"))
