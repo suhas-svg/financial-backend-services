@@ -65,9 +65,9 @@ class MonthlyStatementServiceTest {
                 .thenReturn(Optional.of(existingStatement(accountId, periodStart, periodEnd)));
         when(ledgerAccountRepository.findByExternalAccountId("1001")).thenReturn(Optional.of(account));
         when(projectionRepository.findById(accountId)).thenReturn(Optional.of(
-                LedgerBalanceProjection.open(accountId, new BigDecimal("990.00"))));
-        when(postingRepository.postedMovementFrom(accountId, periodStart))
-                .thenReturn(new BigDecimal("-10.00"));
+                LedgerBalanceProjection.open(accountId, new BigDecimal("1000.00"))));
+        when(postingRepository.postedMovementBefore(accountId, periodStart))
+                .thenReturn(BigDecimal.ZERO);
         StatementMovementProjection debitMovement = movement(debit, "-25.00");
         StatementMovementProjection refundMovement = movement(feeRefund, "10.00");
         when(postingRepository.findPostedStatementMovements(accountId, periodStart, periodEnd))
@@ -113,9 +113,9 @@ class MonthlyStatementServiceTest {
                 .thenReturn(Optional.of(existingStatement(accountId, periodStart, periodEnd)));
         when(ledgerAccountRepository.findByExternalAccountId("1001")).thenReturn(Optional.of(account));
         when(projectionRepository.findById(accountId)).thenReturn(Optional.of(
-                LedgerBalanceProjection.open(accountId, new BigDecimal("1110.00"))));
-        when(postingRepository.postedMovementFrom(accountId, periodStart))
-                .thenReturn(new BigDecimal("110.00"));
+                LedgerBalanceProjection.open(accountId, new BigDecimal("1000.00"))));
+        when(postingRepository.postedMovementBefore(accountId, periodStart))
+                .thenReturn(BigDecimal.ZERO);
         StatementMovementProjection debitMovement = movement(debit, "-25.00");
         StatementMovementProjection refundMovement = movement(refund, "10.00");
         StatementMovementProjection reversalMovement = movement(reversal, "125.00");
@@ -154,7 +154,7 @@ class MonthlyStatementServiceTest {
         when(ledgerAccountRepository.findByExternalAccountId("2002")).thenReturn(Optional.of(account));
         when(projectionRepository.findById(accountId)).thenReturn(Optional.of(
                 LedgerBalanceProjection.open(accountId, new BigDecimal("500.00"))));
-        when(postingRepository.postedMovementFrom(accountId, LocalDate.of(2026, 7, 1)))
+        when(postingRepository.postedMovementBefore(accountId, LocalDate.of(2026, 7, 1)))
                 .thenReturn(BigDecimal.ZERO);
         StatementMovementProjection depositMovement = movement(deposit, "25.00");
         when(postingRepository.findPostedStatementMovements(
@@ -197,7 +197,7 @@ class MonthlyStatementServiceTest {
         when(ledgerAccountRepository.findById(accountId)).thenReturn(Optional.of(ledgerAccount));
         when(projectionRepository.findById(accountId)).thenReturn(Optional.of(
                 LedgerBalanceProjection.open(accountId, new BigDecimal("500.00"))));
-        when(postingRepository.postedMovementFrom(accountId, LocalDate.of(2026, 7, 1)))
+        when(postingRepository.postedMovementBefore(accountId, LocalDate.of(2026, 7, 1)))
                 .thenReturn(BigDecimal.ZERO);
         when(postingRepository.findPostedStatementMovements(
                 accountId, LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1)))

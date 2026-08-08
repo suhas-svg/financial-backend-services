@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
 
 @Data
@@ -29,6 +30,10 @@ public class TransactionDisputeResponse {
     private LocalDateTime claimedAt;
     private LocalDateTime closedAt;
     private String resolutionNote;
+    private String reimbursementTransactionId;
+    private BigDecimal reimbursementAmount;
+    private String reimbursementCurrency;
+    private LocalDateTime reimbursedAt;
     private List<Note> notes;
 
     @Data

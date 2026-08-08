@@ -160,7 +160,7 @@ class TransactionControllerTest {
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(depositRequest)))
-                .andExpect(status().isMethodNotAllowed());
+                .andExpect(status().isConflict());
 
         verifyNoInteractions(transactionService);
     }

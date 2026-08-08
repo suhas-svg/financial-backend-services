@@ -9,6 +9,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -273,15 +274,25 @@ public class AlertingService {
      * Get current alert statistics
      */
     public Map<String, Object> getAlertStatistics() {
-        return Map.of(
-                "criticalAlerts", criticalAlertsCounter.count(),
-                "warningAlerts", warningAlertsCounter.count(),
-                "infoAlerts", infoAlertsCounter.count(),
-                "consecutiveAccountServiceErrors", consecutiveAccountServiceErrors.get(),
-                "consecutiveHighErrorRateMinutes", consecutiveHighErrorRateMinutes.get(),
-                "consecutiveSlowResponseMinutes", consecutiveSlowResponseMinutes.get(),
-                "activeAlertSuppressions", lastAlertTimes.size()
-        );
+        // These counters are historical trigger totals. They are not
+        // unresolved incidents and must not be presented as active.
+        Map<String, Object> statistics = new LinkedHashMap<>();
+        statistics.put("criticalAlerts", criticalAlertsCounter.count());
+        statistics.put("warningAlerts", warningAlertsCounter.count());
+        statistics.put("infoAlerts", infoAlertsCounter.count());
+        statistics.put("criticalAlertsTriggered", criticalAlertsCounter.count());
+        statistics.put("warningAlertsTriggered", warningAlertsCounter.count());
+        statistics.put("infoAlertsTriggered", infoAlertsCounter.count());
+        statistics.put("activeAlerts", 0L);
+        statistics.put("activeCriticalAlerts", 0L);
+        statistics.put("activeWarningAlerts", 0L);
+        statistics.put("activeInfoAlerts", 0L);
+        statistics.put("alertState", "TRIGGERED_TOTALS_ONLY");
+        statistics.put("consecutiveAccountServiceErrors", consecutiveAccountServiceErrors.get());
+        statistics.put("consecutiveHighErrorRateMinutes", consecutiveHighErrorRateMinutes.get());
+        statistics.put("consecutiveSlowResponseMinutes", consecutiveSlowResponseMinutes.get());
+        statistics.put("activeAlertSuppressions", lastAlertTimes.size());
+        return statistics;
     }
     
     /**

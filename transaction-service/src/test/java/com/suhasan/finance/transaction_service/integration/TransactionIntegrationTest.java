@@ -120,6 +120,7 @@ class TransactionIntegrationTest extends BaseIntegrationTest {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(validJwtToken);
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("Idempotency-Key", "deposit-disabled-integration");
         HttpEntity<DepositRequest> request = new HttpEntity<>(depositRequest, headers);
 
         // When
@@ -130,7 +131,8 @@ class TransactionIntegrationTest extends BaseIntegrationTest {
         );
 
         // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).contains("Customer deposits are unavailable");
         assertThat(transactionRepository.findAll()).isEmpty();
     }
 

@@ -18,6 +18,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -80,6 +81,19 @@ public class TransactionDispute {
 
     @Column(length = 1000)
     private String resolutionNote;
+
+    // The migration uses a partial unique index so null reimbursement receipts
+    // do not become a provider-specific uniqueness constraint.
+    @Column(length = 36)
+    private String reimbursementTransactionId;
+
+    @Column(precision = 19, scale = 2)
+    private BigDecimal reimbursementAmount;
+
+    @Column(length = 3)
+    private String reimbursementCurrency;
+
+    private LocalDateTime reimbursedAt;
 
     @Builder.Default
     @OneToMany(mappedBy = "dispute", cascade = CascadeType.ALL, orphanRemoval = true)

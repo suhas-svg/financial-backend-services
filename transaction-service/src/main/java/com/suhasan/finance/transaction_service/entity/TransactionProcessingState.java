@@ -11,6 +11,7 @@ public enum TransactionProcessingState {
     HOLD_RELEASED("Debit authorization hold has been released"),
     DEBIT_APPLIED("Debit side of transaction has been applied"),
     CREDIT_APPLIED("Credit side of transaction has been applied"),
+    FAILED("Transaction processing failed without a posted journal"),
     COMPLETED("Transaction processing completed"),
     COMPENSATED("Compensation/rollback step completed"),
     MANUAL_ACTION_REQUIRED("Automatic compensation failed; manual action required");

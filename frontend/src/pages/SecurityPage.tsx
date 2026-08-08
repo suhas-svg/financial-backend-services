@@ -36,7 +36,7 @@ export function SecurityPage() {
           <p className="text-sm">Status: <strong>{status.data?.enrolled ? "Enabled" : "Not enabled"}</strong>{status.data?.enrolled ? ` · ${status.data.recoveryCodesRemaining} recovery codes remaining` : ""}</p>
           {!status.data?.enrolled && !enrollment ? (
             <>
-              <Field label="Current password"><Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></Field>
+              <Field label="Current password"><Input name="mfa-enrollment-password" autoComplete="new-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></Field>
               <Button disabled={!password || enroll.isPending} onClick={() => enroll.mutate()}>Set up authenticator</Button>
             </>
           ) : null}
@@ -44,14 +44,14 @@ export function SecurityPage() {
             <div className="grid gap-4 rounded-md border border-line bg-slate-50 p-4">
               <p className="text-sm">Add this secret to your authenticator app, then enter its 6-digit code.</p>
               <code className="break-all rounded bg-white p-3 text-sm">{enrollment.secret}</code>
-              <Field label="Authenticator code"><Input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value)} /></Field>
+              <Field label="Authenticator code"><Input name="mfa-enrollment-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value)} /></Field>
               <Button disabled={code.length !== 6 || confirm.isPending} onClick={() => confirm.mutate()}>Confirm and enable</Button>
             </div>
           ) : null}
           {status.data?.enrolled ? (
             <div className="grid gap-4 border-t border-line pt-4">
-              <Field label="Current password"><Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></Field>
-              <Field label="Authenticator or recovery code"><Input autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} /></Field>
+              <Field label="Current password"><Input name="mfa-management-password" autoComplete="new-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></Field>
+              <Field label="Authenticator or recovery code"><Input name="mfa-management-code" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} /></Field>
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" disabled={!password || regenerate.isPending} onClick={() => regenerate.mutate()}>Replace recovery codes</Button>
                 <Button variant="danger" disabled={!password || !code || disable.isPending} onClick={() => disable.mutate()}>Disable authenticator</Button>
@@ -72,7 +72,7 @@ export function SecurityPage() {
                 <Field label="Daily transfer limit"><Input type="number" min="0" step="0.01" value={draft.transfer} onChange={(e) => setLimitDrafts((all) => ({ ...all, [limit.accountId]: { ...draft, transfer: e.target.value } }))} /></Field>
                 <Field label="Daily withdrawal limit"><Input type="number" min="0" step="0.01" value={draft.withdrawal} onChange={(e) => setLimitDrafts((all) => ({ ...all, [limit.accountId]: { ...draft, withdrawal: e.target.value } }))} /></Field>
               </div>
-              <Field label="Authenticator or recovery code (for increases)"><Input value={draft.credential} onChange={(e) => setLimitDrafts((all) => ({ ...all, [limit.accountId]: { ...draft, credential: e.target.value } }))} /></Field>
+              <Field label="Authenticator or recovery code (for increases)"><Input name={`spending-limit-credential-${limit.accountId}`} autoComplete="one-time-code" value={draft.credential} onChange={(e) => setLimitDrafts((all) => ({ ...all, [limit.accountId]: { ...draft, credential: e.target.value } }))} /></Field>
               {limit.pendingEffectiveAt ? <p className="text-sm text-amber-700">Verified increase pending until {new Date(limit.pendingEffectiveAt).toLocaleString()}.</p> : null}
               <Button disabled={!draft.transfer || !draft.withdrawal || updateLimit.isPending} onClick={() => updateLimit.mutate({ accountId: limit.accountId, ...draft })}>Save limits</Button>
             </div>;

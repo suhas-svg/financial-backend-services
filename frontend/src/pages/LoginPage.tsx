@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowRight, BadgeCheck, Building2, Eye, EyeOff, Landmark, LockKeyhole, ShieldCheck, Sparkles, UserRound } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link, Navigate, useNavigate, useSearchParams } from "../routing";
 import { Button, ErrorNotice, Input } from "../components/ui";
@@ -39,6 +39,15 @@ export function LoginPage() {
   const sessionExpired = searchParams.get("reason") === "expired";
   const content = portalContent[portal];
   const form = useForm<LoginValues>({ resolver: zodResolver(loginSchema), defaultValues: { username: "", password: "" } });
+  const { reset } = form;
+
+  useEffect(() => {
+    // Keep the customer and operations credentials in separate browser form
+    // contexts. This prevents a previous synthetic account from being shown
+    // when the portal changes or after an expired session redirects to login.
+    reset({ username: "", password: "" });
+    setShowPassword(false);
+  }, [portal, reset]);
   const mutation = useMutation({
     mutationFn: login,
     onSuccess: (data) => {
@@ -144,24 +153,24 @@ export function LoginPage() {
               <p className="mt-2 text-sm leading-6 text-slate-400">{content.detail}</p>
             </div>
 
-            <form className="grid gap-5" onSubmit={form.handleSubmit((values) => { setPortalError(undefined); mutation.mutate(values); })}>
+            <form key={portal} autoComplete="off" className="grid gap-5" onSubmit={form.handleSubmit((values) => { setPortalError(undefined); mutation.mutate(values); })}>
               {sessionExpired ? <div role="status" aria-live="polite" className="rounded-xl border border-amber-400/30 bg-amber-950/30 p-3 text-sm text-amber-100">Your session expired. Sign in again to continue.</div> : null}
               <ErrorNotice message={portalError ?? (mutation.error instanceof Error ? mutation.error.message : undefined)} />
 
               <div className="grid gap-2 text-sm">
-                <label className="font-semibold text-slate-200" htmlFor="login-username">Username</label>
+                <label className="font-semibold text-slate-200" htmlFor={`login-${portal}-username`}>Username</label>
                 <span className="relative block">
                   <UserRound className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <Input id="login-username" className="auth-dark-input h-12 rounded-xl border-slate-700 bg-slate-950/70 pl-10 pr-4 text-white placeholder:text-slate-600" autoComplete="username" placeholder={portal === "admin" ? "Enter your admin username" : "Enter your username"} {...form.register("username")} />
+                  <Input id={`login-${portal}-username`} className="auth-dark-input h-12 rounded-xl border-slate-700 bg-slate-950/70 pl-10 pr-4 text-white placeholder:text-slate-600" autoComplete="off" placeholder={portal === "admin" ? "Enter your admin username" : "Enter your username"} {...form.register("username")} />
                 </span>
                 {form.formState.errors.username?.message ? <span className="text-xs text-danger">{form.formState.errors.username.message}</span> : null}
               </div>
 
               <div className="grid gap-2 text-sm">
-                <label className="font-semibold text-slate-200" htmlFor="login-password">Password</label>
+                <label className="font-semibold text-slate-200" htmlFor={`login-${portal}-password`}>Password</label>
                 <span className="relative block">
                   <LockKeyhole className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <Input id="login-password" className="auth-dark-input h-12 rounded-xl border-slate-700 bg-slate-950/70 pl-10 pr-12 text-white placeholder:text-slate-600" type={showPassword ? "text" : "password"} autoComplete="current-password" placeholder="Enter your password" {...form.register("password")} />
+                  <Input id={`login-${portal}-password`} className="auth-dark-input h-12 rounded-xl border-slate-700 bg-slate-950/70 pl-10 pr-12 text-white placeholder:text-slate-600" type={showPassword ? "text" : "password"} autoComplete="new-password" placeholder="Enter your password" {...form.register("password")} />
                   <button type="button" className="absolute right-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-800 hover:text-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Hide password" : "Show password"}>
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>

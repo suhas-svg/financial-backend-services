@@ -11,6 +11,7 @@ import com.suhasan.finance.transaction_service.entity.TransactionProcessingState
 import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
 import com.suhasan.finance.transaction_service.exception.AccountServiceUnavailableException;
+import com.suhasan.finance.transaction_service.exception.InsufficientFundsException;
 import com.suhasan.finance.transaction_service.exception.TransactionAlreadyReversedException;
 import com.suhasan.finance.transaction_service.ledger.domain.JournalState;
 import com.suhasan.finance.transaction_service.ledger.domain.JournalType;
@@ -35,6 +36,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -73,7 +75,7 @@ public class TransactionServiceImpl implements TransactionService {
     private boolean ledgerAuthoritative;
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW, noRollbackFor = InsufficientFundsException.class)
     @CacheEvict(value = "transaction:history", allEntries = true)
     public TransactionResponse processTransfer(TransferRequest request, String userId, String idempotencyKey) {
         String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
@@ -110,7 +112,7 @@ public class TransactionServiceImpl implements TransactionService {
         }
 
         if (!ledgerAuthoritative && fromAccount.spendableBalance().compareTo(request.getAmount()) < 0) {
-            throw new IllegalArgumentException("Insufficient funds");
+            throw new InsufficientFundsException("Insufficient funds. No money moved.");
         }
 
         String limitReservationKey = firstNonBlank(normalizedIdempotencyKey, transactionId);
@@ -261,14 +263,15 @@ public class TransactionServiceImpl implements TransactionService {
             }
             transaction.setProcessedAt(LocalDateTime.now());
             transactionRepository.save(transaction);
+            String failureCode = failureCode(e);
             auditService.logTransactionFailed(transactionId, TransactionType.TRANSFER,
                     request.getFromAccountId(), request.getToAccountId(), request.getAmount(),
-                    userId, e.getMessage(), "PROCESSING_ERROR");
+                    userId, e.getMessage(), failureCode);
             riskEvaluationService.evaluateFailedTransaction(transaction);
-            metricsService.recordTransactionFailed(TransactionType.TRANSFER, "PROCESSING_ERROR");
+            metricsService.recordTransactionFailed(TransactionType.TRANSFER, failureCode);
             emitTransactionNotification(transaction);
             releaseSpendingLimitAfterFailure(request.getFromAccountId(), "TRANSFER", limitReservationKey, userId);
-            throw new RuntimeException("Transfer failed: " + e.getMessage());
+            throw transactionFailure("Transfer", e);
         }
     }
 
@@ -328,16 +331,18 @@ public class TransactionServiceImpl implements TransactionService {
             return mapToResponse(transaction);
         } catch (Exception e) {
             transaction.setStatus(TransactionStatus.FAILED);
+            transaction.setProcessingState(TransactionProcessingState.FAILED);
             transaction.setProcessedAt(LocalDateTime.now());
             transactionRepository.save(transaction);
+            String failureCode = failureCode(e);
             auditService.logTransactionFailed(transaction.getTransactionId(), TransactionType.TRANSFER,
                     request.getFromAccountId(), request.getToAccountId(), request.getAmount(),
-                    transaction.getCreatedBy(), e.getMessage(), "PROCESSING_ERROR");
+                    transaction.getCreatedBy(), e.getMessage(), failureCode);
             riskEvaluationService.evaluateFailedTransaction(transaction);
-            metricsService.recordTransactionFailed(TransactionType.TRANSFER, "PROCESSING_ERROR");
+            metricsService.recordTransactionFailed(TransactionType.TRANSFER, failureCode);
             emitTransactionNotification(transaction);
             releaseSpendingLimitAfterFailure(request.getFromAccountId(), "TRANSFER", limitReservationKey, transaction.getCreatedBy());
-            throw new RuntimeException("Transfer failed: " + e.getMessage());
+            throw transactionFailure("Transfer", e);
         }
     }
 
@@ -504,7 +509,7 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = InsufficientFundsException.class)
     @CacheEvict(value = "transaction:history", allEntries = true)
     public TransactionResponse processWithdrawal(String accountId, BigDecimal amount,
             String description, String reference, String userId, String idempotencyKey) {
@@ -531,7 +536,7 @@ public class TransactionServiceImpl implements TransactionService {
             throw new IllegalArgumentException("Transaction exceeds limits");
         }
         if (!ledgerAuthoritative && account.spendableBalance().compareTo(amount) < 0) {
-            throw new IllegalArgumentException("Insufficient funds");
+            throw new InsufficientFundsException("Insufficient funds. No money moved.");
         }
 
         String limitReservationKey = firstNonBlank(normalizedIdempotencyKey, UUID.randomUUID().toString());
@@ -631,13 +636,14 @@ public class TransactionServiceImpl implements TransactionService {
             }
             if (transaction.getStatus() != TransactionStatus.COMPLETED) {
                 transaction.setStatus(TransactionStatus.FAILED);
+                transaction.setProcessingState(TransactionProcessingState.FAILED);
                 transaction.setProcessedAt(LocalDateTime.now());
                 transactionRepository.save(transaction);
                 riskEvaluationService.evaluateFailedTransaction(transaction);
                 emitTransactionNotification(transaction);
             }
             releaseSpendingLimitAfterFailure(accountId, "WITHDRAWAL", limitReservationKey, userId);
-            throw new RuntimeException("Withdrawal failed: " + e.getMessage());
+            throw transactionFailure("Withdrawal", e);
         }
     }
 
@@ -680,13 +686,40 @@ public class TransactionServiceImpl implements TransactionService {
             return mapToResponse(transaction);
         } catch (Exception e) {
             transaction.setStatus(TransactionStatus.FAILED);
+            transaction.setProcessingState(TransactionProcessingState.FAILED);
             transaction.setProcessedAt(LocalDateTime.now());
             transactionRepository.save(transaction);
+            String failureCode = failureCode(e);
             riskEvaluationService.evaluateFailedTransaction(transaction);
+            metricsService.recordTransactionFailed(TransactionType.WITHDRAWAL, failureCode);
             emitTransactionNotification(transaction);
             releaseSpendingLimitAfterFailure(transaction.getFromAccountId(), "WITHDRAWAL", limitReservationKey, transaction.getCreatedBy());
-            throw new RuntimeException("Withdrawal failed: " + e.getMessage());
+            throw transactionFailure("Withdrawal", e);
         }
+    }
+
+    private RuntimeException transactionFailure(String operation, Exception failure) {
+        if (isInsufficientFunds(failure)) {
+            return new InsufficientFundsException("Insufficient funds. No money moved.", failure);
+        }
+        return new RuntimeException(operation + " failed: "
+                + firstNonBlank(failure.getMessage(), "processing could not be confirmed"), failure);
+    }
+
+    private String failureCode(Throwable failure) {
+        return isInsufficientFunds(failure) ? "INSUFFICIENT_FUNDS" : "PROCESSING_ERROR";
+    }
+
+    private boolean isInsufficientFunds(Throwable failure) {
+        Throwable current = failure;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null && message.toLowerCase(Locale.ROOT).contains("insufficient")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private void releaseSpendingLimitAfterFailure(String accountId, String operationType,
@@ -811,7 +844,8 @@ public class TransactionServiceImpl implements TransactionService {
             transactionRepository.save(originalTransaction);
 
             // Record successful reversal
-            auditService.logTransactionReversal(transactionId, reversal.getTransactionId(), reason, userId);
+            auditService.logTransactionReversal(transactionId, reversal.getTransactionId(),
+                    reversal.getAmount(), reversal.getCurrency(), reason, userId);
             auditService.logTransactionCompleted(reversal);
             riskEvaluationService.evaluateReversalTransaction(reversal);
             metricsService.recordTransactionReversal(originalTransaction.getType());

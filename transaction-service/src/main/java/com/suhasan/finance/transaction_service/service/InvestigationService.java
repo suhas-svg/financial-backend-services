@@ -117,6 +117,7 @@ public class InvestigationService {
         List<InvestigationTimelineItemResponse> items = new ArrayList<>();
         Pageable sourcePage = PageRequest.of(0, sourceLimit, Sort.by(Sort.Direction.DESC, "createdAt"));
         transactionRepository.findAll(transactionSpec(context), sourcePage).forEach(transaction -> items.add(toTransactionItem(transaction)));
+        addExactTransactionIfMissing(context, items);
         auditLogEntryRepository.findAll(auditSpec(context), sourcePage).forEach(audit -> items.add(toAuditItem(audit)));
         riskAlertRepository.findAll(alertSpec(context), sourcePage).forEach(alert -> items.add(toAlertItem(alert)));
         riskCaseRepository.findAll(caseSpec(context), sourcePage).forEach(riskCase -> {
@@ -128,6 +129,27 @@ public class InvestigationService {
             dispute.getNotes().forEach(note -> items.add(toDisputeNoteItem(dispute, note)));
         });
         return items;
+    }
+
+    private void addExactTransactionIfMissing(
+            InvestigationContext context, List<InvestigationTimelineItemResponse> items) {
+        if (context.requestedTransactionId == null) {
+            return;
+        }
+        boolean alreadyIncluded = items.stream().anyMatch(item ->
+                context.requestedTransactionId.equals(item.getTransactionId()));
+        if (alreadyIncluded) {
+            return;
+        }
+        transactionRepository.findById(context.requestedTransactionId)
+                .filter(transaction -> inDateRange(transaction.getCreatedAt(), context))
+                .ifPresent(transaction -> items.add(toTransactionItem(transaction)));
+    }
+
+    private boolean inDateRange(LocalDateTime createdAt, InvestigationContext context) {
+        return createdAt != null
+                && (context.from == null || !createdAt.isBefore(context.from))
+                && (context.to == null || !createdAt.isAfter(context.to));
     }
 
     private InvestigationContext resolveContext(InvestigationFilter filter) {
@@ -475,12 +497,15 @@ public class InvestigationService {
         private final Set<String> accountIds = new HashSet<>();
         private final Set<String> alertIds = new HashSet<>();
         private final Set<String> caseIds = new HashSet<>();
+        private final String requestedTransactionId;
         private final LocalDateTime from;
         private final LocalDateTime to;
 
         private InvestigationContext(InvestigationFilter filter) {
             addIfPresent(userIds, filter.getUserId());
             addIfPresent(transactionIds, filter.getTransactionId());
+            this.requestedTransactionId = hasText(filter.getTransactionId())
+                    ? filter.getTransactionId().trim() : null;
             addIfPresent(accountIds, filter.getAccountId());
             addIfPresent(alertIds, filter.getAlertId());
             addIfPresent(caseIds, filter.getCaseId());

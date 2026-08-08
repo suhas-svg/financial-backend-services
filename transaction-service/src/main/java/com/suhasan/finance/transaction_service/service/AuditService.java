@@ -146,12 +146,23 @@ public class AuditService {
      */
     public void logTransactionReversal(String originalTransactionId, String reversalTransactionId, 
                                      String reason, String userId) {
+        logTransactionReversal(originalTransactionId, reversalTransactionId, null, null, reason, userId);
+    }
+
+    public void logTransactionReversal(String originalTransactionId, String reversalTransactionId,
+                                     BigDecimal amount, String currency, String reason, String userId) {
         try {
             MDC.put("originalTransactionId", originalTransactionId);
             MDC.put("reversalTransactionId", reversalTransactionId);
             MDC.put("userId", userId);
             MDC.put("reversalReason", reason);
             MDC.put("auditAction", "TRANSACTION_REVERSED");
+            if (amount != null) {
+                MDC.put("amount", amount.toPlainString());
+            }
+            if (currency != null) {
+                MDC.put("currency", currency);
+            }
             
             AUDIT_LOGGER.info("Transaction reversed: original {} reversal {} reason: {}",
                     originalTransactionId, reversalTransactionId, reason);
@@ -161,6 +172,8 @@ public class AuditService {
                     .outcome("SUCCESS")
                     .transactionId(originalTransactionId)
                     .userId(userId)
+                    .amount(amount)
+                    .currency(currency)
                     .details(reason)
                     .metadata("{\"reversalTransactionId\":\"" + sanitizeJsonValue(reversalTransactionId) + "\"}")
                     .build());

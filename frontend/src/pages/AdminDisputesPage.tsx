@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
 import { Badge, Button, EmptyState, Input, PageHeader, Panel, Select, Stat } from "../components/ui";
-import { addDisputeNote, claimDispute, getDisputeSummary, searchAdminDisputes, updateDisputeStatus } from "../lib/queries";
+import { addDisputeNote, claimDispute, getDisputeSummary, reimburseDispute, searchAdminDisputes, updateDisputeStatus } from "../lib/queries";
+import { createIdempotencyKey } from "../lib/idempotency";
 import type { DisputeReasonCode, DisputeStatus, TransactionDispute } from "../types";
 
 const defaultFilters = {
@@ -51,6 +52,17 @@ export function AdminDisputesPage() {
       setSelected(updated);
       setInternalNote("");
       queryClient.invalidateQueries({ queryKey: ["admin-disputes"] });
+    }
+  });
+
+  const reimbursementMutation = useMutation({
+    mutationFn: (dispute: TransactionDispute) => reimburseDispute(
+      dispute.disputeId,
+      createIdempotencyKey(`dispute-reimbursement-${dispute.disputeId}`)),
+    onSuccess: (updated) => {
+      setSelected(updated);
+      queryClient.invalidateQueries({ queryKey: ["admin-disputes"] });
+      queryClient.invalidateQueries({ queryKey: ["dispute-summary"] });
     }
   });
 
@@ -116,7 +128,9 @@ export function AdminDisputesPage() {
               onClaim={() => claimMutation.mutate(selected)}
               onStatusChange={(status) => statusMutation.mutate({ dispute: selected, status })}
               onAddNote={() => noteMutation.mutate(selected)}
-              isUpdating={claimMutation.isPending || statusMutation.isPending || noteMutation.isPending}
+              onReimburse={() => reimbursementMutation.mutate(selected)}
+              reimbursementError={reimbursementMutation.error instanceof Error ? reimbursementMutation.error.message : undefined}
+              isUpdating={claimMutation.isPending || statusMutation.isPending || noteMutation.isPending || reimbursementMutation.isPending}
             />
           ) : (
             <EmptyState title="No dispute selected" detail="Select a dispute to inspect the transaction context, claim it, and add notes." />
@@ -176,6 +190,8 @@ function DisputeDetail({
   onClaim,
   onStatusChange,
   onAddNote,
+  onReimburse,
+  reimbursementError,
   isUpdating
 }: {
   dispute: TransactionDispute;
@@ -186,6 +202,8 @@ function DisputeDetail({
   onClaim: () => void;
   onStatusChange: (status: DisputeStatus) => void;
   onAddNote: () => void;
+  onReimburse: () => void;
+  reimbursementError?: string;
   isUpdating: boolean;
 }) {
   const isTerminal = ["APPROVED", "DENIED", "CLOSED"].includes(dispute.status);
@@ -217,6 +235,20 @@ function DisputeDetail({
         <p className="text-xs font-medium uppercase text-muted">Customer explanation</p>
         <p className="mt-1 text-sm">{dispute.description}</p>
       </div>
+
+      {dispute.reimbursementTransactionId ? (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+          <p className="font-semibold">Reimbursement completed</p>
+          <p className="mt-1">{dispute.reimbursementAmount?.toFixed(2)} {dispute.reimbursementCurrency} credited at {formatDate(dispute.reimbursedAt)}.</p>
+          <p className="mt-1 break-all font-mono text-xs">Refund transaction: {dispute.reimbursementTransactionId}</p>
+        </div>
+      ) : dispute.status === "APPROVED" ? (
+        <div className="grid gap-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+          <p className="text-sm text-amber-900">Approval records the decision only. Reimbursement is a separate, explicit operator action and will post a balanced ledger correction.</p>
+          {reimbursementError ? <p className="text-sm text-danger">{reimbursementError}</p> : null}
+          <Button variant="danger" disabled={isUpdating} onClick={onReimburse}>Issue customer reimbursement</Button>
+        </div>
+      ) : null}
 
       {!dispute.assignedTo ? <Button variant="secondary" disabled={isUpdating} onClick={onClaim}>Claim dispute</Button> : null}
 

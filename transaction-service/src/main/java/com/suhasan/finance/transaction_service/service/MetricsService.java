@@ -45,6 +45,8 @@ public class MetricsService {
     private final AtomicLong pendingTransactionsCount = new AtomicLong(0);
     private final AtomicLong dailyTransactionVolume = new AtomicLong(0);
     private final AtomicLong dailyTransactionAmount = new AtomicLong(0);
+    private final ThreadLocal<Boolean> failureRecordedForAttempt =
+            ThreadLocal.withInitial(() -> false);
     
     // Error counters
     private final Counter insufficientFundsCounter;
@@ -168,7 +170,8 @@ public class MetricsService {
      */
     public void recordTransactionInitiated(TransactionType type) {
         transactionInitiatedCounter.increment();
-        transactionTypeCounters.get(type).increment();
+        Counter typeCounter = transactionTypeCounters.get(type);
+        if (typeCounter != null) typeCounter.increment();
         activeTransactionsCount.incrementAndGet();
         log.debug("Recorded transaction initiated: type={}", type);
     }
@@ -179,9 +182,10 @@ public class MetricsService {
     public void recordTransactionCompleted(TransactionType type, TransactionStatus status, 
                                          BigDecimal amount, long processingTimeMs) {
         transactionCompletedCounter.increment();
-        transactionTypeCounters.get(type).increment();
+        Counter typeCounter = transactionTypeCounters.get(type);
+        if (typeCounter != null) typeCounter.increment();
         transactionStatusCounters.get(status).increment();
-        activeTransactionsCount.decrementAndGet();
+        activeTransactionsCount.updateAndGet(value -> Math.max(0, value - 1));
         dailyTransactionVolume.incrementAndGet();
         dailyTransactionAmount.addAndGet(amount.multiply(BigDecimal.valueOf(100)).longValue()); // Convert to cents
         
@@ -193,11 +197,16 @@ public class MetricsService {
      * Record transaction failure
      */
     public void recordTransactionFailed(TransactionType type, String errorType) {
+        if (Boolean.TRUE.equals(failureRecordedForAttempt.get())) {
+            log.debug("Skipping duplicate transaction failure metric: type={}", type);
+            return;
+        }
+        failureRecordedForAttempt.set(true);
         transactionFailedCounter.increment();
-        transactionTypeCounters.get(type).increment();
+        Counter typeCounter = transactionTypeCounters.get(type);
+        if (typeCounter != null) typeCounter.increment();
         transactionStatusCounters.get(TransactionStatus.FAILED).increment();
-        
-        activeTransactionsCount.decrementAndGet();
+        activeTransactionsCount.updateAndGet(value -> Math.max(0, value - 1));
         
         // Record specific error types
         switch (errorType.toUpperCase()) {
@@ -208,6 +217,14 @@ public class MetricsService {
         }
         
         log.debug("Recorded transaction failed: type={}, errorType={}", type, errorType);
+    }
+
+    public void beginTransactionAttempt() {
+        failureRecordedForAttempt.set(false);
+    }
+
+    public void endTransactionAttempt() {
+        failureRecordedForAttempt.remove();
     }
     
     /**

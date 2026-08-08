@@ -1,6 +1,7 @@
 package com.suhasan.finance.transaction_service.ledger.service;
 
 import com.suhasan.finance.transaction_service.evidence.FinancialEvidenceOutboxService;
+import com.suhasan.finance.transaction_service.exception.InsufficientFundsException;
 import com.suhasan.finance.transaction_service.ledger.domain.*;
 import com.suhasan.finance.transaction_service.ledger.repository.*;
 import org.springframework.stereotype.Service;
@@ -47,7 +48,7 @@ public class LedgerPostingService {
         this.ledgerOperationsMetrics = ledgerOperationsMetrics;
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = InsufficientFundsException.class)
     public JournalResult createPending(JournalCommand command) {
         Instant startedAt = Instant.now();
         idempotencyLock.acquire(command.idempotencyScope(), command.idempotencyKey());
@@ -70,6 +71,8 @@ public class LedgerPostingService {
         requireAllProjections(accountIds, projections);
         Map<UUID, LedgerAccount> accounts = toAccountMap(accountRepository.findAllById(accountIds));
         requirePostableAccounts(command.currency(), accountIds, accounts);
+        validatePostingAmounts(draft.postings());
+        validateCustomerDebitAvailability(draft.postings(), accounts, projections);
 
         UUID journalId = UUID.randomUUID();
         JournalTransaction journal = journalRepository.save(JournalTransaction.builder()
@@ -105,10 +108,18 @@ public class LedgerPostingService {
             long projectionEventSequence = projection.getLastEventSequence() + 1L;
             if (posting.direction() == PostingDirection.DEBIT) {
                 LedgerAccount account = accounts.get(posting.ledgerAccountId());
-                if (account.getAccountKind() == LedgerAccountKind.CUSTOMER) {
-                    projection.reserveDebit(posting.amount(), projectionEventSequence);
-                } else {
-                    projection.reserveDebitAllowNegative(posting.amount(), projectionEventSequence);
+                try {
+                    if (account.getAccountKind() == LedgerAccountKind.CUSTOMER) {
+                        projection.reserveDebit(posting.amount(), projectionEventSequence);
+                    } else {
+                        projection.reserveDebitAllowNegative(posting.amount(), projectionEventSequence);
+                    }
+                } catch (IllegalArgumentException failure) {
+                    if (failure.getMessage() != null
+                            && failure.getMessage().toLowerCase(Locale.ROOT).contains("insufficient")) {
+                        throw new InsufficientFundsException("Insufficient available balance", failure);
+                    }
+                    throw failure;
                 }
             } else {
                 projection.reserveCredit(posting.amount(), projectionEventSequence);
@@ -293,6 +304,36 @@ public class LedgerPostingService {
             Collection<UUID> accountIds, Map<UUID, LedgerBalanceProjection> projections) {
         if (projections.size() != accountIds.size()) {
             throw new IllegalArgumentException("One or more ledger projections do not exist");
+        }
+    }
+
+    private void validatePostingAmounts(List<PostingDraft> postings) {
+        for (PostingDraft posting : postings) {
+            if (posting.amount() == null || posting.amount().compareTo(java.math.BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("Posting amount must be positive");
+            }
+        }
+    }
+
+    private void validateCustomerDebitAvailability(
+            List<PostingDraft> postings,
+            Map<UUID, LedgerAccount> accounts,
+            Map<UUID, LedgerBalanceProjection> projections) {
+        Map<UUID, java.math.BigDecimal> customerDebitTotals = new HashMap<>();
+        for (PostingDraft posting : postings) {
+            if (posting.direction() != PostingDirection.DEBIT) {
+                continue;
+            }
+            LedgerAccount account = accounts.get(posting.ledgerAccountId());
+            if (account != null && account.getAccountKind() == LedgerAccountKind.CUSTOMER) {
+                customerDebitTotals.merge(posting.ledgerAccountId(), posting.amount(), java.math.BigDecimal::add);
+            }
+        }
+        for (Map.Entry<UUID, java.math.BigDecimal> entry : customerDebitTotals.entrySet()) {
+            LedgerBalanceProjection projection = projections.get(entry.getKey());
+            if (projection.getAvailableBalance().compareTo(entry.getValue()) < 0) {
+                throw new InsufficientFundsException("Insufficient available balance");
+            }
         }
     }
 

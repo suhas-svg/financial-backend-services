@@ -1,6 +1,7 @@
 package com.suhasan.finance.transaction_service.ledger.service;
 
 import com.suhasan.finance.transaction_service.evidence.FinancialEvidenceOutboxService;
+import com.suhasan.finance.transaction_service.exception.InsufficientFundsException;
 import com.suhasan.finance.transaction_service.ledger.domain.*;
 import com.suhasan.finance.transaction_service.ledger.repository.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -106,6 +107,27 @@ class LedgerPostingServiceTest {
         assertThatThrownBy(() -> service.createPending(transferCommand("idem-1", "fp-other")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Idempotency key payload conflict");
+    }
+
+    @Test
+    void insufficientCustomerDebitIsRejectedBeforeAnIncompleteJournalIsPersisted() {
+        when(journalRepository.findByIdempotencyScopeAndIdempotencyKey(any(), any()))
+                .thenReturn(Optional.empty());
+        when(accountRepository.findAllById(any())).thenReturn(List.of(
+                customer(sourceId, "account-1"), customer(destinationId, "account-2")));
+        when(projectionRepository.lockAllOrdered(any())).thenReturn(List.of(sourceProjection, destinationProjection));
+
+        assertThatThrownBy(() -> service.createPending(transferCommand(
+                "idem-insufficient", "fp-insufficient", new BigDecimal("125.00"))))
+                .isInstanceOf(InsufficientFundsException.class)
+                .hasMessage("Insufficient available balance");
+
+        verify(journalRepository, never()).save(any());
+        verify(postingRepository, never()).saveAll(any());
+        verify(stateRepository, never()).save(any());
+        verify(projectionRepository, never()).saveAll(any());
+        assertThat(sourceProjection.getAvailableBalance()).isEqualByComparingTo("100.00");
+        assertThat(destinationProjection.getPendingCredits()).isZero();
     }
 
     @Test
@@ -269,12 +291,16 @@ class LedgerPostingServiceTest {
     }
 
     private JournalCommand transferCommand(String key, String fingerprint) {
+        return transferCommand(key, fingerprint, new BigDecimal("25.00"));
+    }
+
+    private JournalCommand transferCommand(String key, String fingerprint, BigDecimal amount) {
         return new JournalCommand(
                 JournalType.TRANSFER, "USD", LocalDate.now(), "transfer", "correlation-1",
                 "user-1", "user-1:TRANSFER", key, fingerprint,
                 List.of(
-                        new PostingDraft(sourceId, PostingDirection.DEBIT, new BigDecimal("25.00"), "USD", "source"),
-                        new PostingDraft(destinationId, PostingDirection.CREDIT, new BigDecimal("25.00"), "USD", "destination")));
+                        new PostingDraft(sourceId, PostingDirection.DEBIT, amount, "USD", "source"),
+                        new PostingDraft(destinationId, PostingDirection.CREDIT, amount, "USD", "destination")));
     }
 
     private JournalTransaction journal(String key, String fingerprint) {

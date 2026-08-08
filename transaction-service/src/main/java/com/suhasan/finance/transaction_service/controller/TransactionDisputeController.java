@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -99,6 +100,15 @@ public class TransactionDisputeController {
             @Valid @RequestBody DisputeStatusUpdateRequest request,
             Authentication authentication) {
         return ResponseEntity.ok(disputeService.updateStatus(disputeId, request, currentUser(authentication)));
+    }
+
+    @PostMapping("/admin/{disputeId}/reimburse")
+    public ResponseEntity<TransactionDisputeResponse> reimburseDispute(
+            @PathVariable String disputeId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            Authentication authentication) {
+        return ResponseEntity.ok(disputeService.reimburseApprovedDispute(
+                disputeId, currentUser(authentication), idempotencyKey));
     }
 
     @PostMapping("/admin/{disputeId}/notes")

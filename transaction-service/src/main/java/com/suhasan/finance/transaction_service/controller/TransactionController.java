@@ -1,6 +1,7 @@
 package com.suhasan.finance.transaction_service.controller;
 
 import com.suhasan.finance.transaction_service.dto.TransferRequest;
+import com.suhasan.finance.transaction_service.dto.DepositRequest;
 import com.suhasan.finance.transaction_service.dto.WithdrawalRequest;
 import com.suhasan.finance.transaction_service.dto.ReversalRequest;
 import com.suhasan.finance.transaction_service.dto.TransactionResponse;
@@ -15,6 +16,7 @@ import com.suhasan.finance.transaction_service.service.TransferAuthorizationServ
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -37,6 +39,36 @@ public class TransactionController {
 
     private final TransactionService transactionService;
     private final TransferAuthorizationService transferAuthorizationService;
+
+    // Environment variables use underscores, while focused MVC tests may set
+    // the canonical dotted property. Support both so the live synthetic
+    // Compose capability cannot silently fall back to the disabled default.
+    @Value("${CUSTOMER_DEPOSITS_ENABLED:${customer-deposits.enabled:false}}")
+    private boolean customerDepositsEnabled;
+
+    @GetMapping("/deposit/capability")
+    public ResponseEntity<Map<String, Object>> depositCapability() {
+        return ResponseEntity.ok(Map.of(
+                "enabled", customerDepositsEnabled,
+                "message", customerDepositsEnabled
+                        ? "Controlled synthetic beta deposits are enabled."
+                        : "Customer deposits are unavailable until a funding provider is activated."));
+    }
+
+    @PostMapping("/deposit")
+    public ResponseEntity<TransactionResponse> processDeposit(
+            @Valid @RequestBody DepositRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            Authentication authentication) {
+        if (!customerDepositsEnabled) {
+            throw new IllegalStateException(
+                    "Customer deposits are unavailable until a funding provider is activated");
+        }
+        TransactionResponse response = transactionService.processDeposit(
+                request.getAccountId(), request.getAmount(), request.getDescription(), request.getReference(),
+                authentication.getName(), idempotencyKey);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
 
     /**
      * Process a transfer between accounts
@@ -72,6 +104,14 @@ public class TransactionController {
             @PathVariable String authorizationId,
             Authentication authentication) {
         return ResponseEntity.ok(transferAuthorizationService.cancel(
+                authorizationId, authentication.getName()));
+    }
+
+    @GetMapping("/authorizations/{authorizationId}")
+    public ResponseEntity<TransactionResponse> transferAuthorizationStatus(
+            @PathVariable String authorizationId,
+            Authentication authentication) {
+        return ResponseEntity.ok(transferAuthorizationService.status(
                 authorizationId, authentication.getName()));
     }
 

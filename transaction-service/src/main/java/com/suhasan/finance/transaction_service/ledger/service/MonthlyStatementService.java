@@ -99,11 +99,12 @@ public class MonthlyStatementService {
             int statementVersion,
             List<StatementMovementProjection> movements) {
 
-        BigDecimal currentBalance = projectionRepository.findById(account.getLedgerAccountId())
-                .orElseThrow(() -> new IllegalArgumentException("Ledger projection not found"))
-                .getPostedBalance();
-        BigDecimal openingBalance = currentBalance.subtract(postingRepository.postedMovementFrom(
-                account.getLedgerAccountId(), periodStart));
+        LedgerBalanceProjection projection = projectionRepository.findById(account.getLedgerAccountId())
+                .orElseThrow(() -> new IllegalArgumentException("Ledger projection not found"));
+        BigDecimal postedMovementBeforePeriod = postingRepository.postedMovementBefore(
+                account.getLedgerAccountId(), periodStart);
+        BigDecimal openingBalance = projection.getOpeningBalance().add(
+                postedMovementBeforePeriod == null ? BigDecimal.ZERO : postedMovementBeforePeriod);
         BigDecimal runningBalance = openingBalance;
         List<CustomerMonthlyStatementLine> lines = new ArrayList<>();
         CustomerMonthlyStatement statement = CustomerMonthlyStatement.create(
