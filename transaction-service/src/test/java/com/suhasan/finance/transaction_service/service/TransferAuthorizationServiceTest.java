@@ -6,6 +6,7 @@ import com.suhasan.finance.transaction_service.dto.TransactionResponse;
 import com.suhasan.finance.transaction_service.dto.TransferRequest;
 import com.suhasan.finance.transaction_service.entity.TransferAuthorization;
 import com.suhasan.finance.transaction_service.entity.TransferAuthorizationStatus;
+import com.suhasan.finance.transaction_service.exception.InsufficientFundsException;
 import com.suhasan.finance.transaction_service.repository.TransferAuthorizationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,11 +37,13 @@ class TransferAuthorizationServiceTest {
     @Mock AuditService auditService;
 
     private TransferAuthorizationService service;
+    private TransferAuthorizationStateService authorizationStateService;
 
     @BeforeEach
     void setUp() {
+        authorizationStateService = new TransferAuthorizationStateService(authorizationRepository, accountServiceClient);
         service = new TransferAuthorizationService(policy, authorizationRepository, accountServiceClient,
-                transactionService, auditService);
+                transactionService, auditService, authorizationStateService);
         org.mockito.Mockito.lenient().when(authorizationRepository.save(any(TransferAuthorization.class))).thenAnswer(invocation -> {
             TransferAuthorization authorization = invocation.getArgument(0);
             if (authorization.getAuthorizationId() == null) authorization.setAuthorizationId("authorization-1");
@@ -140,7 +143,25 @@ class TransferAuthorizationServiceTest {
 
         assertThat(authorization.getStatus()).isEqualTo(TransferAuthorizationStatus.AUTHORIZED);
         assertThat(authorization.getExecutedTransactionId()).isNull();
-        verify(authorizationRepository, org.mockito.Mockito.atLeast(2)).save(authorization);
+        verify(authorizationRepository, org.mockito.Mockito.atLeast(1)).save(authorization);
+    }
+
+    @Test
+    void insufficientFundsFailsAuthorizationAndDoesNotLeaveItHanging() {
+        TransferAuthorization authorization = authorization(TransferAuthorizationStatus.PENDING);
+        when(authorizationRepository.findByIdWithLock("authorization-1"))
+                .thenReturn(Optional.of(authorization));
+        when(transactionService.processTransfer(any(TransferRequest.class), eq("alice"), eq("request-1")))
+                .thenThrow(new InsufficientFundsException("Insufficient funds. No money moved."));
+
+        assertThatThrownBy(() -> service.authorize("authorization-1", "alice", "proof-1"))
+                .isInstanceOf(InsufficientFundsException.class)
+                .hasMessage("Insufficient funds. No money moved.");
+
+        assertThat(authorization.getStatus()).isEqualTo(TransferAuthorizationStatus.FAILED);
+        assertThat(authorization.getExecutedTransactionId()).isNull();
+        verify(auditService).logSecurityEvent(eq("STEP_UP_EXECUTION_FAILED"), eq("alice"), any(), eq(null));
+        verify(accountServiceClient).createNotification(any());
     }
 
     @Test

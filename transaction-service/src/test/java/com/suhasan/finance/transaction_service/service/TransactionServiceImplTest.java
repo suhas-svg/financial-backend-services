@@ -7,6 +7,7 @@ import com.suhasan.finance.transaction_service.dto.TransactionResponse;
 import com.suhasan.finance.transaction_service.entity.Transaction;
 import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
+import com.suhasan.finance.transaction_service.exception.InsufficientFundsException;
 import com.suhasan.finance.transaction_service.exception.TransactionAlreadyReversedException;
 import com.suhasan.finance.transaction_service.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -298,10 +299,10 @@ class TransactionServiceImplTest {
                 when(accountServiceClient.getAccount("acc2")).thenReturn(toAccount);
 
                 // Act & Assert
-                IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                InsufficientFundsException exception = assertThrows(InsufficientFundsException.class,
                                 () -> transactionService.processTransfer(transferRequest, userId, null));
 
-                assertEquals("Insufficient funds", exception.getMessage());
+                assertEquals("Insufficient funds. No money moved.", exception.getMessage());
         }
 
         @Test
@@ -567,11 +568,11 @@ class TransactionServiceImplTest {
                 when(accountServiceClient.getAccount(accountId)).thenReturn(fromAccount);
 
                 // Act & Assert
-                IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                InsufficientFundsException exception = assertThrows(InsufficientFundsException.class,
                                 () -> transactionService.processWithdrawal(accountId, amount, description, userId,
                                                 null));
 
-                assertEquals("Insufficient funds", exception.getMessage());
+                assertEquals("Insufficient funds. No money moved.", exception.getMessage());
         }
 
         @Test
@@ -776,7 +777,8 @@ class TransactionServiceImplTest {
                 assertEquals(TransactionType.REVERSAL, result.getType());
                 verify(transactionRepository).findByIdWithLock(transactionId);
                 verify(transactionRepository).isTransactionReversed(transactionId);
-                verify(auditService).logTransactionReversal(eq(transactionId), anyString(), eq(reason), eq(userId));
+                verify(auditService).logTransactionReversal(eq(transactionId), eq("rev123"),
+                                eq(BigDecimal.valueOf(100)), eq("USD"), eq(reason), eq(userId));
                 verify(metricsService).recordTransactionReversal(TransactionType.TRANSFER);
         }
 

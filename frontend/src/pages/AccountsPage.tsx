@@ -66,12 +66,13 @@ export function AccountsPage() {
         <form className="grid gap-4" onSubmit={form.handleSubmit((values) => (editing ? updateMutation.mutate(values) : createMutation.mutate(values)))}>
           <ErrorNotice message={(createMutation.error instanceof Error ? createMutation.error.message : undefined) ?? (updateMutation.error instanceof Error ? updateMutation.error.message : undefined)} />
           <Field label="Type" error={form.formState.errors.accountType?.message}>
-            <Select {...form.register("accountType")}>
+            <Select {...form.register("accountType")} disabled={Boolean(editing)}>
               <option value="CHECKING">Checking</option>
               <option value="SAVINGS">Savings</option>
               <option value="CREDIT">Credit</option>
             </Select>
           </Field>
+          {editing ? <p className="text-xs text-muted">Account type, currency, and owner are immutable after opening. Only account-specific metadata can be updated.</p> : null}
           <Field label="Currency" error={form.formState.errors.currency?.message}>
             <Select {...form.register("currency")} disabled={Boolean(editing)}>
               <option value="USD">USD</option>

@@ -8,6 +8,8 @@ import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
 import com.suhasan.finance.transaction_service.entity.TransferAuthorization;
 import com.suhasan.finance.transaction_service.entity.TransferAuthorizationStatus;
+import com.suhasan.finance.transaction_service.exception.InsufficientFundsException;
+import com.suhasan.finance.transaction_service.exception.TransactionLimitExceededException;
 import com.suhasan.finance.transaction_service.repository.TransferAuthorizationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -28,6 +30,7 @@ public class TransferAuthorizationService {
     private final ResilientAccountServiceClient accountServiceClient;
     private final TransactionService transactionService;
     private final AuditService auditService;
+    private final TransferAuthorizationStateService authorizationStateService;
 
     @Transactional
     public TransactionResponse submit(TransferRequest request, String userId, String idempotencyKey) {
@@ -74,46 +77,45 @@ public class TransferAuthorizationService {
         return response(authorization);
     }
 
-    @Transactional(noRollbackFor = Exception.class)
     public TransactionResponse authorize(String authorizationId, String userId, String proof) {
-        TransferAuthorization authorization = lockedOwned(authorizationId, userId);
+        final TransferAuthorization authorization;
+        try {
+            authorization = authorizationStateService.authorizeProof(authorizationId, userId, proof);
+        } catch (IllegalStateException e) {
+            if ("Transfer authorization has expired".equals(e.getMessage())) {
+                auditService.logSecurityEvent("STEP_UP_EXPIRED", userId,
+                        "authorizationId=" + authorizationId, null);
+            }
+            throw e;
+        }
         if (authorization.getStatus() == TransferAuthorizationStatus.COMPLETED) {
             return transactionService.getTransaction(authorization.getExecutedTransactionId());
         }
-        if (authorization.getStatus() != TransferAuthorizationStatus.PENDING
-                && authorization.getStatus() != TransferAuthorizationStatus.AUTHORIZED) {
-            throw new IllegalStateException("Transfer authorization cannot be completed in its current state");
-        }
-        if (!authorization.getExpiresAt().isAfter(Instant.now())) {
-            authorization.setStatus(TransferAuthorizationStatus.CANCELLED);
-            authorizationRepository.save(authorization);
-            auditService.logSecurityEvent("STEP_UP_EXPIRED", userId,
-                    "authorizationId=" + authorizationId, null);
-            throw new IllegalStateException("Transfer authorization has expired");
-        }
-        accountServiceClient.consumeStepUpChallenge(authorization.getChallengeId(),
-                new StepUpClientDtos.ConsumeChallengeRequest(userId, authorization.getActionFingerprint(),
-                        authorization.getAuthorizationId(), proof));
-        authorization.setStatus(TransferAuthorizationStatus.AUTHORIZED);
-        authorization.setAuthorizedAt(Instant.now());
-        authorizationRepository.save(authorization);
         try {
             TransactionResponse executed = transactionService.processTransfer(toRequest(authorization), userId,
                     authorization.getIdempotencyKey());
-            authorization.setStatus(TransferAuthorizationStatus.COMPLETED);
-            authorization.setExecutedTransactionId(executed.getTransactionId());
-            authorization.setCompletedAt(Instant.now());
-            authorizationRepository.save(authorization);
+            authorizationStateService.markCompleted(authorizationId, userId, executed.getTransactionId());
             auditService.logSecurityEvent("STEP_UP_AUTHORIZED", userId,
                     "authorizationId=" + authorizationId + ", transactionId=" + executed.getTransactionId(), null);
             notifyBestEffort(authorization, "TRANSFER_AUTHORIZED", "SUCCESS",
                     "Transfer authorized", "Your verified transfer has been processed.");
             return executed;
         } catch (Exception e) {
-            // The proof is already consumed. Keep the authorization retryable; the
-            // downstream transfer remains protected by the same idempotency key.
-            authorization.setStatus(TransferAuthorizationStatus.AUTHORIZED);
-            authorizationRepository.save(authorization);
+            // A consumed proof remains retryable only for an ambiguous downstream
+            // outcome. Deterministic validation/funds failures are terminal so the
+            // customer is not left with a hanging authorization dialog.
+            boolean deterministic = e instanceof InsufficientFundsException
+                    || e instanceof TransactionLimitExceededException
+                    || e instanceof IllegalArgumentException;
+            if (deterministic) {
+                authorizationStateService.markFailed(authorizationId, userId);
+            }
+            auditService.logSecurityEvent(deterministic ? "STEP_UP_EXECUTION_FAILED" : "STEP_UP_EXECUTION_PENDING",
+                    userId, "authorizationId=" + authorizationId + ", reason=" + e.getMessage(), null);
+            if (deterministic) {
+                notifyBestEffort(authorization, "TRANSFER_AUTHORIZED", "ERROR",
+                        "Transfer could not be completed", "No money moved. Review the transfer details before trying again.");
+            }
             throw e;
         }
     }
@@ -127,6 +129,16 @@ public class TransferAuthorizationService {
         authorization.setStatus(TransferAuthorizationStatus.CANCELLED);
         authorizationRepository.save(authorization);
         auditService.logSecurityEvent("STEP_UP_CANCELLED", userId, "authorizationId=" + authorizationId, null);
+        return response(authorization);
+    }
+
+    @Transactional(readOnly = true)
+    public TransactionResponse status(String authorizationId, String userId) {
+        TransferAuthorization authorization = authorizationRepository.findById(authorizationId)
+                .orElseThrow(() -> new IllegalArgumentException("Transfer authorization not found"));
+        if (!authorization.getUserId().equals(userId)) {
+            throw new IllegalArgumentException("Transfer authorization not found");
+        }
         return response(authorization);
     }
 
@@ -170,15 +182,22 @@ public class TransferAuthorizationService {
                 .currency(authorization.getCurrency())
                 .type(TransactionType.TRANSFER)
                 .status(authorization.getStatus() == TransferAuthorizationStatus.CANCELLED
-                        ? TransactionStatus.CANCELLED : TransactionStatus.PENDING)
+                        ? TransactionStatus.CANCELLED
+                        : authorization.getStatus() == TransferAuthorizationStatus.FAILED
+                        ? TransactionStatus.FAILED : TransactionStatus.PENDING)
                 .processingState(authorization.getStatus() == TransferAuthorizationStatus.CANCELLED
-                        ? "AUTHORIZATION_CANCELLED" : "AWAITING_AUTHORIZATION")
+                        ? "AUTHORIZATION_CANCELLED"
+                        : authorization.getStatus() == TransferAuthorizationStatus.FAILED
+                        ? "AUTHORIZATION_FAILED"
+                        : authorization.getStatus() == TransferAuthorizationStatus.AUTHORIZED
+                        ? "AUTHORIZATION_ACCEPTED_RETRYABLE" : "AWAITING_AUTHORIZATION")
                 .description(authorization.getDescription())
                 .reference(authorization.getReference())
                 .createdBy(authorization.getUserId())
                 .createdAt(LocalDateTime.ofInstant(authorization.getCreatedAt(), ZoneOffset.UTC))
                 .idempotencyKey(authorization.getIdempotencyKey())
-                .authorizationRequired(true)
+                .authorizationRequired(authorization.getStatus() == TransferAuthorizationStatus.PENDING
+                        || authorization.getStatus() == TransferAuthorizationStatus.AUTHORIZED)
                 .authorizationChallengeId(authorization.getChallengeId())
                 .authorizationExpiresAt(authorization.getExpiresAt())
                 .authorizationReasons(parseReasons(authorization.getReasonCodes()))

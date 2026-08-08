@@ -1,6 +1,7 @@
 package com.suhasan.finance.transaction_service.service;
 
 import com.suhasan.finance.transaction_service.client.ResilientAccountServiceClient;
+import com.suhasan.finance.transaction_service.dto.AccountDto;
 import com.suhasan.finance.transaction_service.dto.DisputeCreateRequest;
 import com.suhasan.finance.transaction_service.dto.DisputeNoteRequest;
 import com.suhasan.finance.transaction_service.dto.DisputeStatusUpdateRequest;
@@ -12,9 +13,17 @@ import com.suhasan.finance.transaction_service.entity.TransactionDispute;
 import com.suhasan.finance.transaction_service.entity.TransactionDisputeNote;
 import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
+import com.suhasan.finance.transaction_service.ledger.domain.JournalState;
+import com.suhasan.finance.transaction_service.ledger.domain.JournalType;
+import com.suhasan.finance.transaction_service.ledger.domain.LedgerAccountKind;
+import com.suhasan.finance.transaction_service.ledger.domain.PostingDirection;
+import com.suhasan.finance.transaction_service.ledger.service.JournalCommand;
+import com.suhasan.finance.transaction_service.ledger.service.JournalResult;
 import com.suhasan.finance.transaction_service.repository.TransactionDisputeNoteRepository;
 import com.suhasan.finance.transaction_service.repository.TransactionDisputeRepository;
 import com.suhasan.finance.transaction_service.repository.TransactionRepository;
+import com.suhasan.finance.transaction_service.ledger.service.AccountLedgerResolver;
+import com.suhasan.finance.transaction_service.ledger.service.LedgerPostingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,6 +37,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -54,11 +64,18 @@ class TransactionDisputeServiceTest {
     @Mock
     private ResilientAccountServiceClient accountServiceClient;
 
+    @Mock
+    private LedgerPostingService ledgerPostingService;
+
+    @Mock
+    private AccountLedgerResolver accountLedgerResolver;
+
     private TransactionDisputeService disputeService;
 
     @BeforeEach
     void setUp() {
-        disputeService = new TransactionDisputeService(disputeRepository, noteRepository, transactionRepository, auditService, accountServiceClient);
+        disputeService = new TransactionDisputeService(disputeRepository, noteRepository, transactionRepository,
+                auditService, accountServiceClient, ledgerPostingService, accountLedgerResolver);
     }
 
     @Test
@@ -179,6 +196,62 @@ class TransactionDisputeServiceTest {
                 "ops"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Closed disputes cannot change status");
+    }
+
+    @Test
+    void reimburseApprovedDisputePostsBalancedCorrectionAndStoresReceipt() {
+        TransactionDispute dispute = dispute("dispute-1", DisputeStatus.APPROVED);
+        Transaction original = transaction("txn-1", "customer", TransactionStatus.COMPLETED, LocalDateTime.now().minusDays(5));
+        AccountDto customerAccount = AccountDto.builder()
+                .id(101L)
+                .ownerId("customer")
+                .balance(new BigDecimal("100.00"))
+                .ledgerBalance(new BigDecimal("100.00"))
+                .currency("USD")
+                .status("ACTIVE")
+                .active(true)
+                .build();
+        UUID customerLedger = UUID.randomUUID();
+        UUID suspenseLedger = UUID.randomUUID();
+        UUID journalId = UUID.randomUUID();
+
+        when(disputeRepository.findByIdWithLock("dispute-1")).thenReturn(Optional.of(dispute));
+        when(transactionRepository.findById("txn-1")).thenReturn(Optional.of(original));
+        when(accountServiceClient.getAccountInternal("101")).thenReturn(customerAccount);
+        when(transactionRepository.findFirstByCreatedByAndTypeAndIdempotencyKey(
+                "ops", TransactionType.REFUND, "refund-1")).thenReturn(Optional.empty());
+        when(accountLedgerResolver.resolveCustomerAccount("101", customerAccount)).thenReturn(customerLedger);
+        when(accountLedgerResolver.resolveSystemAccount(LedgerAccountKind.SUSPENSE, "USD"))
+                .thenReturn(suspenseLedger);
+        when(transactionRepository.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(ledgerPostingService.createPending(any(JournalCommand.class)))
+                .thenReturn(new JournalResult(journalId, JournalState.PENDING, false));
+        when(ledgerPostingService.post(journalId, "ops"))
+                .thenReturn(new JournalResult(journalId, JournalState.POSTED, false));
+        when(disputeRepository.save(any(TransactionDispute.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TransactionDisputeResponse result = disputeService.reimburseApprovedDispute(
+                "dispute-1", "ops", "refund-1");
+
+        assertThat(result.getReimbursementTransactionId()).isNotBlank();
+        assertThat(result.getReimbursementAmount()).isEqualByComparingTo("25.00");
+        assertThat(result.getReimbursementCurrency()).isEqualTo("USD");
+        assertThat(dispute.getReimbursementTransactionId()).isEqualTo(result.getReimbursementTransactionId());
+
+        org.mockito.ArgumentCaptor<JournalCommand> commandCaptor = org.mockito.ArgumentCaptor.forClass(JournalCommand.class);
+        verify(ledgerPostingService).createPending(commandCaptor.capture());
+        JournalCommand command = commandCaptor.getValue();
+        assertThat(command.journalType()).isEqualTo(JournalType.CORRECTION);
+        assertThat(command.postings()).hasSize(2);
+        assertThat(command.postings()).extracting(posting -> posting.direction())
+                .containsExactlyInAnyOrder(PostingDirection.DEBIT, PostingDirection.CREDIT);
+        assertThat(command.postings()).allSatisfy(posting ->
+                assertThat(posting.amount()).isEqualByComparingTo("25.00"));
+
+        when(disputeRepository.findByIdWithLock("dispute-1")).thenReturn(Optional.of(dispute));
+        assertThat(disputeService.reimburseApprovedDispute("dispute-1", "ops", "refund-1")
+                .getReimbursementTransactionId()).isEqualTo(result.getReimbursementTransactionId());
+        verify(ledgerPostingService, org.mockito.Mockito.times(1)).createPending(any(JournalCommand.class));
     }
 
     @Test

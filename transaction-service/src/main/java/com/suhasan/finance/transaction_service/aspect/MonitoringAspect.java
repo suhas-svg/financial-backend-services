@@ -104,9 +104,10 @@ public class MonitoringAspect {
         
         // Extract transaction type from method name or arguments
         String transactionType = extractTransactionType(methodName, joinPoint.getArgs());
-        
+
         MDC.put("transactionProcessingMethod", methodName);
         MDC.put("transactionType", transactionType);
+        metricsService.beginTransactionAttempt();
         
         try {
             log.debug("Transaction processing started: {} type: {}", methodName, transactionType);
@@ -143,10 +144,11 @@ public class MonitoringAspect {
                     .register(meterRegistry));
             
             // Record processing failure
-            metricsService.recordTransactionFailed(
-                    TransactionType.valueOf(transactionType.toUpperCase()), 
-                    e.getClass().getSimpleName()
-            );
+            if (!"UNKNOWN".equalsIgnoreCase(transactionType)) {
+                metricsService.recordTransactionFailed(
+                        TransactionType.valueOf(transactionType.toUpperCase()),
+                        e.getClass().getSimpleName());
+            }
             
             log.error("Transaction processing failed: {} type: {} time: {}ms error: {}", 
                     methodName, transactionType, processingTime, e.getMessage());
@@ -154,6 +156,7 @@ public class MonitoringAspect {
             throw e;
             
         } finally {
+            metricsService.endTransactionAttempt();
             MDC.remove("transactionProcessingMethod");
             MDC.remove("transactionType");
         }

@@ -19,12 +19,12 @@ public interface JournalPostingRepository extends JpaRepository<JournalPosting, 
             from journal_postings posting
             join journal_transactions journal on journal.journal_id = posting.journal_id
             where posting.ledger_account_id = :accountId
-              and journal.effective_date >= :periodStart
+              and journal.effective_date < :periodStart
               and (select event.state from journal_state_events event
                    where event.journal_id = journal.journal_id
                    order by event.event_sequence desc limit 1) = 'POSTED'
             """, nativeQuery = true)
-    BigDecimal postedMovementFrom(
+    BigDecimal postedMovementBefore(
             @Param("accountId") UUID accountId,
             @Param("periodStart") LocalDate periodStart);
 

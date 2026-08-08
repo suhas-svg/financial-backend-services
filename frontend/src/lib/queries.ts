@@ -41,7 +41,18 @@ export function createAccount(values: AccountValues) {
 }
 
 export function updateAccount(id: number, values: AccountValues) {
-  return apiRequest<Account>("account", `/api/accounts/${id}`, { method: "PUT", body: values });
+  // The account service intentionally exposes metadata updates only. Sending
+  // immutable creation fields (ownerId, accountType, currency) caused a
+  // generic 400 and made a harmless edit look like a failed money operation.
+  const payload: Record<string, unknown> = {};
+  if (values.accountType === "SAVINGS") {
+    payload.interestRate = values.interestRate ?? 0;
+  }
+  if (values.accountType === "CREDIT") {
+    payload.creditLimit = values.creditLimit;
+    payload.dueDate = values.dueDate;
+  }
+  return apiRequest<Account>("account", `/api/accounts/${id}`, { method: "PUT", body: payload });
 }
 
 export function closeAccount(id: number, reason: string) {
@@ -119,6 +130,10 @@ export function deposit(values: MoneyMovementValues, idempotencyKey: string) {
   return apiRequest<Transaction>("transaction", "/api/transactions/deposit", { method: "POST", body: values, idempotencyKey });
 }
 
+export function getDepositCapability() {
+  return apiRequest<{ enabled: boolean; message: string }>("transaction", "/api/transactions/deposit/capability");
+}
+
 export function withdraw(values: MoneyMovementValues, idempotencyKey: string) {
   return apiRequest<Transaction>("transaction", "/api/transactions/withdraw", { method: "POST", body: values, idempotencyKey });
 }
@@ -165,6 +180,10 @@ export function authorizeTransfer(authorizationId: string, proof: string) {
 
 export function cancelTransferAuthorization(authorizationId: string) {
   return apiRequest<Transaction>("transaction", `/api/transactions/${authorizationId}/authorization`, { method: "DELETE" });
+}
+
+export function getTransferAuthorization(authorizationId: string) {
+  return apiRequest<Transaction>("transaction", `/api/transactions/authorizations/${authorizationId}`);
 }
 
 export function reverseTransaction(transactionId: string, values: ReversalValues, idempotencyKey: string) {
@@ -401,6 +420,13 @@ export function claimDispute(disputeId: string) {
 
 export function updateDisputeStatus(disputeId: string, values: DisputeStatusValues) {
   return apiRequest<TransactionDispute>("transaction", `/api/disputes/admin/${disputeId}/status`, { method: "PATCH", body: values });
+}
+
+export function reimburseDispute(disputeId: string, idempotencyKey: string) {
+  return apiRequest<TransactionDispute>("transaction", `/api/disputes/admin/${disputeId}/reimburse`, {
+    method: "POST",
+    idempotencyKey
+  });
 }
 
 export function addDisputeNote(disputeId: string, values: DisputeNoteValues) {

@@ -80,9 +80,10 @@ export function AdminMonitoringPage() {
           title="Alerts"
           rows={[
             { label: "Status", value: alertSummary.label, tone: alertSummary.tone },
-            metricRow("Critical", alerts.data, "criticalAlerts"),
-            metricRow("Warnings", alerts.data, "warningAlerts"),
-            metricRow("Info", alerts.data, "infoAlerts"),
+            metricRow("Active alerts", alerts.data, "activeAlerts"),
+            metricRow("Triggered critical", alerts.data, "criticalAlertsTriggered"),
+            metricRow("Triggered warnings", alerts.data, "warningAlertsTriggered"),
+            metricRow("Triggered info", alerts.data, "infoAlertsTriggered"),
             metricRow("Suppressions", alerts.data, "activeAlertSuppressions")
           ]}
           isLoading={alerts.isLoading}
@@ -160,7 +161,7 @@ function statusText(data: unknown, isLoading: boolean, fallbackWhenPresent = "av
 function getAlertSummary(data: unknown): MetricRow {
   if (!data) return { label: "unknown", value: "unknown", tone: "neutral" };
   if (readPath(data, "alertingEnabled") === false) return { label: "disabled", value: "disabled", tone: "neutral" };
-  const active = ["criticalAlerts", "warningAlerts", "infoAlerts"].reduce((total, key) => total + toNumber(readPath(data, key)), 0);
+  const active = toNumber(readPath(data, "activeAlerts"));
   return active === 0 ? { label: "0 active", value: "0 active", tone: "good" } : { label: `${formatValue(active)} active`, value: `${formatValue(active)} active`, tone: "warn" };
 }
 

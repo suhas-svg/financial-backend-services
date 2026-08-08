@@ -107,7 +107,7 @@ export type NotificationSummary = {
   bySourceType: Partial<Record<NotificationSourceType, number>>;
 };
 
-export type TransactionType = "DEPOSIT" | "WITHDRAWAL" | "TRANSFER" | "REVERSAL" | string;
+export type TransactionType = "DEPOSIT" | "WITHDRAWAL" | "TRANSFER" | "REVERSAL" | "REFUND" | string;
 export type TransactionStatus = "COMPLETED" | "PENDING" | "FAILED" | "REVERSED" | string;
 export type DisputeStatus = "OPEN" | "IN_REVIEW" | "APPROVED" | "DENIED" | "CLOSED";
 export type DisputeReasonCode = "UNAUTHORIZED" | "DUPLICATE" | "INCORRECT_AMOUNT" | "SERVICE_NOT_RECEIVED" | "OTHER";
@@ -598,6 +598,10 @@ export type TransactionDispute = {
   claimedAt?: string;
   closedAt?: string;
   resolutionNote?: string;
+  reimbursementTransactionId?: string;
+  reimbursementAmount?: number;
+  reimbursementCurrency?: string;
+  reimbursedAt?: string;
   notes?: TransactionDisputeNote[];
 };
 
