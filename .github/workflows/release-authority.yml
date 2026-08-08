@@ -320,15 +320,22 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           set -euo pipefail
+          data_dir="${HOME}/.m2/repository/org/owasp/dependency-check-data"
           args=(
-            "-DdataDirectory=${HOME}/.m2/repository/org/owasp/dependency-check-data"
+            "-DdataDirectory=${data_dir}"
             "-DnvdMaxRetryCount=20"
             "-DnvdApiDelay=8000"
           )
-          if [ -n "${NVD_API_KEY:-}" ]; then
+          if [ -z "${NVD_API_KEY:-}" ]; then
+            if [ -z "$(find "${data_dir}" -type f -print -quit)" ]; then
+              echo "::error::NVD_API_KEY is not configured and no restored OWASP dependency data is available"
+              exit 1
+            fi
+            echo "::warning::NVD_API_KEY is not configured; using the restored OWASP dependency data cache"
+          else
             args+=("-DnvdApiKey=${NVD_API_KEY}" "-DnvdApiDelay=3500")
+            ./mvnw org.owasp:dependency-check-maven:update-only "${args[@]}"
           fi
-          ./mvnw org.owasp:dependency-check-maven:update-only "${args[@]}"
       - name: Scan account-service dependencies
         working-directory: account-service
         run: >-
