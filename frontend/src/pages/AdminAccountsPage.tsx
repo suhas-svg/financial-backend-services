@@ -3,12 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Banknote, CircleX, Lock, Pencil, Unlock } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { closeAccount, createAccount, listAccounts, syntheticFundAccount, updateAccount, updateAccountStatus } from "../lib/queries";
+import { closeAccount, createAccount, listAccounts, listLedgerAccounts, syntheticFundAccount, updateAccount, updateAccountStatus } from "../lib/queries";
 import { accountSchema, type AccountValues } from "../lib/schemas";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { compactDate, money } from "../lib/format";
 import { invalidateInBackground, MONEY_STATE_REFRESH_INTERVAL_MS } from "../lib/queryInvalidation";
-import { availableBalance, ledgerBalance } from "../lib/accountBalances";
+import { availableBalance, ledgerBalance, projectionFor, projectionMap } from "../lib/accountBalances";
 import type { Account } from "../types";
 import { Button, ErrorNotice, Field, Input, PageHeader, Panel, Select } from "../components/ui";
 import { StatusBadge } from "../components/StatusBadge";
@@ -27,6 +27,8 @@ export function AdminAccountsPage() {
   const [actionReason, setActionReason] = useState("");
   const [actionError, setActionError] = useState("");
   const accounts = useQuery({ queryKey: ["admin-accounts", ownerId, accountType, status], queryFn: () => listAccounts({ ownerId, accountType, status: status as "" | "ACTIVE" | "FROZEN" | "CLOSED" }), refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
+  const ledgerAccounts = useQuery({ queryKey: ["ledger", "accounts"], queryFn: listLedgerAccounts, retry: false, refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
+  const projections = projectionMap(ledgerAccounts.data);
   const form = useForm<AccountValues>({
     resolver: zodResolver(accountSchema),
     defaultValues: { accountType: "CHECKING", ownerId: "", interestRate: 0 }
@@ -268,7 +270,9 @@ export function AdminAccountsPage() {
               </tr>
             </thead>
             <tbody>
-              {accounts.data?.content.map((account) => (
+              {accounts.data?.content.map((account) => {
+                const projection = projectionFor(account, projections);
+                return (
                 <tr key={account.id} className="border-b border-line last:border-0">
                   <td className="py-2 font-medium">#{account.id}</td>
                   <td>{account.ownerId}</td>
@@ -278,8 +282,8 @@ export function AdminAccountsPage() {
                   <td>
                     <StatusBadge value={account.status ?? "ACTIVE"} />
                   </td>
-                  <td>{money(availableBalance(account), account.currency)}</td>
-                  <td>{money(ledgerBalance(account), account.currency)}</td>
+                  <td>{money(availableBalance(account, projection), projection?.currency ?? account.currency)}</td>
+                  <td>{money(ledgerBalance(account, projection), projection?.currency ?? account.currency)}</td>
                   <td>{compactDate(account.createdAt)}</td>
                   <td className="text-right">
                     <div className="flex justify-end gap-2">
@@ -311,7 +315,8 @@ export function AdminAccountsPage() {
                       </Button>                    </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

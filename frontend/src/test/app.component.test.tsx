@@ -1325,15 +1325,20 @@ describe("admin audit log", () => {
 });
 
 describe("admin account status controls", () => {
-  it("shows available and ledger balance columns", async () => {
-    mockFetch();
+  it("shows authoritative ledger projections instead of stale account snapshots", async () => {
+    const { calls } = mockFetch((url) => {
+      if (url.includes("/api/ledger/accounts")) return jsonResponse([sampleLedgerAccount]);
+      return undefined;
+    });
 
     renderApp("/admin/accounts", tokenFor({ sub: "admin", roles: ["ROLE_ADMIN"] }));
 
     expect(await screen.findByRole("columnheader", { name: "Available" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Ledger" })).toBeInTheDocument();
     expect(await screen.findByText("$175.00")).toBeInTheDocument();
-    expect(await screen.findByText("$250.00")).toBeInTheDocument();
+    expect(await screen.findByText("$200.00")).toBeInTheDocument();
+    expect(screen.queryByText("$250.00")).not.toBeInTheDocument();
+    expect(calls.some(({ url }) => url.includes("/transaction-api/api/ledger/accounts"))).toBe(true);
   });
 
   it("disables every mutation control for a closed account", async () => {
