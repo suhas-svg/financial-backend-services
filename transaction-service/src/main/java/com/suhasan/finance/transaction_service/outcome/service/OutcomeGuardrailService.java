@@ -45,12 +45,14 @@ public class OutcomeGuardrailService {
     private final OutcomeGuardrailRuntimeControlRepository controlRepository;
     private final OutcomeScenarioRepository scenarioRepository;
     private final OutcomeScenarioVersionRepository scenarioVersionRepository;
+    private final OutcomeSimulationResultRepository simulationResultRepository;
     private final OutcomeDomainEventRepository eventRepository;
     private final LedgerAccountRepository ledgerAccountRepository;
     private final LedgerBalanceProjectionRepository projectionRepository;
     private final ResilientAccountServiceClient accountServiceClient;
     private final TransferAuthorizationService transferAuthorizationService;
     private final OutcomeNotificationDeliveryService notificationDeliveryService;
+    private final OutcomeSourceFreshnessService freshnessService;
     private final ObjectMapper objectMapper;
 
     @Value("${outcome-protection.guardrails.terms-version:2026-07-16.1}")
@@ -81,9 +83,14 @@ public class OutcomeGuardrailService {
         validateConsentAccounts(draft, request, userId);
         OutcomeScenario scenario = scenarioRepository.findByScenarioIdAndUserId(draft.getScenarioId(), userId)
                 .orElseThrow(() -> new AccessDeniedException("Guardrail draft not found"));
+        OutcomeSimulationResult simulationResult = simulationResultRepository.findById(draft.getResultId())
+                .filter(result -> result.getScenarioId().equals(scenario.getScenarioId()))
+                .orElseThrow(() -> new IllegalStateException("Authoritative simulation result is missing"));
         OutcomeScenarioVersion scenarioVersion = scenarioVersionRepository
-                .findByScenarioIdAndScenarioVersion(scenario.getScenarioId(), scenario.getCurrentVersion())
+                .findByScenarioIdAndScenarioVersion(scenario.getScenarioId(), simulationResult.getScenarioVersion())
                 .orElseThrow(() -> new IllegalStateException("Authoritative scenario version is missing"));
+
+        freshnessService.assertFresh(draft, userId, "CONSENT");
 
         String requestFingerprint = fingerprint(consentFingerprint(draft, request));
         var keyReplay = policyRepository.findByUserIdAndConsentIdempotencyKey(userId, key);
@@ -149,6 +156,7 @@ public class OutcomeGuardrailService {
         requireStatus(policy, "CONSENT_PENDING", "Guardrail is not awaiting activation");
         ensureNotExpired(policy);
         ensureCurrentTerms(policy);
+        freshnessService.assertFresh(policy, userId, "ACTIVATION", null);
         accountServiceClient.consumeStepUpChallenge(policy.getActivationChallengeId(),
                 new StepUpClientDtos.ConsumeChallengeRequest(userId, policy.getActivationFingerprint(),
                         policy.getPolicyId(), request.proof()));
@@ -193,6 +201,7 @@ public class OutcomeGuardrailService {
         requireStatus(policy, "SUSPENDED", "Only a suspended guardrail can be resumed");
         ensureNotExpired(policy);
         ensureCurrentTerms(policy);
+        freshnessService.assertFresh(policy, userId, "RESUME", null);
         policy.setStatus("ACTIVE");
         policy.setSuspendedAt(null);
         policy.setSuspensionReason(null);
@@ -262,6 +271,7 @@ public class OutcomeGuardrailService {
         }
         ensureExecutable(policy);
         validateExecution(policy, amount, userId);
+        freshnessService.assertFresh(policy, userId, "PRE_EXECUTION", null);
 
         String executionId = UUID.randomUUID().toString();
         String transferKey = "guardrail:" + executionId;
@@ -337,6 +347,7 @@ public class OutcomeGuardrailService {
         ensureExecutable(policy);
         String key = requireIdempotencyKey(idempotencyKey);
         try {
+            freshnessService.assertFresh(policy, userId, "PRE_AUTHORIZATION_COMPLETION", executionId);
             TransactionResponse transfer = transferAuthorizationService.authorize(
                     execution.getTransferAuthorizationId(), userId, request.proof());
             if (transfer.getStatus() != TransactionStatus.COMPLETED) {
@@ -352,6 +363,9 @@ public class OutcomeGuardrailService {
                     "Balance Shield top-up completed",
                     "Your verified top-up completed through the authorized transfer flow.");
             return executionResponse(execution, notificationDeliveryService.evidence(delivery));
+        } catch (ScenarioDivergedException divergence) {
+            cancelDivergedAuthorization(policy, execution, userId);
+            throw divergence;
         } catch (RuntimeException failure) {
             if ("COMPLETED".equals(execution.getStatus())) {
                 execution.setLastError("Transfer completed; notification evidence enqueue failed: " + sanitize(failure));
@@ -364,6 +378,22 @@ public class OutcomeGuardrailService {
                     "guardrail-action-auth-failed:" + executionId + ":" + key,
                     Map.of("executionId", executionId, "reason", execution.getLastError(), "retryable", true));
             throw failure;
+        }
+    }
+
+    private void cancelDivergedAuthorization(OutcomeGuardrailPolicy policy,
+                                             OutcomeGuardrailExecution execution,
+                                             String userId) {
+        try {
+            transferAuthorizationService.cancel(execution.getTransferAuthorizationId(), userId);
+            policy.setTotalReserved(money(policy.getTotalReserved().subtract(execution.getAmount()).max(BigDecimal.ZERO)));
+            policyRepository.save(policy);
+            execution.setStatus("CANCELLED");
+            execution.setLastError(ScenarioDivergedException.RECOVERY);
+            executionRepository.save(execution);
+        } catch (RuntimeException cancellationFailure) {
+            execution.setLastError("Scenario diverged; pending authorization cancellation requires retry");
+            executionRepository.save(execution);
         }
     }
 

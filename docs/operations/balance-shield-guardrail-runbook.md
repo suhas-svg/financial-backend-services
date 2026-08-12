@@ -46,6 +46,14 @@ The kill switch blocks new execution and pending MFA completion. It does not rev
 
 The expected evidence chain is draft preview, versioned informed consent, action-bound activation MFA, active policy, explicit action confirmation, optional risk MFA, authorized transfer result, immutable domain event, and account-service notification evidence. Suspension, revocation, expiry, stale terms, absent runtime control, or a disabled kill switch must prevent execution.
 
+## Authoritative source divergence
+
+`SCENARIO_DIVERGED` is a financial safety rejection, not a retryable transfer error. Confirm the immutable event contains saved/current source fingerprints, `outcome-source-v2`, scenario/version/result/guardrail identifiers, stage, redacted changed-field names, and `moneyMoved=false`. Never copy MFA proofs, tokens, credentials, raw requests, or unredacted account/schedule values into incident notes.
+
+Tell the customer: **Authoritative state changed. Refresh or re-run the scenario, then select and consent to a fresh repair.** Do not reactivate the old repair or bypass the fingerprint comparison. For a rejection at `PRE_AUTHORIZATION_COMPLETION`, verify the pending transfer authorization was cancelled and the policy reservation released. If cancellation failed, keep the reservation in place and retry the existing cancellation/recovery path; do not create a compensating transfer or edit balances directly.
+
+The canonical comparison runs immediately before transfer submission and MFA-authorized completion. Transaction-service cannot atomically lock account-service state across that network boundary, so retain the existing transfer authorization, ownership/status, balance, limit, hold, risk/MFA, idempotency and double-entry checks as the final money-movement authority.
+
 ## External and regulatory boundaries
 
 - Legal/compliance owns terms wording, version approval, disclosures, consent retention period, and jurisdiction eligibility.

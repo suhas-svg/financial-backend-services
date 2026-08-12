@@ -16,6 +16,7 @@ import {
 } from "../lib/queries";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { compactDate, money } from "../lib/format";
+import { isScenarioDivergedError } from "../lib/outcomeFreshness";
 import { Badge, Button, ErrorNotice, Field, Input, Select, StatusNotice } from "./ui";
 
 type Props = {
@@ -114,6 +115,7 @@ export function OutcomeGuardrailCard({
   const error = [terms.error, control.error, consent.error, activate.error, execute.error, authorize.error,
     cancelExecution.error, suspend.error, resume.error, revoke.error]
     .find(Boolean);
+  const scenarioDiverged = isScenarioDivergedError(error);
   const state = policy?.effectiveStatus ?? guardrail.status;
   const stateTone = state === "ACTIVE" ? "good" : state === "REVOKED" || state === "EXPIRED" ? "bad" : state === "SUSPENDED" ? "warn" : "info";
 
@@ -126,7 +128,9 @@ export function OutcomeGuardrailCard({
       <Badge tone={stateTone}>{state}</Badge>
     </div>
     <p className="mt-3 text-sm leading-6">{guardrail.previewText}</p>
-    <ErrorNotice message={error instanceof Error ? error.message : undefined} />
+    {scenarioDiverged
+      ? <StatusNotice message="Authoritative state changed. Refresh or re-run the scenario, then select and consent to a fresh repair." />
+      : <ErrorNotice message={error instanceof Error ? error.message : undefined} />}
 
     {guardrail.type !== "RESERVE_BUFFER" && guardrail.status === "DRAFT" ? <div className="mt-4 grid gap-3">
       <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={previewConfirmed} onChange={(event) => onPreviewConfirmed(event.target.checked)} /><span>I accept this read-only preview. It cannot hold, schedule, or move money.</span></label>

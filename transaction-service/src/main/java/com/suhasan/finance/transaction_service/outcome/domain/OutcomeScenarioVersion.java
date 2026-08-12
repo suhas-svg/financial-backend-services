@@ -41,6 +41,10 @@ public class OutcomeScenarioVersion {
     private String scheduleSnapshotJson;
     @Column(name = "source_fingerprint", nullable = false, length = 64)
     private String sourceFingerprint;
+    @Column(name = "source_fingerprint_schema", nullable = false, length = 32)
+    private String sourceFingerprintSchema;
+    @Column(name = "source_components_json", nullable = false, columnDefinition = "TEXT")
+    private String sourceComponentsJson;
     @Column(name = "mutation_idempotency_key", nullable = false, length = 128)
     private String mutationIdempotencyKey;
     @Column(name = "request_fingerprint", nullable = false, length = 64)
@@ -53,5 +57,7 @@ public class OutcomeScenarioVersion {
         if (createdAt == null) createdAt = Instant.now();
         if (outcomeType == null) outcomeType = "BALANCE_FLOOR";
         if (canonicalInputsJson == null) canonicalInputsJson = "{}";
+        if (sourceFingerprintSchema == null) sourceFingerprintSchema = "outcome-source-v1";
+        if (sourceComponentsJson == null) sourceComponentsJson = "{}";
     }
 }

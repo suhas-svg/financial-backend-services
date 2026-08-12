@@ -10,6 +10,7 @@ import com.suhasan.finance.transaction_service.outcome.domain.*;
 import com.suhasan.finance.transaction_service.outcome.fx.FxRateQuote;
 import com.suhasan.finance.transaction_service.outcome.fx.OutcomeFxConverter;
 import com.suhasan.finance.transaction_service.outcome.repository.*;
+import com.suhasan.finance.transaction_service.outcome.service.OutcomeAuthoritativeSourceService.Snapshot;
 import com.suhasan.finance.transaction_service.outcome.web.OutcomeProtectionDtos.*;
 import com.suhasan.finance.transaction_service.repository.ScheduledTransferRepository;
 import lombok.RequiredArgsConstructor;
@@ -43,12 +44,8 @@ public class OutcomeProtectionService {
     private final OutcomeSimulationResultRepository resultRepository;
     private final OutcomeGuardrailDraftRepository guardrailRepository;
     private final OutcomeDomainEventRepository eventRepository;
-    private final LedgerAccountRepository ledgerAccountRepository;
-    private final LedgerBalanceProjectionRepository projectionRepository;
-    private final ScheduledTransferRepository scheduledTransferRepository;
     private final OutcomeSimulationEngine simulationEngine;
-    private final OutcomeScheduledTransferForecaster scheduledTransferForecaster;
-    private final OutcomeFxConverter fxConverter;
+    private final OutcomeAuthoritativeSourceService sourceService;
     private final OutcomeNotificationDeliveryService notificationDeliveryService;
     private final OutcomeGuardrailService guardrailService;
     private final ObjectMapper objectMapper;
@@ -64,7 +61,7 @@ public class OutcomeProtectionService {
             return response(replay.get());
         }
 
-        Snapshot snapshot = captureSnapshot(request, userId, true);
+        Snapshot snapshot = sourceService.capture(request, userId, true);
         String scenarioId = UUID.randomUUID().toString();
         OutcomeScenario scenario = OutcomeScenario.builder()
                 .scenarioId(scenarioId).userId(userId).name(request.name().trim()).status("ACTIVE")
@@ -93,7 +90,7 @@ public class OutcomeProtectionService {
             return response(scenario, replay.get().getScenarioVersion());
         }
 
-        Snapshot snapshot = captureSnapshot(request, userId, true);
+        Snapshot snapshot = sourceService.capture(request, userId, true);
         SimulationProof simulation = simulate(request, snapshot);
         int nextVersion = scenario.getCurrentVersion() + 1;
         scenario.setCurrentVersion(nextVersion);
@@ -237,7 +234,7 @@ public class OutcomeProtectionService {
         OutcomeScenarioVersion saved = requiredVersion(scenario, scenario.getCurrentVersion());
         OutcomeSimulationResult savedResult = requiredResult(scenario.getScenarioId(), scenario.getCurrentVersion());
         ScenarioRequest request = requestFrom(scenario, saved);
-        Snapshot fresh = captureSnapshot(request, scenario.getUserId(), false);
+        Snapshot fresh = sourceService.capture(request, scenario.getUserId(), false);
         SimulationProof simulation = simulate(request, fresh);
         String previousFingerprint = scenario.getLastSourceFingerprint();
         boolean diverged = !fresh.sourceFingerprint().equals(saved.getSourceFingerprint());
@@ -311,7 +308,10 @@ public class OutcomeProtectionService {
                 .accountIdsJson(json(sortedDistinct(request.accountIds())))
                 .assumptionsJson(json(sortedAssumptions(request.assumptions()))).shocksJson(json(sortedShocks(request.shocks())))
                 .ledgerSnapshotJson(json(snapshot.ledgerAccounts())).scheduleSnapshotJson(json(snapshot.scheduledCashflows()))
-                .sourceFingerprint(snapshot.sourceFingerprint()).mutationIdempotencyKey(mutationKey)
+                .sourceFingerprint(snapshot.sourceFingerprint())
+                .sourceFingerprintSchema(OutcomeAuthoritativeSourceService.FINGERPRINT_SCHEMA)
+                .sourceComponentsJson(sourceService.componentsJson(snapshot.components()))
+                .mutationIdempotencyKey(mutationKey)
                 .requestFingerprint(requestFingerprint).build();
         versionRepository.save(version);
 
@@ -386,103 +386,6 @@ public class OutcomeProtectionService {
         }
     }
 
-    private Snapshot captureSnapshot(ScenarioRequest request, String userId, boolean rejectStaleObligation) {
-        Instant capturedAt = Instant.now();
-        List<String> accountIds = sortedDistinct(request.accountIds());
-        Set<String> selectedAccounts = new LinkedHashSet<>(accountIds);
-        List<LedgerAccountSnapshot> ledger = new ArrayList<>();
-        for (String accountId : accountIds) {
-            LedgerAccount account = ledgerAccountRepository.findByExternalAccountId(accountId)
-                    .filter(candidate -> candidate.getAccountKind() == LedgerAccountKind.CUSTOMER)
-                    .orElseThrow(() -> new IllegalArgumentException("Authoritative ledger account %s was not found".formatted(accountId)));
-            if (!userId.equals(account.getOwnerId())) {
-                throw new AccessDeniedException("Selected ledger account is not owned by the authenticated customer");
-            }
-            LedgerBalanceProjection projection = projectionRepository.findById(account.getLedgerAccountId())
-                    .orElseThrow(() -> new IllegalArgumentException("Authoritative balance projection was not found"));
-            Instant projectionTime = projection.getUpdatedAt() == null ? capturedAt
-                    : projection.getUpdatedAt().toInstant(ZoneOffset.UTC);
-            var conversion = fxConverter.convert(projection.getAvailableBalance(), account.getCurrency().trim(),
-                    request.currency(), capturedAt);
-            ledger.add(new LedgerAccountSnapshot(accountId, account.getCurrency().trim(),
-                    money(projection.getAvailableBalance()), projection.getProjectionVersion(), projectionTime,
-                    conversion.convertedAmount(), request.currency(), conversion.quote()));
-        }
-
-        List<ScheduledCashflowSnapshot> rawSchedules = scheduledTransferForecaster.forecast(request, userId,
-                selectedAccounts,
-                scheduledTransferRepository.findByUserIdAndStatusOrderByNextRunAtAsc(userId, ScheduledTransferStatus.ACTIVE));
-        List<ScheduledCashflowSnapshot> schedules = rawSchedules.stream().map(schedule -> {
-            var conversion = fxConverter.convert(schedule.amount(), schedule.currency(), request.currency(), capturedAt);
-            boolean sourceOwned = ledgerAccountRepository.findByExternalAccountId(schedule.fromAccountId())
-                    .map(account -> userId.equals(account.getOwnerId())).orElse(false);
-            boolean destinationOwned = ledgerAccountRepository.findByExternalAccountId(schedule.toAccountId())
-                    .map(account -> userId.equals(account.getOwnerId())).orElse(false);
-            boolean repairEligible = schedule.repairEligible() && sourceOwned;
-            String ineligibleReason = repairEligible ? null : (sourceOwned
-                    ? schedule.repairIneligibilityReason()
-                    : "The schedule source is not an owned authoritative ledger account");
-            return new ScheduledCashflowSnapshot(schedule.eventId(), schedule.scheduleId(), schedule.scheduledFor(),
-                    schedule.date(), conversion.convertedAmount(), request.currency(), schedule.status(),
-                    schedule.cadence(), schedule.evaluationTimeZone(), schedule.label(), schedule.fromAccountId(),
-                    schedule.toAccountId(), schedule.sourceAmount(), schedule.sourceCurrency(), conversion.quote(),
-                    schedule.scheduleVersion(), schedule.scheduleOwnerId(), schedule.sourceTimeZone(),
-                    schedule.dueLocalDate(), sourceOwned, destinationOwned, repairEligible, ineligibleReason);
-        }).toList();
-
-        ProtectedObligationSnapshot protectedObligation = null;
-        if (request.effectiveOutcomeType() == OutcomeType.SCHEDULED_OBLIGATION) {
-            ScheduledTransfer schedule = scheduledTransferRepository.findById(request.protectedScheduleId())
-                    .orElseThrow(() -> new AccessDeniedException("Protected scheduled obligation not found"));
-            if (!userId.equals(schedule.getUserId())) {
-                throw new AccessDeniedException("Protected scheduled obligation not found");
-            }
-            boolean sourceOwned = ledgerAccountRepository.findByExternalAccountId(schedule.getFromAccountId())
-                    .map(account -> userId.equals(account.getOwnerId())).orElse(false);
-            boolean destinationOwned = ledgerAccountRepository.findByExternalAccountId(schedule.getToAccountId())
-                    .map(account -> userId.equals(account.getOwnerId())).orElse(false);
-            LedgerAccount sourceLedger = ledgerAccountRepository.findByExternalAccountId(schedule.getFromAccountId())
-                    .filter(account -> account.getAccountKind() == LedgerAccountKind.CUSTOMER)
-                    .orElse(null);
-            long sourceProjectionVersion = sourceLedger == null ? -1L : projectionRepository
-                    .findById(sourceLedger.getLedgerAccountId())
-                    .map(LedgerBalanceProjection::getProjectionVersion).orElse(-1L);
-            List<ScheduledCashflowSnapshot> occurrences = schedules.stream()
-                    .filter(value -> schedule.getScheduleId().equals(value.scheduleId())).toList();
-            boolean valid = true;
-            String invalidReason = null;
-            if (!Objects.equals(schedule.getVersion(), request.protectedScheduleVersion())) {
-                valid = false;
-                invalidReason = "The protected obligation version changed after selection.";
-            } else if (schedule.getStatus() != ScheduledTransferStatus.ACTIVE) {
-                valid = false;
-                invalidReason = "The protected obligation is no longer active.";
-            } else if (!sourceOwned || !selectedAccounts.contains(schedule.getFromAccountId())) {
-                valid = false;
-                invalidReason = "The protected obligation must debit an owned selected ledger account.";
-            } else if (occurrences.isEmpty()) {
-                valid = false;
-                invalidReason = "The protected obligation has no due occurrence inside the inclusive horizon.";
-            }
-            fxConverter.convert(schedule.getAmount(), schedule.getCurrency(), request.currency(), capturedAt);
-            if (rejectStaleObligation && !valid) {
-                throw new IllegalStateException(invalidReason);
-            }
-            ZoneId sourceZone = ZoneId.of(schedule.getSourceTimeZone() == null
-                    ? "UTC" : schedule.getSourceTimeZone());
-            String cadence = schedule.getScheduleType() == ScheduledTransferType.ONE_TIME
-                    ? "ONE_TIME" : schedule.getFrequency().name();
-            protectedObligation = new ProtectedObligationSnapshot(
-                    schedule.getScheduleId(), schedule.getVersion() == null ? 0L : schedule.getVersion(),
-                    schedule.getStatus().name(), schedule.getUserId(), schedule.getFromAccountId(),
-                    schedule.getToAccountId(), sourceOwned, destinationOwned, money(schedule.getAmount()),
-                    schedule.getCurrency(), schedule.getScheduleType().name(), cadence, schedule.getNextRunAt(),
-                    schedule.getNextRunAt().atZone(sourceZone).toLocalDate(), sourceZone.getId(),
-                    request.timeZone(), schedule.getEndAt(), sourceProjectionVersion, capturedAt, valid, invalidReason);
-        }
-        String sourceFingerprint = fingerprint(new SourceFingerprint(ledger, schedules, protectedObligation));
-        return new Snapshot(ledger, schedules, protectedObligation, sourceFingerprint);
-    }
     private SimulationProof simulate(ScenarioRequest request, Snapshot snapshot) {
         List<OutcomeSimulationEngine.Cashflow> cashflows = new ArrayList<>();
         for (AssumptionInput assumption : sortedAssumptions(request.assumptions())) {
@@ -677,11 +580,4 @@ public class OutcomeProtectionService {
         } catch (NoSuchAlgorithmException ex) { throw new IllegalStateException("SHA-256 is unavailable", ex); }
     }
 
-    private record Snapshot(List<LedgerAccountSnapshot> ledgerAccounts,
-                            List<ScheduledCashflowSnapshot> scheduledCashflows,
-                            ProtectedObligationSnapshot protectedObligation,
-                            String sourceFingerprint) {}
-    private record SourceFingerprint(List<LedgerAccountSnapshot> ledger,
-                                     List<ScheduledCashflowSnapshot> schedules,
-                                     ProtectedObligationSnapshot protectedObligation) {}
 }

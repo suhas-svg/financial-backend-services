@@ -13,6 +13,7 @@ import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import com.suhasan.finance.transaction_service.outcome.service.ScenarioDivergedException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -21,6 +22,19 @@ import java.util.Map;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ScenarioDivergedException.class)
+    public ResponseEntity<ErrorResponse> handleScenarioDivergedException(ScenarioDivergedException ex) {
+        log.warn("Outcome Protection source freshness rejected an operation");
+        ErrorResponse error = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.CONFLICT.value())
+                .error(ScenarioDivergedException.CODE)
+                .message(ScenarioDivergedException.RECOVERY)
+                .path("/api/outcome-protection")
+                .build();
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
     
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgumentException(IllegalArgumentException ex) {

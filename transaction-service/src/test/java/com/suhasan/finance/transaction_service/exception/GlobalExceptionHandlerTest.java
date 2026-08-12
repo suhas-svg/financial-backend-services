@@ -12,6 +12,7 @@ import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import com.suhasan.finance.transaction_service.outcome.service.ScenarioDivergedException;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -29,6 +30,18 @@ class GlobalExceptionHandlerTest {
     @BeforeEach
     void setUp() {
         // Setup if needed
+    }
+
+    @Test
+    void handleScenarioDivergedReturnsStableCustomerSafeConflict() {
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler
+                .handleScenarioDivergedException(new ScenarioDivergedException());
+
+        assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("SCENARIO_DIVERGED", response.getBody().getError());
+        assertEquals(ScenarioDivergedException.RECOVERY, response.getBody().getMessage());
+        assertEquals("/api/outcome-protection", response.getBody().getPath());
     }
 
     @Test

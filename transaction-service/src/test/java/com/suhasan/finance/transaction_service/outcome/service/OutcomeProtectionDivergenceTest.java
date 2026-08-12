@@ -2,6 +2,7 @@ package com.suhasan.finance.transaction_service.outcome.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.suhasan.finance.transaction_service.client.ResilientAccountServiceClient;
+import com.suhasan.finance.transaction_service.dto.AccountDto;
 import com.suhasan.finance.transaction_service.entity.ScheduledTransfer;
 import com.suhasan.finance.transaction_service.entity.ScheduledTransferStatus;
 import com.suhasan.finance.transaction_service.entity.ScheduledTransferType;
@@ -58,6 +59,7 @@ class OutcomeProtectionDivergenceTest {
     @Mock ScheduledTransferRepository scheduledTransferRepository;
     @Mock OutcomeNotificationDeliveryService notificationDeliveryService;
     @Mock OutcomeGuardrailService outcomeGuardrailService;
+    @Mock ResilientAccountServiceClient accountServiceClient;
 
     private OutcomeProtectionService service;
     private final Map<String, OutcomeDomainEvent> events = new HashMap<>();
@@ -65,12 +67,13 @@ class OutcomeProtectionDivergenceTest {
     @BeforeEach
     void setUp() {
         ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+        OutcomeFxConverter fxConverter = new OutcomeFxConverter((quote, base, time) -> new FxRateQuote(
+                quote, base, BigDecimal.ONE, Instant.EPOCH, "TEST", "Deterministic test rate", false, "REJECT"));
+        OutcomeAuthoritativeSourceService sourceService = new OutcomeAuthoritativeSourceService(
+                ledgerAccountRepository, projectionRepository, scheduledTransferRepository,
+                new OutcomeScheduledTransferForecaster(), fxConverter, accountServiceClient, objectMapper);
         service = new OutcomeProtectionService(scenarioRepository, versionRepository, resultRepository,
-                guardrailRepository, eventRepository, ledgerAccountRepository, projectionRepository,
-                scheduledTransferRepository, new OutcomeSimulationEngine(3, 100),
-                new OutcomeScheduledTransferForecaster(),
-                new OutcomeFxConverter((quote, base, time) -> new FxRateQuote(quote, base, BigDecimal.ONE,
-                        Instant.EPOCH, "TEST", "Deterministic test rate", false, "REJECT")),
+                guardrailRepository, eventRepository, new OutcomeSimulationEngine(3, 100), sourceService,
                 notificationDeliveryService, outcomeGuardrailService, objectMapper);
 
         OutcomeScenario scenario = OutcomeScenario.builder()
@@ -107,6 +110,9 @@ class OutcomeProtectionDivergenceTest {
         when(resultRepository.findByScenarioIdAndScenarioVersion("scenario-1", 1)).thenReturn(Optional.of(savedResult));
         when(ledgerAccountRepository.findByExternalAccountId("10")).thenReturn(Optional.of(ledgerAccount));
         when(projectionRepository.findById(ledgerId)).thenReturn(Optional.of(projection));
+        when(accountServiceClient.getAccountInternal("10")).thenReturn(AccountDto.builder()
+                .id(10L).ownerId("customer-1").currency("INR").status("ACTIVE").active(true)
+                .accountType("CHECKING").build());
         when(scheduledTransferRepository.findByUserIdAndStatusOrderByNextRunAtAsc("customer-1", ScheduledTransferStatus.ACTIVE))
                 .thenReturn(List.of(schedule));
         when(eventRepository.findByUserIdAndDedupeKey(any(), any()))

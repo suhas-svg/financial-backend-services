@@ -37,20 +37,22 @@ class OutcomeGuardrailServiceTest {
     @Mock OutcomeGuardrailRuntimeControlRepository controls;
     @Mock OutcomeScenarioRepository scenarios;
     @Mock OutcomeScenarioVersionRepository scenarioVersions;
+    @Mock OutcomeSimulationResultRepository simulationResults;
     @Mock OutcomeDomainEventRepository events;
     @Mock LedgerAccountRepository accounts;
     @Mock LedgerBalanceProjectionRepository projections;
     @Mock ResilientAccountServiceClient accountClient;
     @Mock TransferAuthorizationService transfers;
     @Mock OutcomeNotificationDeliveryService notifications;
+    @Mock OutcomeSourceFreshnessService freshness;
 
     private OutcomeGuardrailService service;
     private OutcomeGuardrailPolicy policy;
 
     @BeforeEach
     void setUp() {
-        service = new OutcomeGuardrailService(drafts, policies, executions, controls, scenarios, scenarioVersions, events,
-                accounts, projections, accountClient, transfers, notifications,
+        service = new OutcomeGuardrailService(drafts, policies, executions, controls, scenarios, scenarioVersions,
+                simulationResults, events, accounts, projections, accountClient, transfers, notifications, freshness,
                 new ObjectMapper().findAndRegisterModules());
         ReflectionTestUtils.setField(service, "termsVersion", "2026-07-16.1");
         String termsHash = service.terms().hash();
@@ -84,6 +86,19 @@ class OutcomeGuardrailServiceTest {
     }
 
     @Test
+    void staleActivationFailsBeforeMfaConsumptionOrMoneyMovement() {
+        policy.setStatus("CONSENT_PENDING");
+        when(policies.lockByGuardrailAndUser("guardrail-1", "customer")).thenReturn(Optional.of(policy));
+        doThrow(new ScenarioDivergedException()).when(freshness)
+                .assertFresh(policy, "customer", "ACTIVATION", null);
+
+        assertThatThrownBy(() -> service.activate("guardrail-1",
+                new GuardrailActivationRequest("123456"), "customer"))
+                .isInstanceOf(ScenarioDivergedException.class);
+        verifyNoInteractions(accountClient, transfers);
+    }
+
+    @Test
     void consentUsesProtectedMinimumAsExecutionTriggerNotRepairAmount() {
         Instant expiry = Instant.now().plusSeconds(1800);
         OutcomeGuardrailDraft draft = OutcomeGuardrailDraft.builder()
@@ -98,6 +113,8 @@ class OutcomeGuardrailServiceTest {
                 .protectedMinimum(new BigDecimal("200.00")).build();
         when(drafts.lockByGuardrailAndUser("guardrail-1", "customer")).thenReturn(Optional.of(draft));
         when(scenarios.findByScenarioIdAndUserId("scenario-1", "customer")).thenReturn(Optional.of(scenario));
+        when(simulationResults.findById("result-1")).thenReturn(Optional.of(OutcomeSimulationResult.builder()
+                .resultId("result-1").scenarioId("scenario-1").scenarioVersion(1).build()));
         when(scenarioVersions.findByScenarioIdAndScenarioVersion("scenario-1", 1))
                 .thenReturn(Optional.of(scenarioVersion));
         when(policies.findByUserIdAndConsentIdempotencyKey("customer", "consent-key"))
@@ -135,6 +152,19 @@ class OutcomeGuardrailServiceTest {
     }
 
     @Test
+    void driftAfterActivationFailsBeforeExecutionPersistenceOrTransfer() {
+        executableState();
+        doThrow(new ScenarioDivergedException()).when(freshness)
+                .assertFresh(policy, "customer", "PRE_EXECUTION", null);
+
+        assertThatThrownBy(() -> service.execute("guardrail-1",
+                new GuardrailExecutionRequest(true, new BigDecimal("25.00")), "customer", "action-key"))
+                .isInstanceOf(ScenarioDivergedException.class);
+        verify(executions, never()).save(any());
+        verifyNoInteractions(transfers);
+    }
+
+    @Test
     void replayReturnsSameExecutionWithoutMovingMoneyAgain() {
         OutcomeGuardrailExecution prior = execution("execution-1", "COMPLETED", new BigDecimal("25.00"));
         when(executions.findByUserIdAndIdempotencyKey("customer", "action-key")).thenReturn(Optional.of(prior));
@@ -144,6 +174,18 @@ class OutcomeGuardrailServiceTest {
 
         assertThat(replay.executionId()).isEqualTo("execution-1");
         assertThat(replay.status()).isEqualTo("COMPLETED");
+        verifyNoInteractions(transfers);
+    }
+
+    @Test
+    void replayWithMismatchedPayloadFailsWithoutMovingMoney() {
+        OutcomeGuardrailExecution prior = execution("execution-1", "COMPLETED", new BigDecimal("25.00"));
+        when(executions.findByUserIdAndIdempotencyKey("customer", "action-key")).thenReturn(Optional.of(prior));
+
+        assertThatThrownBy(() -> service.execute("guardrail-1",
+                new GuardrailExecutionRequest(true, new BigDecimal("26.00")), "customer", "action-key"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Idempotency-Key was already used for a different guardrail action");
         verifyNoInteractions(transfers);
     }
 
@@ -185,6 +227,28 @@ class OutcomeGuardrailServiceTest {
         assertThat(pending.getStatus()).isEqualTo("CANCELLED");
         assertThat(policy.getTotalReserved()).isEqualByComparingTo("0.00");
         verify(transfers).cancel("authorization-1", "customer");
+    }
+
+    @Test
+    void driftWhileAwaitingMfaCancelsAuthorizationAndReleasesReservation() {
+        policy.setTotalReserved(new BigDecimal("25.00"));
+        OutcomeGuardrailExecution pending = execution("execution-1", "AWAITING_AUTHORIZATION", new BigDecimal("25.00"));
+        pending.setTransferAuthorizationId("authorization-1");
+        when(executions.findByExecutionIdAndUserId("execution-1", "customer")).thenReturn(Optional.of(pending));
+        when(policies.lockByPolicyAndUser("policy-1", "customer")).thenReturn(Optional.of(policy));
+        when(executions.lockByExecutionAndUser("execution-1", "customer")).thenReturn(Optional.of(pending));
+        when(controls.findById(OutcomeGuardrailControlService.GLOBAL_CONTROL_ID)).thenReturn(Optional.of(control(true)));
+        doThrow(new ScenarioDivergedException()).when(freshness)
+                .assertFresh(policy, "customer", "PRE_AUTHORIZATION_COMPLETION", "execution-1");
+        when(executions.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThatThrownBy(() -> service.authorize("execution-1",
+                new GuardrailExecutionAuthorizationRequest("proof"), "customer", "authorize-key"))
+                .isInstanceOf(ScenarioDivergedException.class);
+        assertThat(pending.getStatus()).isEqualTo("CANCELLED");
+        assertThat(policy.getTotalReserved()).isEqualByComparingTo("0.00");
+        verify(transfers).cancel("authorization-1", "customer");
+        verify(transfers, never()).authorize(anyString(), anyString(), anyString());
     }
 
     private void executableState() {

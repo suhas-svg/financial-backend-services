@@ -80,6 +80,24 @@ class OutcomeProtectionMigrationSmokeTest {
                 """, Integer.class);
         assertThat(columnCount).isEqualTo(17);
     }
+
+    @Test
+    void addsVersionedCanonicalSourceComponentsForFreshnessChecks() {
+        Integer columnCount = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'outcome_scenario_versions'
+                  AND column_name IN ('source_fingerprint_schema', 'source_components_json')
+                """, Integer.class);
+        assertThat(columnCount).isEqualTo(2);
+
+        String legacyDefault = jdbc.queryForObject("""
+                SELECT column_default FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'outcome_scenario_versions'
+                  AND column_name = 'source_fingerprint_schema'
+                """, String.class);
+        assertThat(legacyDefault).contains("outcome-source-v1");
+    }
     @Test
     void createsFailClosedConsentGuardrailControlAndImmutableEvidence() {
         Integer tableCount = jdbc.queryForObject("""
