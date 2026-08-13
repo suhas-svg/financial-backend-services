@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, CreditCard, PlusCircle, ShieldCheck, Sparkles, WalletCards } from "lucide-react";
 import { Link } from "../routing";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { getNotificationSummary, getTransactions, getUserStats, listAccounts, listLedgerAccounts } from "../lib/queries";
+import { getNotificationSummary, getTransactions, getUserStats, listLedgerAccounts, listOwnedAccounts } from "../lib/queries";
 import { compactDate, money, percent } from "../lib/format";
 import { availableBalance, ledgerBalance, pendingBalance, projectionFor, projectionMap } from "../lib/accountBalances";
 import { EmptyState, ErrorNotice, Panel, Skeleton } from "../components/ui";
@@ -10,7 +10,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { MONEY_STATE_REFRESH_INTERVAL_MS } from "../lib/queryInvalidation";
 
 export function DashboardPage() {
-  const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => listAccounts(), refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
+  const accounts = useQuery({ queryKey: ["accounts", "owned"], queryFn: () => listOwnedAccounts(), refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
   const ledgerAccounts = useQuery({ queryKey: ["ledger", "accounts"], queryFn: listLedgerAccounts, retry: false, refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
   const transactions = useQuery({ queryKey: ["transactions", 0], queryFn: () => getTransactions(0) });
   const stats = useQuery({ queryKey: ["stats", "user"], queryFn: getUserStats });

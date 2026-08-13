@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Badge, Button, EmptyState, ErrorNotice, Field, Input, Panel, Select, StatusNotice } from "../components/ui";
-import { createBeneficiary, disableBeneficiary, listAccounts, listBeneficiaries, updateBeneficiary } from "../lib/queries";
+import { createBeneficiary, disableBeneficiary, listBeneficiaries, listOwnedAccounts, updateBeneficiary } from "../lib/queries";
 import { beneficiarySchema, type BeneficiaryValues } from "../lib/schemas";
 import type { Beneficiary } from "../types";
 
@@ -22,7 +22,7 @@ export function BeneficiariesPage() {
   const [statusMessage, setStatusMessage] = useState<string>();
   const form = useForm<BeneficiaryValues>({ resolver: zodResolver(beneficiarySchema), defaultValues });
   const beneficiaries = useQuery({ queryKey: ["beneficiaries", "ACTIVE"], queryFn: () => listBeneficiaries({ status: "ACTIVE" }) });
-  const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => listAccounts() });
+  const accounts = useQuery({ queryKey: ["accounts", "owned"], queryFn: () => listOwnedAccounts() });
   const selected = useMemo(
     () => beneficiaries.data?.content.find((beneficiary) => beneficiary.beneficiaryId === selectedId) ?? beneficiaries.data?.content[0] ?? null,
     [beneficiaries.data, selectedId]

@@ -67,6 +67,9 @@ class ScheduledTransferServiceTest {
     private ResilientAccountServiceClient accountServiceClient;
 
     @Mock
+    private CustomerNotificationDispatcher notificationDispatcher;
+
+    @Mock
     private MetricsService metricsService;
 
     @Mock
@@ -212,7 +215,7 @@ class ScheduledTransferServiceTest {
         verify(transactionService).processTransfer(any(TransferRequest.class), eq("customer"),
                 eq("scheduled-transfer:schedule-1:2026-07-01T09:00:00Z"));
         verify(runRepository, never()).save(argThat(run -> run.getStatus() == ScheduledTransferRunStatus.FAILED));
-        verify(accountServiceClient, never()).createNotification(argThat(request ->
+        verify(notificationDispatcher, never()).dispatchAfterCommit(argThat(request ->
                 "SCHEDULED_TRANSFER_FAILED".equals(request.getType())
                         && "SCHEDULED_TRANSFER".equals(request.getSourceType())));
     }

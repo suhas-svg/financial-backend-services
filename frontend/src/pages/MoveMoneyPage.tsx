@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseFormRegisterReturn } from "react-hook-form";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { authorizeTransfer, cancelTransferAuthorization, deposit, getDepositCapability, getTransferAuthorization, listAccounts, listBeneficiaries, transfer, verifyStepUpChallenge, withdraw } from "../lib/queries";
+import { authorizeTransfer, cancelTransferAuthorization, deposit, getDepositCapability, getTransferAuthorization, listBeneficiaries, listOwnedAccounts, transfer, verifyStepUpChallenge, withdraw } from "../lib/queries";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { availableBalance, canDebit } from "../lib/accountBalances";
 import { moneyMovementSchema, transferSchema, type MoneyMovementValues, type TransferValues } from "../lib/schemas";
@@ -11,11 +11,12 @@ import { invalidateMoneyMovementQueries, MONEY_STATE_REFRESH_INTERVAL_MS } from 
 import { Button, ErrorNotice, Field, Input, Panel, Select, StatusNotice } from "../components/ui";
 import { ApiError } from "../lib/api";
 import type { Beneficiary, Transaction } from "../types";
+import { Link } from "../routing";
 
 const AUTHORIZATION_STATUS_TIMEOUT_MS = 60_000;
 
 function AccountSelect({ field, debitSource = false, amount = 0 }: { field: UseFormRegisterReturn; debitSource?: boolean; amount?: number }) {
-  const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => listAccounts(), refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
+  const accounts = useQuery({ queryKey: ["accounts", "owned"], queryFn: () => listOwnedAccounts(), refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
   return (
     <Select {...field}>
       <option value="">Select account</option>
@@ -117,8 +118,10 @@ export function MoveMoneyPage() {
         invalidate();
       }
     },
-    onError: () => {
-      setTransferStatus("Transfer could not be confirmed. No money was moved; check Transactions before retrying.");
+    onError: (error) => {
+      setTransferStatus(isMfaEnrollmentRequired(error)
+        ? undefined
+        : "Transfer could not be confirmed. No money was moved; check Transactions before retrying.");
       invalidate();
     }
   });
@@ -211,6 +214,11 @@ export function MoveMoneyPage() {
                 ? "Authorization status is taking longer than expected. Do not submit another transfer; refresh status or check Transactions."
                 : transferStatus}
           />
+          {isMfaEnrollmentRequired(transferMutation.error) ? (
+            <p role="status" className="text-sm text-amber-800">
+              <Link className="font-semibold underline" to="/security">Open Security and set up an authenticator</Link>, then start a new transfer.
+            </p>
+          ) : null}
           <Field label="From account" error={transferForm.formState.errors.fromAccountId?.message}>
             <AccountSelect field={transferForm.register("fromAccountId")} debitSource amount={transferAmount} />
           </Field>
@@ -338,12 +346,24 @@ function friendlyMovementError(error: unknown, operation: string) {
       ? Object.values(payload as Record<string, unknown>).filter((value) => typeof value === "string").join(" ")
       : "";
     const combined = `${error.message} ${payloadText}`.toLowerCase();
+    if (isMfaEnrollmentRequired(error)) {
+      return "Additional verification is required, but this profile has no authenticator. No money moved.";
+    }
     if (combined.includes("insufficient")) return "Insufficient funds. No money moved. Your available balance was unchanged.";
     if (error.status === 409) return `This ${operation} is already being processed. Check Transactions before retrying.`;
     if (error.status >= 500) return `The ${operation} could not be confirmed. No new submission was made; check Transactions before retrying.`;
     return error.message;
   }
   return error instanceof Error ? error.message : `The ${operation} could not be confirmed.`;
+}
+
+function isMfaEnrollmentRequired(error: unknown) {
+  if (!(error instanceof ApiError)) return false;
+  const payload = error.payload;
+  const payloadText = typeof payload === "object" && payload !== null
+    ? Object.values(payload as Record<string, unknown>).filter((value) => typeof value === "string").join(" ")
+    : String(payload ?? "");
+  return `${error.message} ${payloadText}`.toUpperCase().includes("MFA_ENROLLMENT_REQUIRED");
 }
 
 function MoneyFields({ form }: { form: ReturnType<typeof useForm<MoneyMovementValues>> }) {

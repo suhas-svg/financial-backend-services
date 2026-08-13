@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { createAccount, listAccounts, listLedgerAccounts, updateAccount } from "../lib/queries";
+import { createAccount, listLedgerAccounts, listOwnedAccounts, updateAccount } from "../lib/queries";
 import { accountSchema, type AccountValues } from "../lib/schemas";
 import { compactDate, money } from "../lib/format";
 import { invalidateInBackground, MONEY_STATE_REFRESH_INTERVAL_MS } from "../lib/queryInvalidation";
@@ -17,7 +17,7 @@ export function AccountsPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [editing, setEditing] = useState<Account | null>(null);
   const [selected, setSelected] = useState<Account | null>(null);
-  const accounts = useQuery({ queryKey: ["accounts", typeFilter], queryFn: () => listAccounts({ accountType: typeFilter || undefined }), refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
+  const accounts = useQuery({ queryKey: ["accounts", "owned", typeFilter], queryFn: () => listOwnedAccounts({ accountType: typeFilter || undefined }), refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
   const ledgerAccounts = useQuery({ queryKey: ["ledger", "accounts"], queryFn: listLedgerAccounts, retry: false, refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
   const projections = projectionMap(ledgerAccounts.data);
   const form = useForm<AccountValues>({

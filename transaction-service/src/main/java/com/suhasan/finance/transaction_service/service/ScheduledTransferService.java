@@ -51,6 +51,7 @@ public class ScheduledTransferService {
     private final TransactionService transactionService;
     private final TransactionRepository transactionRepository;
     private final ResilientAccountServiceClient accountServiceClient;
+    private final CustomerNotificationDispatcher notificationDispatcher;
     private final MetricsService metricsService;
     private final TransactionTemplate transactionTemplate;
 
@@ -516,8 +517,7 @@ public class ScheduledTransferService {
 
     private void emitNotification(ScheduledTransfer schedule, String type, String severity, String title,
                                   String message, String lifecycleKey) {
-        try {
-            accountServiceClient.createNotification(ResilientAccountServiceClient.NotificationRequest.builder()
+        notificationDispatcher.dispatchAfterCommit(ResilientAccountServiceClient.NotificationRequest.builder()
                     .userId(schedule.getUserId())
                     .type(type)
                     .severity(severity)
@@ -527,10 +527,6 @@ public class ScheduledTransferService {
                     .sourceId(schedule.getScheduleId())
                     .dedupeKey("scheduled-transfer:%s:%s".formatted(schedule.getScheduleId(), lifecycleKey))
                     .build());
-        } catch (RuntimeException e) {
-            log.warn("Failed to create scheduled transfer notification for schedule {}: {}",
-                    schedule.getScheduleId(), e.getMessage());
-        }
     }
 
     private record ClaimedScheduledTransfer(

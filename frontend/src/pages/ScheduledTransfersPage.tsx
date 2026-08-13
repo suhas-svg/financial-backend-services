@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { Badge, Button, EmptyState, ErrorNotice, Field, Input, Panel, Select } from "../components/ui";
 import { availableBalance } from "../lib/accountBalances";
 import { compactDate, money } from "../lib/format";
-import { cancelScheduledTransfer, createScheduledTransfer, listAccounts, listBeneficiaries, listScheduledTransferRuns, listScheduledTransfers, pauseScheduledTransfer, resumeScheduledTransfer } from "../lib/queries";
+import { cancelScheduledTransfer, createScheduledTransfer, listBeneficiaries, listOwnedAccounts, listScheduledTransferRuns, listScheduledTransfers, pauseScheduledTransfer, resumeScheduledTransfer } from "../lib/queries";
 import { scheduledTransferSchema, type ScheduledTransferValues } from "../lib/schemas";
 import type { Account, Beneficiary, ScheduledTransfer, ScheduledTransferStatus } from "../types";
 
@@ -36,7 +36,7 @@ export function ScheduledTransfersPage() {
     }
   });
 
-  const accounts = useQuery({ queryKey: ["accounts"], queryFn: () => listAccounts() });
+  const accounts = useQuery({ queryKey: ["accounts", "owned"], queryFn: () => listOwnedAccounts() });
   const beneficiaries = useQuery({ queryKey: ["beneficiaries", "ACTIVE"], queryFn: () => listBeneficiaries({ status: "ACTIVE" }) });
   const schedules = useQuery({ queryKey: ["scheduled-transfers", status], queryFn: () => listScheduledTransfers({ status }) });
   const selected = useMemo(
