@@ -133,6 +133,7 @@ frontend/vite.config.js
 
 # Docker
 .dockerignore
+!frontend/.dockerignore
 
 # Kubernetes secrets
 k8s/secrets.yaml

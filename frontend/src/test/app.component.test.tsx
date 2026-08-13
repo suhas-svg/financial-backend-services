@@ -1107,8 +1107,12 @@ describe("customer security", () => {
     renderApp("/security", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
     await user.type(await screen.findByLabelText("Current password"), "secret-password");
     await user.click(screen.getByRole("button", { name: "Set up authenticator" }));
+    const setupHeading = await screen.findByText("Connect your authenticator");
+    expect(setupHeading.parentElement?.parentElement).toHaveClass("dark:bg-[#091713]");
+    expect(screen.getByText("Manual setup key")).toBeInTheDocument();
     expect(await screen.findByText("JBSWY3DPEHPK3PXP")).toBeInTheDocument();
-    await user.type(screen.getByLabelText("Authenticator code"), "123456");
+    await user.type(screen.getByLabelText("Authenticator code"), "12ab3456");
+    expect(screen.getByLabelText("Authenticator code")).toHaveValue("123456");
     await user.click(screen.getByRole("button", { name: "Confirm and enable" }));
 
     expect(await screen.findByText("RECOVERY-ONE")).toBeInTheDocument();
