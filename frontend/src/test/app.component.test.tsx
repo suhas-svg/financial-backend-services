@@ -869,6 +869,32 @@ describe("customer beneficiaries", () => {
     expect(calls.some(({ url, init }) => url.includes("/account-api/api/beneficiaries") && init?.method === "POST")).toBe(false);
   });
 
+  it("does not treat another customer's account as owned for a hybrid admin customer session", async () => {
+    const user = userEvent.setup();
+    const { calls } = mockFetch((url, init) => {
+      if (url.includes("/api/accounts")) {
+        const accounts = url.includes("ownerId=hybrid-admin") ? [sampleAccount] : [sampleAccount, frozenAccount];
+        return jsonResponse({ ...emptyPage, content: accounts, totalElements: accounts.length, totalPages: 1 });
+      }
+      if (url.includes("/api/beneficiaries") && init?.method === "POST") {
+        return jsonResponse({ ...sampleBeneficiary, userId: "hybrid-admin" }, 201);
+      }
+      return undefined;
+    });
+
+    renderApp("/beneficiaries", tokenFor({ sub: "hybrid-admin", roles: ["ROLE_USER", "ROLE_ADMIN"] }));
+
+    await screen.findByRole("heading", { name: "Recipients" });
+    await user.type(screen.getByLabelText("Display name"), "External customer account");
+    await user.type(screen.getByLabelText("Destination account ID"), "202");
+    await user.click(screen.getByRole("button", { name: "Save recipient" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Rent account was saved and is ready to use.");
+    expect(calls.some(({ url }) => url.includes("/api/accounts?") && url.includes("ownerId=hybrid-admin"))).toBe(true);
+    expect(calls.some(({ url, init }) => url.includes("/api/beneficiaries") && init?.method === "POST")).toBe(true);
+    expect(screen.queryByText("This is one of your accounts. Use Move Money to transfer between your own accounts.")).not.toBeInTheDocument();
+  });
+
   it("shows the backend rejection when recipient creation fails", async () => {
     const user = userEvent.setup();
     mockFetch((url, init) => {
@@ -918,6 +944,29 @@ describe("customer beneficiaries", () => {
         && String(init.body).includes("\"beneficiaryId\":\"beneficiary-1\"")
       )).toBe(true);
     });
+  });
+
+  it("directs a customer to Security when transfer verification requires MFA enrollment", async () => {
+    const user = userEvent.setup();
+    mockFetch((url, init) => {
+      if (url.includes("/api/transactions/transfer") && init?.method === "POST") {
+        return jsonResponse({ status: 409, error: "Conflict", message: "MFA_ENROLLMENT_REQUIRED" }, 409);
+      }
+      return undefined;
+    });
+
+    renderApp("/move-money", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
+
+    await waitFor(() => expect(screen.getAllByText(/#101 - CHECKING/).length).toBeGreaterThan(0));
+    await user.selectOptions(screen.getByLabelText("From account"), "101");
+    await user.type(screen.getByLabelText("To account"), "202");
+    await user.clear(screen.getByLabelText("Transfer amount"));
+    await user.type(screen.getByLabelText("Transfer amount"), "10");
+    await user.click(screen.getByRole("button", { name: "Transfer" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Additional verification is required, but this profile has no authenticator. No money moved.");
+    expect(screen.getByRole("link", { name: "Open Security and set up an authenticator" })).toHaveAttribute("href", "/security");
+    expect(screen.queryByText(/already being processed/i)).not.toBeInTheDocument();
   });
 
   it("verifies a challenged transfer before authorizing execution", async () => {

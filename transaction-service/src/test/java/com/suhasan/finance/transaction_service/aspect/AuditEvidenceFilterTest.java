@@ -1,6 +1,5 @@
 package com.suhasan.finance.transaction_service.aspect;
 
-import com.suhasan.finance.transaction_service.service.AuditService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
@@ -19,10 +18,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 class AuditEvidenceFilterTest {
-    private final AuditService auditService = mock(AuditService.class);
+    private final ApiAccessAuditRecorder auditRecorder = mock(ApiAccessAuditRecorder.class);
     private final AuditEvidenceFilter filter = new AuditEvidenceFilter(
-            new StaticListableBeanFactory(java.util.Map.of("auditService", auditService))
-                    .getBeanProvider(AuditService.class));
+            new StaticListableBeanFactory(java.util.Map.of("auditRecorder", auditRecorder))
+                    .getBeanProvider(ApiAccessAuditRecorder.class));
 
     @AfterEach
     void clearSecurityContext() {
@@ -43,7 +42,7 @@ class AuditEvidenceFilterTest {
 
         filter.doFilter(request, response, (req, res) -> ((MockHttpServletResponse) res).setStatus(422));
 
-        verify(auditService).logApiAccess(
+        verify(auditRecorder).record(
                 eq("/api/transactions/transfer"), eq("POST"), eq("principal-1"), eq("10.0.0.5"), eq(422),
                 longThat(value -> value >= 0));
     }
@@ -55,7 +54,7 @@ class AuditEvidenceFilterTest {
 
         filter.doFilter(request, response, (req, res) -> ((MockHttpServletResponse) res).setStatus(200));
 
-        verifyNoInteractions(auditService);
+        verifyNoInteractions(auditRecorder);
     }
     @Test
     void honorsForwardedIpOnlyForAnExplicitlyTrustedProxy() throws Exception {
@@ -68,7 +67,7 @@ class AuditEvidenceFilterTest {
 
         filter.doFilter(request, response, (req, res) -> ((MockHttpServletResponse) res).setStatus(204));
 
-        verify(auditService).logApiAccess(
+        verify(auditRecorder).record(
                 eq("/api/accounts"), eq("GET"), eq("anonymous"), eq("203.0.113.7"), eq(204),
                 longThat(value -> value >= 0));
     }

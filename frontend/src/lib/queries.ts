@@ -15,6 +15,14 @@ export function listAccounts(params: { ownerId?: string; accountType?: string; s
   return apiRequest<Page<Account>>("account", `/api/accounts${toQuery({ size: 20, ...params })}`);
 }
 
+export function listOwnedAccounts(params: { accountType?: string; status?: AccountStatus | ""; page?: number; size?: number } = {}) {
+  const session = getSession();
+  if (!session) {
+    throw new Error("An authenticated customer session is required to list owned accounts");
+  }
+  return listAccounts({ ...params, ownerId: session.username });
+}
+
 export function listLedgerAccounts() {
   return apiRequest<LedgerAccountProjection[]>("transaction", "/api/ledger/accounts");
 }

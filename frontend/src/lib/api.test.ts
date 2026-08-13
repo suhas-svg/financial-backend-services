@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
-import { addRiskCaseNote, cancelScheduledTransfer, claimRiskCase, createBeneficiary, createRiskCaseFromAlert, createScheduledTransfer, disableBeneficiary, exportInvestigationTimelineCsv, getCustomerJournal, getInvestigationSummary, getInvestigationTimeline, getScheduledTransfer, listBeneficiaries, listLedgerAccounts, listScheduledTransferRuns, listScheduledTransfers, pauseScheduledTransfer, resumeScheduledTransfer, searchAuditEvents, searchRiskAlerts, searchRiskCases, selectOutcomeRepairDraft, updateAccountStatus, updateBeneficiary, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
+import { addRiskCaseNote, cancelScheduledTransfer, claimRiskCase, createBeneficiary, createRiskCaseFromAlert, createScheduledTransfer, disableBeneficiary, exportInvestigationTimelineCsv, getCustomerJournal, getInvestigationSummary, getInvestigationTimeline, getScheduledTransfer, listBeneficiaries, listLedgerAccounts, listOwnedAccounts, listScheduledTransferRuns, listScheduledTransfers, pauseScheduledTransfer, resumeScheduledTransfer, searchAuditEvents, searchRiskAlerts, searchRiskCases, selectOutcomeRepairDraft, updateAccountStatus, updateBeneficiary, updateRiskAlertStatus, updateRiskCaseStatus } from "./queries";
 import { clearSession, saveSession, SESSION_EXPIRED_EVENT } from "./session";
 
 function tokenFor(payload: object) {
@@ -51,6 +51,20 @@ describe("apiRequest", () => {
         headers: expect.objectContaining({ "Idempotency-Key": "idem-1" }),
         body: JSON.stringify({ accountId: "1", amount: 10 })
       })
+    );
+  });
+
+  it("always scopes customer account listings to the authenticated owner, including hybrid admins", async () => {
+    saveSession(tokenFor({ sub: "hybrid-admin", roles: ["ROLE_USER", "ROLE_ADMIN"] }));
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ content: [] }), { status: 200, headers: { "Content-Type": "application/json" } })
+    );
+
+    await listOwnedAccounts({ accountType: "CHECKING" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/account-api/api/accounts?size=20&accountType=CHECKING&ownerId=hybrid-admin",
+      expect.any(Object)
     );
   });
 

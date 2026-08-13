@@ -1,6 +1,5 @@
 package com.suhasan.finance.transaction_service.aspect;
 
-import com.suhasan.finance.transaction_service.service.AuditService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,7 +20,7 @@ import java.util.stream.Collectors;
 @Component
 @RequiredArgsConstructor
 public class AuditEvidenceFilter extends OncePerRequestFilter {
-    private final ObjectProvider<AuditService> auditService;
+    private final ObjectProvider<ApiAccessAuditRecorder> auditRecorder;
 
     @Value("${audit.trusted-proxy.enabled:false}")
     private boolean trustedProxyEnabled;
@@ -39,9 +38,9 @@ public class AuditEvidenceFilter extends OncePerRequestFilter {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             String actor = authentication == null || !authentication.isAuthenticated()
                     ? "anonymous" : authentication.getName();
-            AuditService service = auditService.getIfAvailable();
-            if (service != null) {
-                service.logApiAccess(request.getRequestURI(), request.getMethod(), actor,
+            ApiAccessAuditRecorder recorder = auditRecorder.getIfAvailable();
+            if (recorder != null) {
+                recorder.record(request.getRequestURI(), request.getMethod(), actor,
                         clientIp(request), response.getStatus(), System.currentTimeMillis() - started);
             }
         }

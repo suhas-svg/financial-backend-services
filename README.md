@@ -525,6 +525,10 @@ GET /api/audit/summary?from=&to=
 
 Version 1 stores transaction initiated, completed, failed, reversed, and security events in `transaction-service`. Audit rows are retained for 90 days and intentionally exclude stack traces, JWTs, passwords, authorization headers, and raw token values.
 
+Financial transaction and security audit events are persisted synchronously with their owning workflow. Generic `API_ACCESS` evidence is dispatched to a bounded audit executor so routine dashboard polling does not extend customer response latency. The executor drains for up to 30 seconds during graceful shutdown and uses caller-runs backpressure when saturated or rejected, preserving evidence rather than silently dropping it.
+
+Scheduled-transfer lifecycle notifications are submitted to a bounded executor only after the authoritative schedule transaction commits. Notification-provider latency or failure cannot roll back schedule state; executor saturation applies backpressure, and delivery failures are logged without exposing customer data.
+
 ### Risk Alerts
 
 The admin Risk Alerts page calls the transaction-service risk APIs through the frontend proxy at `/transaction-api/api/risk/*`.
