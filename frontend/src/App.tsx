@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 import { Route, Switch } from "wouter";
 import { Navigate } from "./routing";
 import { AdminLayout } from "./components/AdminLayout";
@@ -9,39 +9,39 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
-
-const AccountsPage = lazy(() => import("./pages/AccountsPage").then((module) => ({ default: module.AccountsPage })));
-const AdminAccountsPage = lazy(() => import("./pages/AdminAccountsPage").then((module) => ({ default: module.AdminAccountsPage })));
-const AdminAuditLogPage = lazy(() => import("./pages/AdminAuditLogPage").then((module) => ({ default: module.AdminAuditLogPage })));
-const AdminInvestigationsPage = lazy(() => import("./pages/AdminInvestigationsPage").then((module) => ({ default: module.AdminInvestigationsPage })));
-const AdminMonitoringPage = lazy(() => import("./pages/AdminMonitoringPage").then((module) => ({ default: module.AdminMonitoringPage })));
-const AdminOverviewPage = lazy(() => import("./pages/AdminOverviewPage").then((module) => ({ default: module.AdminOverviewPage })));
-const AdminReconciliationPage = lazy(() => import("./pages/AdminReconciliationPage").then((module) => ({ default: module.AdminReconciliationPage })));
-const AdminDisputesPage = lazy(() => import("./pages/AdminDisputesPage").then((module) => ({ default: module.AdminDisputesPage })));
-const AdminRiskAlertsPage = lazy(() => import("./pages/AdminRiskAlertsPage").then((module) => ({ default: module.AdminRiskAlertsPage })));
-const AdminRiskCasesPage = lazy(() => import("./pages/AdminRiskCasesPage").then((module) => ({ default: module.AdminRiskCasesPage })));
-const AdminTransactionsPage = lazy(() => import("./pages/AdminTransactionsPage").then((module) => ({ default: module.AdminTransactionsPage })));
-const BeneficiariesPage = lazy(() => import("./pages/BeneficiariesPage").then((module) => ({ default: module.BeneficiariesPage })));
-const DisputesPage = lazy(() => import("./pages/DisputesPage").then((module) => ({ default: module.DisputesPage })));
-const MoveMoneyPage = lazy(() => import("./pages/MoveMoneyPage").then((module) => ({ default: module.MoveMoneyPage })));
-const NotificationsPage = lazy(() => import("./pages/NotificationsPage").then((module) => ({ default: module.NotificationsPage })));
-const OutcomeProtectionPage = lazy(() => import("./pages/OutcomeProtectionPage").then((module) => ({ default: module.OutcomeProtectionPage })));
-const ScheduledTransfersPage = lazy(() => import("./pages/ScheduledTransfersPage").then((module) => ({ default: module.ScheduledTransfersPage })));
-const SecurityPage = lazy(() => import("./pages/SecurityPage").then((module) => ({ default: module.SecurityPage })));
-const StatementsPage = lazy(() => import("./pages/StatementsPage").then((module) => ({ default: module.StatementsPage })));
+import {
+  AccountsPage,
+  AdminAccountsPage,
+  AdminAuditLogPage,
+  AdminDisputesPage,
+  AdminInvestigationsPage,
+  AdminMonitoringPage,
+  AdminOverviewPage,
+  AdminReconciliationPage,
+  AdminRiskAlertsPage,
+  AdminRiskCasesPage,
+  AdminTransactionsPage,
+  BeneficiariesPage,
+  DisputesPage,
+  MoveMoneyPage,
+  NotificationsPage,
+  OutcomeProtectionPage,
+  ScheduledTransfersPage,
+  SecurityPage,
+  StatementsPage
+} from "./routePages";
 
 export function App() {
   const customerRoute = (page: React.ReactNode) => (
-    <RequireAuth><CustomerLayout>{page}</CustomerLayout></RequireAuth>
+    <RequireAuth><CustomerLayout><Suspense fallback={<RouteLoading />}>{page}</Suspense></CustomerLayout></RequireAuth>
   );
   const adminRoute = (page: React.ReactNode) => (
-    <RequireAuth admin><AdminLayout>{page}</AdminLayout></RequireAuth>
+    <RequireAuth admin><AdminLayout><Suspense fallback={<RouteLoading />}>{page}</Suspense></AdminLayout></RequireAuth>
   );
 
   return (
     <>
     <RouteAccessibility />
-    <Suspense fallback={<main id="main-content" className="p-6 text-sm text-muted" role="status" aria-live="polite">Loading...</main>}>
       <Switch>
         <Route path="/login"><LoginPage /></Route>
         <Route path="/register"><RegisterPage /></Route>
@@ -68,7 +68,15 @@ export function App() {
         <Route path="/">{customerRoute(<DashboardPage />)}</Route>
         <Route><Navigate to="/" replace /></Route>
       </Switch>
-    </Suspense>
     </>
+  );
+}
+
+function RouteLoading() {
+  return (
+    <section className="grid min-h-48 content-center justify-items-center gap-3 border border-line bg-panel p-8 text-center" role="status" aria-live="polite">
+      <span className="h-8 w-8 animate-pulse rounded-full bg-emerald-200 dark:bg-emerald-900" aria-hidden="true" />
+      <span className="text-sm font-medium text-muted">Loading workspace…</span>
+    </section>
   );
 }

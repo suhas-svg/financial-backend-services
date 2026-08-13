@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "../routing";
 import { Activity, Bell, ChevronLeft, ChevronRight, CircleHelp, ClipboardList, FolderKanban, Gauge, Landmark, LogOut, Menu, Moon, RefreshCw, Search, Shield, ShieldAlert, Sun, X } from "lucide-react";
 import clsx from "clsx";
+import { preloadAdminRoute } from "../routePages";
 import { Button } from "./ui";
 import { useAuth } from "../state/useAuth";
 
@@ -33,11 +34,15 @@ function NavigationLink({
   collapsed?: boolean;
   onNavigate?: () => void;
 }) {
+  const preload = () => { void preloadAdminRoute(to); };
   return (
     <NavLink
       to={to}
       end={end}
       onClick={onNavigate}
+      onMouseEnter={preload}
+      onFocus={preload}
+      onTouchStart={preload}
       title={collapsed ? label : undefined}
       className={({ isActive }) =>
         clsx(
@@ -86,6 +91,10 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [drawerOpen]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void preloadAdminRoute(); }, 1200);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const goTo = (to: string) => {
     setSearch("");

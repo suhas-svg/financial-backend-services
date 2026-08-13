@@ -6,6 +6,7 @@ import clsx from "clsx";
 import { Button } from "./ui";
 import { useAuth } from "../state/useAuth";
 import { getNotificationSummary } from "../lib/queries";
+import { preloadCustomerRoute } from "../routePages";
 
 const navItems = [
   { to: "/", label: "Dashboard", keywords: "overview home balance", icon: Gauge, end: true },
@@ -23,7 +24,8 @@ const navItems = [
 
 function NavigationLink({ item, collapsed, unread, onNavigate }: { item: typeof navItems[number]; collapsed?: boolean; unread: number; onNavigate?: () => void }) {
   const Icon = item.icon;
-  return <NavLink to={item.to} end={item.end} onClick={onNavigate} title={collapsed ? item.label : undefined} className={({ isActive }) => clsx("customer-nav-link", isActive && "customer-nav-link-active", collapsed && "justify-center px-0")}>
+  const preload = () => { void preloadCustomerRoute(item.to); };
+  return <NavLink to={item.to} end={item.end} onClick={onNavigate} onMouseEnter={preload} onFocus={preload} onTouchStart={preload} title={collapsed ? item.label : undefined} className={({ isActive }) => clsx("customer-nav-link", isActive && "customer-nav-link-active", collapsed && "justify-center px-0")}>
     <Icon className="h-[18px] w-[18px] shrink-0" />
     {collapsed ? <span className="sr-only">{item.label}</span> : <span>{item.label}</span>}
     {item.to === "/notifications" && unread > 0 ? <span className={clsx("customer-unread-badge", collapsed ? "absolute right-1 top-1" : "ml-auto")} aria-label={`${unread} unread notifications`}>{unread > 99 ? "99+" : unread}</span> : null}
@@ -68,6 +70,10 @@ export function CustomerLayout({ children }: { children: ReactNode }) {
     };
     window.addEventListener("keydown", keyboard);
     return () => window.removeEventListener("keydown", keyboard);
+  }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void preloadCustomerRoute(); }, 1200);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const goTo = (to: string) => { setSearch(""); navigate(to); };

@@ -41,11 +41,17 @@ export function SecurityPage() {
             </>
           ) : null}
           {enrollment ? (
-            <div className="grid gap-4 rounded-md border border-line bg-slate-50 p-4">
-              <p className="text-sm">Add this secret to your authenticator app, then enter its 6-digit code.</p>
-              <code className="break-all rounded bg-white p-3 text-sm">{enrollment.secret}</code>
-              <Field label="Authenticator code"><Input name="mfa-enrollment-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value)} /></Field>
-              <Button disabled={code.length !== 6 || confirm.isPending} onClick={() => confirm.mutate()}>Confirm and enable</Button>
+            <div className="grid gap-5 rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-4 shadow-sm dark:border-emerald-900/70 dark:bg-[#091713] sm:p-5">
+              <div>
+                <p className="text-sm font-semibold text-ink dark:text-emerald-50">Connect your authenticator</p>
+                <p className="mt-1 text-sm leading-6 text-muted">Add the setup key below to your authenticator app, then enter the generated 6-digit code.</p>
+              </div>
+              <div className="grid gap-2">
+                <span className="text-xs font-semibold uppercase tracking-[.12em] text-emerald-800 dark:text-emerald-300">Manual setup key</span>
+                <code className="break-all rounded-xl border border-emerald-200 bg-white/80 p-3 font-mono text-sm leading-6 text-emerald-950 shadow-inner dark:border-emerald-900 dark:bg-[#06110e] dark:text-emerald-200">{enrollment.secret}</code>
+              </div>
+              <Field label="Authenticator code"><Input className="h-12 text-center font-mono text-lg tracking-[.3em]" name="mfa-enrollment-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} /></Field>
+              <Button className="h-12" disabled={code.length !== 6 || confirm.isPending} onClick={() => confirm.mutate()}>{confirm.isPending ? "Verifying..." : "Confirm and enable"}</Button>
             </div>
           ) : null}
           {status.data?.enrolled ? (
