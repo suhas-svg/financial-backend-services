@@ -2,6 +2,9 @@
 
 GitHub and the checked-out Git branch are the source of truth.
 
-Before continuing an existing task, verify `git status`, the current branch, and recorded validation before editing.
+Before editing:
 
-Never let two agents edit the same worktree concurrently. Never commit secrets, raw transcripts, browser state, or credentials. Run the relevant frontend and backend checks before claiming completion.
+1. Verify `git status` and the current branch.
+2. Run the relevant frontend and backend checks before claiming completion.
+
+Never commit secrets, raw transcripts, browser state, or credentials.

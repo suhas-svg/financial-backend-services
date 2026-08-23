@@ -386,4 +386,4 @@ git rev-parse --short HEAD
 docker compose -f docker-compose.codex.yml ps
 ```
 
-Expected: clean worktree on `codex/github-main-baseline`, all runtime containers healthy, and the final commit recorded for handoff.
+Expected: clean worktree on `codex/github-main-baseline`, all runtime containers healthy, and the final commit recorded.
