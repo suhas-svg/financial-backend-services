@@ -34,6 +34,9 @@ public class TransferAuthorizationService {
 
     @Transactional
     public TransactionResponse submit(TransferRequest request, String userId, String idempotencyKey) {
+        if (request.getFromAccountId() != null && request.getFromAccountId().equals(request.getToAccountId())) {
+            throw new IllegalArgumentException("Source and destination accounts must be different");
+        }
         String fingerprint = TransferAuthorizationFingerprint.of(userId, request);
         String normalizedKey = normalizeKey(idempotencyKey);
         if (normalizedKey != null) {
@@ -135,18 +138,18 @@ public class TransferAuthorizationService {
     @Transactional(readOnly = true)
     public TransactionResponse status(String authorizationId, String userId) {
         TransferAuthorization authorization = authorizationRepository.findById(authorizationId)
-                .orElseThrow(() -> new IllegalArgumentException("Transfer authorization not found"));
+                .orElseThrow(() -> new com.suhasan.finance.transaction_service.exception.TransactionNotFoundException("Transfer authorization not found: " + authorizationId));
         if (!authorization.getUserId().equals(userId)) {
-            throw new IllegalArgumentException("Transfer authorization not found");
+            throw new com.suhasan.finance.transaction_service.exception.TransactionNotFoundException("Transfer authorization not found: " + authorizationId);
         }
         return response(authorization);
     }
 
     private TransferAuthorization lockedOwned(String id, String userId) {
         TransferAuthorization authorization = authorizationRepository.findByIdWithLock(id)
-                .orElseThrow(() -> new IllegalArgumentException("Transfer authorization not found"));
+                .orElseThrow(() -> new com.suhasan.finance.transaction_service.exception.TransactionNotFoundException("Transfer authorization not found: " + id));
         if (!authorization.getUserId().equals(userId)) {
-            throw new IllegalArgumentException("Transfer authorization not found");
+            throw new com.suhasan.finance.transaction_service.exception.TransactionNotFoundException("Transfer authorization not found: " + id);
         }
         return authorization;
     }
