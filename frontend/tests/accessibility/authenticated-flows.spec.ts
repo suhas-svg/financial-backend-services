@@ -28,7 +28,12 @@ async function mockApis(page: import("@playwright/test").Page, roles: string[]) 
 async function signIn(page: import("@playwright/test").Page, admin: boolean) {
   await mockApis(page, admin ? ["ROLE_ADMIN"] : ["ROLE_USER"]);
   await page.goto("/login");
-  if (admin) await page.getByRole("button", { name: "Admin operations" }).click();
+  if (admin) {
+    await page.getByRole("button", { name: "Admin operations" }).click();
+    // Switching portals remounts the form; filling before the remount loses
+    // the values, so wait until the admin inputs are on the page.
+    await page.locator("#login-admin-username").waitFor({ state: "visible" });
+  }
   await page.getByLabel("Username").fill("synthetic-tester");
   await page.getByLabel("Password", { exact: true }).fill("synthetic-only-password");
   await page.getByRole("button", { name: "Sign in" }).click();

@@ -97,6 +97,7 @@ Passing checks:
   - `npm.cmd test -- --reporter=dot`: `4` files, `47` tests passed
   - `npm.cmd run lint`: exit `0`
   - `npm.cmd run build`: exit `0`; Vite emitted only the pre-existing chunk-size warning
+  - `npm.cmd run build`: exit `0`; Vite emitted only the pre-existing chunk-size warning
 Full transaction-service suite status:
 
 - `.\mvnw.cmd -q test`

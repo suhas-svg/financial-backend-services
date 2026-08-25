@@ -445,7 +445,7 @@ Commit with `feat(ledger): add controlled bootstrap and operations telemetry` an
 
 - [ ] **Step 1: Run all static and unit verification**
 
-Run account tests, transaction tests, frontend tests/lint/build, and handoff tests. Record exact counts.
+Run account tests, transaction tests, and frontend tests/lint/build. Record exact counts.
 
 - [ ] **Step 2: Run clean-volume Docker migration verification**
 
