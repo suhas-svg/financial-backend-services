@@ -91,9 +91,28 @@ public class TransactionServiceImpl implements TransactionService {
 
         long startTime = System.currentTimeMillis();
         String transactionId = UUID.randomUUID().toString();
-        AccountDto fromAccount = accountServiceClient.getAccount(request.getFromAccountId());
+        if (request.getFromAccountId().equals(request.getToAccountId())) {
+            throw new IllegalArgumentException("Source and destination accounts must be different");
+        }
+        AccountDto fromAccount = null;
+        try {
+            fromAccount = accountServiceClient.getAccount(request.getFromAccountId());
+        } catch (Exception e) {
+            // For scheduled execution without a user JWT the user-scoped lookup
+            // returns 401/null or throws. Fall through to internal lookup.
+            log.debug("User-scoped account lookup failed for {}: {}", request.getFromAccountId(), e.getMessage());
+        }
         if (fromAccount == null) {
-            throw new IllegalArgumentException("From account not found");
+            // Scheduled execution runs without a user JWT; fall back to internal lookup
+            // so that validated schedules can still resolve their source account.
+            try {
+                fromAccount = accountServiceClient.getAccountInternal(request.getFromAccountId());
+            } catch (Exception ignored) {
+                // fall through to the not-found error below
+            }
+            if (fromAccount == null) {
+                throw new IllegalArgumentException("From account not found");
+            }
         }
         ensureAccountOwnedByUser(fromAccount, userId);
         ensureAccountAllowsDebit(fromAccount, request.getFromAccountId(), userId);
@@ -288,6 +307,10 @@ public class TransactionServiceImpl implements TransactionService {
                 throw new IllegalArgumentException("To account not found");
             }
             String currency = transaction.getCurrency();
+            String toAccountCurrency = firstNonBlank(toAccount.getCurrency(), "USD").trim().toUpperCase(Locale.ROOT);
+            if (!toAccountCurrency.equals(currency)) {
+                throw new IllegalArgumentException("Transfer currency does not match destination account currency");
+            }
             UUID sourceAccountId = accountLedgerResolver.resolveCustomerAccount(
                     request.getFromAccountId(), fromAccount);
             UUID destinationAccountId = accountLedgerResolver.resolveCustomerAccount(
@@ -702,6 +725,9 @@ public class TransactionServiceImpl implements TransactionService {
         if (isInsufficientFunds(failure)) {
             return new InsufficientFundsException("Insufficient funds. No money moved.", failure);
         }
+        if (failure instanceof IllegalArgumentException) {
+            return (IllegalArgumentException) failure;
+        }
         return new RuntimeException(operation + " failed: "
                 + firstNonBlank(failure.getMessage(), "processing could not be confirmed"), failure);
     }
@@ -735,7 +761,7 @@ public class TransactionServiceImpl implements TransactionService {
     @Override
     public TransactionResponse getTransaction(String transactionId) {
         Transaction transaction = transactionRepository.findById(transactionId)
-                .orElseThrow(() -> new IllegalArgumentException("Transaction not found: " + transactionId));
+                .orElseThrow(() -> new com.suhasan.finance.transaction_service.exception.TransactionNotFoundException("Transaction not found: " + transactionId));
         assertCanAccessTransaction(transaction);
         return mapToResponse(transaction);
     }
