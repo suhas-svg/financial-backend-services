@@ -271,6 +271,13 @@ public class ResilientAccountServiceClient {
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceToken)
                     .retrieve().bodyToMono(AccountDto.class)
                     .timeout(Duration.ofMillis(timeout)).block();
+        } catch (WebClientResponseException.NotFound e) {
+            return null;
+        } catch (WebClientResponseException e) {
+            if (e.getStatusCode().is4xxClientError()) {
+                throw new IllegalArgumentException("To account not found: " + accountId);
+            }
+            throw mapServiceException("internal account lookup", e);
         } catch (Exception e) {
             throw mapServiceException("internal account lookup", e);
         }

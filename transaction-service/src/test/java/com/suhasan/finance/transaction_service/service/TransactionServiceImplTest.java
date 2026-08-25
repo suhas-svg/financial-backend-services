@@ -681,7 +681,8 @@ class TransactionServiceImplTest {
                 when(transactionRepository.findById(transactionId)).thenReturn(Optional.empty());
 
                 // Act & Assert
-                IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                com.suhasan.finance.transaction_service.exception.TransactionNotFoundException exception = assertThrows(
+                                com.suhasan.finance.transaction_service.exception.TransactionNotFoundException.class,
                                 () -> transactionService.getTransaction(transactionId));
 
                 assertEquals("Transaction not found: nonexistent", exception.getMessage());

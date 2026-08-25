@@ -49,6 +49,10 @@ export const transferSchema = z.object({
   description: z.string().max(500).optional(),
   reference: z.string().max(100).optional(),
   currency
+}).superRefine((value, ctx) => {
+  if (value.fromAccountId && value.toAccountId && value.fromAccountId === value.toAccountId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["toAccountId"], message: "Destination must be different from source" });
+  }
 });
 
 export const beneficiarySchema = z.object({
