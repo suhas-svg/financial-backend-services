@@ -95,22 +95,34 @@ public class TransactionServiceImpl implements TransactionService {
             throw new IllegalArgumentException("Source and destination accounts must be different");
         }
         AccountDto fromAccount = null;
+        Exception lookupFailure = null;
         try {
             fromAccount = accountServiceClient.getAccount(request.getFromAccountId());
         } catch (Exception e) {
+            lookupFailure = e;
             // For scheduled execution without a user JWT the user-scoped lookup
-            // returns 401/null or throws. Fall through to internal lookup.
+            // returns 401/null or throws. Fall through to internal lookup only for
+            // authentication-related failures, not for 5xx unavailability.
             log.debug("User-scoped account lookup failed for {}: {}", request.getFromAccountId(), e.getMessage());
+            if (e instanceof com.suhasan.finance.transaction_service.exception.AccountServiceUnavailableException) {
+                // 5xx / circuit-breaker — propagate as 503, do not fall back to internal
+                // which would incorrectly mask the outage.
+                throw e;
+            }
         }
         if (fromAccount == null) {
             // Scheduled execution runs without a user JWT; fall back to internal lookup
             // so that validated schedules can still resolve their source account.
+            // Only for null due to 4xx/401, not for 5xx which already threw above.
             try {
                 fromAccount = accountServiceClient.getAccountInternal(request.getFromAccountId());
             } catch (Exception ignored) {
                 // fall through to the not-found error below
             }
             if (fromAccount == null) {
+                if (lookupFailure instanceof com.suhasan.finance.transaction_service.exception.AccountServiceUnavailableException) {
+                    throw (com.suhasan.finance.transaction_service.exception.AccountServiceUnavailableException) lookupFailure;
+                }
                 throw new IllegalArgumentException("From account not found");
             }
         }
