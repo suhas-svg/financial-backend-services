@@ -46,6 +46,10 @@ public class StepUpChallengeService {
         return new StepUpInternalDtos.CreateChallengeResponse(challenge.getChallengeId(), challenge.getExpiresAt());
     }
 
+    // The attempt counter is incremented and then a RuntimeException is thrown on a bad credential.
+    // Without noRollbackFor the surrounding transaction rolls back and the recorded attempt is
+    // discarded, so the challenge would never actually reach its attempt limit.
+    @Transactional(noRollbackFor = MfaVerificationException.class)
     public MfaResponses.ChallengeVerificationResponse verify(final String challengeId, final String username, final String credential) {
         final StepUpChallenge challenge = locked(challengeId);
         assertOwner(challenge, username);

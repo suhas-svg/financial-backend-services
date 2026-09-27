@@ -5,6 +5,9 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.NoSuchBeanDefinitionException;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -28,7 +31,32 @@ class HealthControllerTest {
         uptime = new AtomicInteger(9);
         Gauge.builder("application_uptime_seconds", uptime, AtomicInteger::doubleValue)
                 .register(meters);
-        controller = new HealthController(deployments, meters);
+        controller = new HealthController(deployments, meters, emptyJdbcProvider());
+    }
+
+    /** No JdbcTemplate: the health checks must degrade to UNKNOWN rather than invent a status. */
+    private static ObjectProvider<JdbcTemplate> emptyJdbcProvider() {
+        return new ObjectProvider<JdbcTemplate>() {
+            @Override
+            public JdbcTemplate getObject(Object... args) {
+                throw new NoSuchBeanDefinitionException(JdbcTemplate.class);
+            }
+
+            @Override
+            public JdbcTemplate getObject() {
+                throw new NoSuchBeanDefinitionException(JdbcTemplate.class);
+            }
+
+            @Override
+            public JdbcTemplate getIfAvailable() {
+                return null;
+            }
+
+            @Override
+            public JdbcTemplate getIfUnique() {
+                return null;
+            }
+        };
     }
 
     @Test
@@ -58,7 +86,11 @@ class HealthControllerTest {
 
         when(deployments.performHealthCheck()).thenThrow(new IllegalStateException("health failed"));
         assertThat(controller.getHealthStatus().getStatusCode().value()).isEqualTo(503);
-        assertThat(controller.getHealthStatus().getBody()).containsEntry("error", "health failed");
+        // /api/health/status is reachable without authentication, so the raw driver/exception
+        // message must not be echoed back to the caller.
+        assertThat(controller.getHealthStatus().getBody())
+                .containsEntry("error", "Health status could not be determined")
+                .doesNotContainValue("health failed");
         assertThat(controller.triggerHealthCheck().getStatusCode().value()).isEqualTo(503);
         assertThat(controller.triggerHealthCheck().getBody()).containsEntry("healthy", false);
     }
@@ -70,7 +102,8 @@ class HealthControllerTest {
 
         var brokenMeters = mock(io.micrometer.core.instrument.MeterRegistry.class);
         when(brokenMeters.find("deployment_total")).thenThrow(new IllegalStateException("metrics unavailable"));
-        assertThat(new HealthController(deployments, brokenMeters).getMetricsSummary().getStatusCode().value())
+        assertThat(new HealthController(deployments, brokenMeters, emptyJdbcProvider())
+                .getMetricsSummary().getStatusCode().value())
                 .isEqualTo(500);
     }
 

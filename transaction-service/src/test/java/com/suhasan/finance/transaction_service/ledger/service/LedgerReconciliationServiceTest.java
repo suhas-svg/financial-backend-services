@@ -35,6 +35,7 @@ class LedgerReconciliationServiceTest {
 
     private LedgerReconciliationService service;
     private LocalDate businessDate;
+    private String LOCK_KEY;
 
     @BeforeEach
     void setUp() {
@@ -49,18 +50,18 @@ class LedgerReconciliationServiceTest {
                 accountRepository,
                 checkResultRepository);
         businessDate = LocalDate.of(2026, 6, 24);
+        LOCK_KEY = ReconciliationRunRepository.dailyRunLockKey(businessDate, ReconciliationType.DAILY_LEDGER);
     }
 
     @Test
     void dailyRunUsesAdvisoryLockToPreventConcurrentRunsForSameBusinessDate() {
-        when(runRepository.tryAcquireDailyRunLock(businessDate, ReconciliationType.DAILY_LEDGER))
-                .thenReturn(false);
+        when(runRepository.tryAcquireDailyRunLock(LOCK_KEY)).thenReturn(false);
 
         assertThatThrownBy(() -> service.runDaily(businessDate, "ops"))
                 .isInstanceOf(ReconciliationAlreadyRunningException.class)
                 .hasMessageContaining("already running");
 
-        verify(runRepository).tryAcquireDailyRunLock(businessDate, ReconciliationType.DAILY_LEDGER);
+        verify(runRepository).tryAcquireDailyRunLock(LOCK_KEY);
         verifyNoInteractions(journalRepository, postingRepository, projectionRepository, exceptionRepository);
     }
 
@@ -75,8 +76,7 @@ class LedgerReconciliationServiceTest {
                 journalId,
                 null,
                 "Existing imbalance");
-        when(runRepository.tryAcquireDailyRunLock(businessDate, ReconciliationType.DAILY_LEDGER))
-                .thenReturn(true);
+        when(runRepository.tryAcquireDailyRunLock(LOCK_KEY)).thenReturn(true);
         when(runRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(journalRepository.findAllByEffectiveDateLessThanEqual(businessDate)).thenReturn(List.of(journal));
         when(stateRepository.findFirstByJournalIdOrderByEventSequenceDesc(journalId))
@@ -101,8 +101,7 @@ class LedgerReconciliationServiceTest {
         UUID journalId = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
         JournalTransaction journal = journal(journalId, "JRN-2", businessDate);
         LedgerBalanceProjection projection = LedgerBalanceProjection.open(accountId, new BigDecimal("99.00"));
-        when(runRepository.tryAcquireDailyRunLock(businessDate, ReconciliationType.DAILY_LEDGER))
-                .thenReturn(true);
+        when(runRepository.tryAcquireDailyRunLock(LOCK_KEY)).thenReturn(true);
         when(runRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(journalRepository.findAllByEffectiveDateLessThanEqual(businessDate)).thenReturn(List.of(journal));
         when(stateRepository.findFirstByJournalIdOrderByEventSequenceDesc(journalId))
@@ -140,7 +139,7 @@ class LedgerReconciliationServiceTest {
         LedgerBalanceProjection customerProjection = LedgerBalanceProjection.open(accountId, new BigDecimal("100.00"));
         LedgerBalanceProjection clearingProjection = LedgerBalanceProjection.open(clearingId, BigDecimal.ZERO);
 
-        when(runRepository.tryAcquireDailyRunLock(businessDate, ReconciliationType.DAILY_LEDGER)).thenReturn(true);
+        when(runRepository.tryAcquireDailyRunLock(LOCK_KEY)).thenReturn(true);
         when(runRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(journalRepository.findAllByEffectiveDateLessThanEqual(businessDate)).thenReturn(List.of(original, reversal));
         when(stateRepository.findFirstByJournalIdOrderByEventSequenceDesc(originalId))

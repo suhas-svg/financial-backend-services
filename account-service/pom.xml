@@ -66,6 +66,17 @@
       <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
 
+    <!--
+      AOP. Required for MfaEnrollmentKeyVersionAspect: Spring Boot's
+      AopAutoConfiguration is @ConditionalOnClass(Aspect.class), so without this
+      starter the @Aspect bean is created but never woven and the advice silently
+      does not run.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-aop</artifactId>
+    </dependency>
+
     <!-- DevTools -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

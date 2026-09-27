@@ -194,3 +194,14 @@ logs.txt
 **/.env
 **/.env.*
 !**/.env.example
+
+# ── Coding-agent local state ────────────────────────────────────────────────
+# AGENTS.md forbids committing raw transcripts or browser state. These tool
+# directories hold session transcripts, screenshots, and captured browser state.
+.agents/
+.claude/
+.codex/
+.omo/
+.opencode/
+.aider*
+.cursor/
