@@ -7,9 +7,12 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.File;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -33,6 +36,16 @@ public class HealthController {
 
     private final DeploymentTrackingService deploymentTrackingService;
     private final MeterRegistry meterRegistry;
+
+    /**
+     * Optional: absent in {@code @WebMvcTest} slices, which do not auto-configure JDBC. When it is
+     * missing the health checks report {@code UNKNOWN} rather than fabricating an "UP".
+     */
+    private final ObjectProvider<JdbcTemplate> jdbcTemplateProvider;
+
+    private JdbcTemplate jdbcTemplate() {
+        return jdbcTemplateProvider.getIfAvailable();
+    }
     
     /**
      * Simple test endpoint to check if health endpoints are accessible
@@ -69,9 +82,11 @@ public class HealthController {
         } catch (Exception e) {
             log.error("Error getting health status", e);
             healthStatus.put("status", "DOWN");
-            healthStatus.put("error", e.getMessage());
+            // Do not echo the raw exception message: /api/health/status is reachable without
+            // authentication, and driver/connection messages can disclose host, port or DSN detail.
+            healthStatus.put("error", "Health status could not be determined");
             healthStatus.put("timestamp", Instant.now().toString());
-            
+
             return ResponseEntity.status(503).body(healthStatus);
         }
     }
@@ -190,13 +205,11 @@ public class HealthController {
     // Helper methods
     private Map<String, Object> getDetailedHealthChecks() {
         final Map<String, Object> checks = new HashMap<>();
-        
-        // Database health
-        checks.put("database", Map.of(
-            "status", "UP",
-            "details", "Database connection is healthy"
-        ));
-        
+
+        // Database health — a real connectivity probe. This used to report a hard-coded "UP" with
+        // the detail "Database connection is healthy", which asserted a check that never ran.
+        checks.put("database", databaseHealthCheck());
+
         // Memory health
         final Runtime runtime = Runtime.getRuntime();
         final long maxMemory = runtime.maxMemory();
@@ -204,7 +217,7 @@ public class HealthController {
         final long freeMemory = runtime.freeMemory();
         final long usedMemory = totalMemory - freeMemory;
         final double memoryUsagePercent = (double) usedMemory / maxMemory * 100;
-        
+
         checks.put("memory", Map.of(
             "status", memoryUsagePercent < 85.0 ? "UP" : "DOWN",
             "details", Map.of(
@@ -213,20 +226,64 @@ public class HealthController {
                 "usage_percent", Math.round(memoryUsagePercent * 100.0) / 100.0
             )
         ));
-        
-        // Disk health
-        checks.put("disk", Map.of(
-            "status", "UP",
-            "details", "Disk space is sufficient"
-        ));
-        
-        // External services health
+
+        // Disk health — a real usable-space probe rather than a hard-coded "UP".
+        checks.put("disk", diskHealthCheck());
+
+        // External service reachability is asserted by Spring Boot Actuator's own health
+        // contributors; this controller does not probe them, so it must not claim they are UP.
         checks.put("external_services", Map.of(
-            "status", "UP",
-            "details", "All external services are reachable"
+            "status", "UNKNOWN",
+            "details", "Not evaluated here. See /actuator/health for authoritative component health."
         ));
-        
+
         return checks;
+    }
+
+    private Map<String, Object> databaseHealthCheck() {
+        final JdbcTemplate jdbc = jdbcTemplate();
+        if (jdbc == null) {
+            return Map.of(
+                    "status", "UNKNOWN",
+                    "details", "No JDBC template available; database health not evaluated here.");
+        }
+        try {
+            // A cheap validation query: if the datasource cannot produce a connection, this throws.
+            final Integer one = jdbc.queryForObject("select 1", Integer.class);
+            return "1".equals(String.valueOf(one))
+                    ? Map.of("status", "UP", "details", "Database connection is healthy")
+                    : Map.of("status", "DOWN", "details", "Unexpected database probe result");
+        } catch (Exception e) {
+            // Report the failure category only; the raw driver message can contain connection
+            // details that must not be exposed to an unauthenticated caller of /api/health/status.
+            log.warn("Database health probe failed", e);
+            return Map.of(
+                    "status", "DOWN",
+                    "details", "Database is not reachable",
+                    "error_type", e.getClass().getSimpleName());
+        }
+    }
+
+    private Map<String, Object> diskHealthCheck() {
+        final File file = new File(".");
+        try {
+            final long usable = file.getUsableSpace();
+            final long total = file.getTotalSpace();
+            final double usedPercent = total > 0 ? ((double) (total - usable) / total) * 100.0 : 0.0;
+            return Map.of(
+                    "status", usedPercent < 90.0 ? "UP" : "DOWN",
+                    "details", Map.of(
+                            "path", file.getAbsolutePath(),
+                            "usable_bytes", usable,
+                            "total_bytes", total,
+                            "used_percent", Math.round(usedPercent * 100.0) / 100.0));
+        } catch (Exception e) {
+            log.warn("Disk health probe failed", e);
+            return Map.of(
+                    "status", "UNKNOWN",
+                    "details", "Disk space could not be determined",
+                    "error_type", e.getClass().getSimpleName());
+        }
     }
 
     private double getCounterValue(final String meterName) {

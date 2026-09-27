@@ -43,6 +43,22 @@ public class MfaMethod {
     @Column(name = "last_used_at")
     private Instant lastUsedAt;
 
+    /**
+     * Consecutive failed TOTP verifications. Reset to zero on any successful verification and
+     * cleared when the lockout window elapses, so a user who mistypes a few codes is not
+     * permanently locked out.
+     */
+    @Column(name = "failed_verification_attempts", nullable = false)
+    private int failedVerificationAttempts;
+
+    /**
+     * Set when failed_verification_attempts reaches the configured maximum. While this is in the
+     * future, TOTP verification is refused without consulting the secret at all, which bounds an
+     * online guessing attack against the six-digit code space.
+     */
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
+
     @Version
     @Column(nullable = false)
     private Long version = 0L;

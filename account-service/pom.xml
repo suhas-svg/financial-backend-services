@@ -21,7 +21,10 @@
   <properties>
     <java.version>21</java.version>
     <testcontainers.version>1.21.4</testcontainers.version>
-    <tomcat.version>10.1.55</tomcat.version>
+    <!-- 10.1.58 was never published to Maven Central; 10.1.60 is the current 10.1.x
+         release and is past the 10.1.58 fix line for CVE-2026-68525. -->
+    <tomcat.version>10.1.60</tomcat.version>
+    <bouncycastle.version>1.85</bouncycastle.version>
     <jackson-bom.version>2.21.4</jackson-bom.version>
     <postgresql.version>42.7.12</postgresql.version>
     <maven.compiler.source>21</maven.compiler.source>
@@ -66,6 +69,17 @@
       <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
 
+    <!--
+      AOP. Required for MfaEnrollmentKeyVersionAspect: Spring Boot's
+      AopAutoConfiguration is @ConditionalOnClass(Aspect.class), so without this
+      starter the @Aspect bean is created but never woven and the advice silently
+      does not run.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-aop</artifactId>
+    </dependency>
+
     <!-- DevTools -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -95,6 +109,17 @@
       <groupId>net.logstash.logback</groupId>
       <artifactId>logstash-logback-encoder</artifactId>
       <version>7.4</version>
+    </dependency>
+
+    <!--
+      Pin the transitive Bouncy Castle provider to the release that fixes CVE-2026-8763,
+      CVE-2026-13506 and CVE-2026-65905. Without this the container scan resolves an
+      affected version through the dependency graph and fails the required acceptance gate.
+    -->
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk18on</artifactId>
+      <version>${bouncycastle.version}</version>
     </dependency>
     
     <!-- PostgreSQL Driver -->

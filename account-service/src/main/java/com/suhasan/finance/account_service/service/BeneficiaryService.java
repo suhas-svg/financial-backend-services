@@ -30,13 +30,16 @@ public class BeneficiaryService {
     public BeneficiaryResponse create(final String userId, final BeneficiaryCreateRequest request) {
         final String destinationAccountId = requiredText(request.getDestinationAccountId(), "Destination account is required");
         final String currency = requiredText(request.getCurrency(), "Currency is required").toUpperCase(Locale.ROOT);
+        // Collapse every destination-account failure into one indistinguishable outcome. Distinct
+        // messages here would let any authenticated caller enumerate foreign account IDs and read
+        // each account's currency, bypassing the owner check enforced by AccountController.
         final Account destination = accountRepository.findById(parseAccountId(destinationAccountId))
-                .orElseThrow(() -> new IllegalArgumentException("Destination account not found"));
+                .orElseThrow(BeneficiaryService::destinationRejected);
         if (userId.equals(destination.getOwnerId())) {
             throw new IllegalArgumentException("Beneficiary destination cannot be one of your own accounts");
         }
         if (!currency.equals(destination.getCurrency())) {
-            throw new IllegalArgumentException("Beneficiary currency must match destination account currency");
+            throw destinationRejected();
         }
         if (beneficiaryRepository.existsByUserIdAndDestinationAccountIdAndCurrencyAndStatus(
                 userId, destinationAccountId, currency, BeneficiaryStatus.ACTIVE)) {
@@ -93,6 +96,14 @@ public class BeneficiaryService {
     private Beneficiary findOwned(final String beneficiaryId, final String userId) {
         return beneficiaryRepository.findByBeneficiaryIdAndUserId(beneficiaryId, userId)
                 .orElseThrow(() -> new AccessDeniedException("Beneficiary not found"));
+    }
+
+    /**
+     * Single indistinguishable rejection for every unusable destination account. The message must not
+     * reveal whether the account exists or what currency it holds.
+     */
+    private static IllegalArgumentException destinationRejected() {
+        return new IllegalArgumentException("Destination account cannot be used as a beneficiary");
     }
 
     private Long parseAccountId(final String accountId) {

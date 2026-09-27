@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +31,19 @@ import java.util.List;
 public class MfaService {
     private static final String METHOD = "TOTP";
     private static final int RECOVERY_CODE_COUNT = 8;
+
+    /**
+     * Consecutive failed TOTP verifications tolerated before the code space is refused outright.
+     * Bounds online guessing against a six-digit code to a few hundred attempts per lockout.
+     */
+    static final int MAX_VERIFICATION_ATTEMPTS = 5;
+
+    /** How long a locked method refuses codes before the attempt counter is cleared. */
+    static final Duration VERIFICATION_LOCKOUT = Duration.ofMinutes(15);
+
+    /** Returned for every verification failure so callers cannot distinguish a wrong code from a lockout. */
+    private static final String INVALID_CODE_MESSAGE = "Invalid authentication code";
+
     private final MfaMethodRepository methodRepository;
     private final MfaRecoveryCodeRepository recoveryCodeRepository;
     private final UserRepository userRepository;
@@ -67,12 +81,10 @@ public class MfaService {
         return new MfaResponses.EnrollmentResponse(secret, totpService.provisioningUri(username, secret));
     }
 
+    @Transactional(noRollbackFor = MfaVerificationException.class)
     public MfaResponses.ConfirmationResponse confirm(final String username, final String code) {
         final MfaMethod method = requireMethod(username, MfaMethodStatus.PENDING);
-        if (!totpService.verify(secretManager.decrypt(method.getSecretCiphertext(), method.getSecretKeyId()),
-                code, Instant.now())) {
-            throw new MfaVerificationException("Invalid authentication code");
-        }
+        verifyTotpOrThrow(method, code);
         method.setStatus(MfaMethodStatus.ACTIVE);
         method.setVerifiedAt(Instant.now());
         methodRepository.save(method);
@@ -85,16 +97,60 @@ public class MfaService {
         return new MfaResponses.RecoveryCodesResponse(replaceRecoveryCodes(requireMethod(username, MfaMethodStatus.ACTIVE)));
     }
 
+    @Transactional(noRollbackFor = MfaVerificationException.class)
     public void disable(final String username, final String currentPassword, final String code) {
         requirePassword(username, currentPassword);
         final MfaMethod method = requireMethod(username, MfaMethodStatus.ACTIVE);
-        if (!totpService.verify(secretManager.decrypt(method.getSecretCiphertext(), method.getSecretKeyId()),
-                code, Instant.now())) {
-            throw new MfaVerificationException("Invalid authentication code");
-        }
+        verifyTotpOrThrow(method, code);
         method.setStatus(MfaMethodStatus.DISABLED);
         methodRepository.save(method);
         recoveryCodeRepository.deleteByMfaMethodId(method.getId());
+    }
+
+    /**
+     * Verifies a TOTP code with a consecutive-failure lockout.
+     *
+     * <p>While locked, the secret is not decrypted or compared at all, which bounds online guessing
+     * against the six-digit code space. A wrong code and a locked method raise the same message so a
+     * caller cannot use the response to learn whether a guess was "closer" than another. Successful
+     * verification clears the counter.
+     */
+    private void verifyTotpOrThrow(final MfaMethod method, final String code) {
+        final Instant now = Instant.now();
+        if (isLocked(method, now)) {
+            throw new MfaVerificationException(INVALID_CODE_MESSAGE);
+        }
+        if (totpService.verify(secretManager.decrypt(method.getSecretCiphertext(), method.getSecretKeyId()),
+                code, now)) {
+            method.setFailedVerificationAttempts(0);
+            method.setLockedUntil(null);
+            return;
+        }
+        recordFailedAttempt(method, now);
+        throw new MfaVerificationException(INVALID_CODE_MESSAGE);
+    }
+
+    private boolean isLocked(final MfaMethod method, final Instant now) {
+        final Instant lockedUntil = method.getLockedUntil();
+        if (lockedUntil == null) {
+            return false;
+        }
+        if (lockedUntil.isAfter(now)) {
+            return true;
+        }
+        // Lockout elapsed: clear it so the legitimate owner is not locked out permanently.
+        method.setLockedUntil(null);
+        method.setFailedVerificationAttempts(0);
+        return false;
+    }
+
+    private void recordFailedAttempt(final MfaMethod method, final Instant now) {
+        final int attempts = method.getFailedVerificationAttempts() + 1;
+        method.setFailedVerificationAttempts(attempts);
+        if (attempts >= MAX_VERIFICATION_ATTEMPTS) {
+            method.setLockedUntil(now.plus(VERIFICATION_LOCKOUT));
+        }
+        methodRepository.save(method);
     }
 
     MfaMethod activeMethod(final String username) {

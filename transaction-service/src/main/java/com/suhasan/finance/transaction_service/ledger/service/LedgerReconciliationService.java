@@ -45,7 +45,8 @@ public class LedgerReconciliationService {
 
     @Transactional
     public ReconciliationRunResult runDaily(LocalDate businessDate, String requestedBy) {
-        if (!runRepository.tryAcquireDailyRunLock(businessDate, ReconciliationType.DAILY_LEDGER)) {
+        if (!Boolean.TRUE.equals(runRepository.tryAcquireDailyRunLock(
+                ReconciliationRunRepository.dailyRunLockKey(businessDate, ReconciliationType.DAILY_LEDGER)))) {
             throw new ReconciliationAlreadyRunningException(
                     "Daily ledger reconciliation is already running for " + businessDate);
         }
