@@ -49,7 +49,7 @@ public class MfaMethod {
      * permanently locked out.
      */
     @Column(name = "failed_verification_attempts", nullable = false)
-    private int failedVerificationAttempts = 0;
+    private int failedVerificationAttempts;
 
     /**
      * Set when failed_verification_attempts reaches the configured maximum. While this is in the

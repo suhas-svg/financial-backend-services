@@ -32,7 +32,10 @@
 		<mapstruct.version>1.6.3</mapstruct.version>
 		<lombok.version>1.18.36</lombok.version>
 		<testcontainers.version>1.21.4</testcontainers.version>
-		<tomcat.version>10.1.55</tomcat.version>
+		<!-- 10.1.58 was never published to Maven Central; 10.1.60 is the current 10.1.x
+		     release and is past the 10.1.58 fix line for CVE-2026-68525. -->
+		<tomcat.version>10.1.60</tomcat.version>
+		<bouncycastle.version>1.85</bouncycastle.version>
 		<jackson-bom.version>2.21.4</jackson-bom.version>
 		<netty.version>4.1.136.Final</netty.version>
 		<postgresql.version>42.7.12</postgresql.version>
@@ -126,7 +129,7 @@
 		<dependency>
 			<groupId>org.bouncycastle</groupId>
 			<artifactId>bcprov-jdk18on</artifactId>
-			<version>1.84</version>
+			<version>${bouncycastle.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>io.github.resilience4j</groupId>
