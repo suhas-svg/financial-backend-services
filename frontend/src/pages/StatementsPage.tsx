@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Button, EmptyState, ErrorNotice, Field, Input, Panel, Select, Stat } from "../components/ui";
-import { compactDate, money } from "../lib/format";
+import { compactDate, dateTime, money } from "../lib/format";
 import { exportStatementCsv, generateStatement, listLedgerAccounts, listStatements } from "../lib/queries";
 import { invalidateInBackground } from "../lib/queryInvalidation";
 import type { CustomerStatement } from "../types";
@@ -172,7 +172,7 @@ function StatementTable({
 function StatementDetail({ statement }: { statement: CustomerStatement }) {
   return (
     <div className="grid gap-4">
-      <p className="text-xs text-muted">Immutable posted-ledger snapshot generated {new Date(statement.generatedAt).toLocaleString()}. Later posted activity is preserved as a new version; the highest version is the latest snapshot for this period.</p>
+      <p className="text-xs text-muted">Immutable posted-ledger snapshot generated {dateTime(statement.generatedAt)}. Later posted activity is preserved as a new version; the highest version is the latest snapshot for this period.</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <Stat label="Account" value={`Account ${statement.externalAccountId}`} />
         <Stat label="Currency" value={statement.currency} />
@@ -186,7 +186,7 @@ function StatementDetail({ statement }: { statement: CustomerStatement }) {
             <div key={line.lineId} className="rounded-md border border-line bg-white p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="font-medium">{line.description || line.journalId}</p>
+                  <p className="font-medium">{line.description || (line.amount < 0 ? "Debit" : "Credit")}</p>
                   <p className="text-xs text-muted">{compactDate(line.effectiveDate)} · Journal {line.journalId}</p>
                 </div>
                 <p className="font-semibold">{money(line.amount, line.currency)}</p>

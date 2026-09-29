@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Badge, Button, EmptyState, Input, PageHeader, Panel, Select, Stat } from "../components/ui";
 import { createRiskCaseFromAlert, getRiskSummary, searchRiskAlerts, searchRiskCases, updateRiskAlertStatus } from "../lib/queries";
 import type { RiskAlert, RiskAlertStatus } from "../types";
+import { dateTime } from "../lib/format";
 
 const defaultFilters = {
   status: "",
@@ -223,7 +224,7 @@ function RiskAlertDetail({
       ) : (
         <Button variant="secondary" disabled={isCreatingCase} onClick={onCreateCase}>Create case</Button>
       )}
-      {caseMessage ? <p className="text-sm font-medium text-brand">{caseMessage}</p> : null}
+      {caseMessage ? <p role="status" className="text-sm font-medium text-brand">{caseMessage}</p> : null}
       <label className="grid gap-1 text-sm">
         <span className="font-medium text-ink">Resolution note</span>
         <textarea
@@ -259,5 +260,5 @@ function formatNumber(value: number | undefined) {
 }
 
 function formatDate(value: string) {
-  return value ? new Date(value).toLocaleString() : "n/a";
+  return value ? dateTime(value) : "n/a";
 }

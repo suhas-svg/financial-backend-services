@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Badge, Button, EmptyState, Input, PageHeader, Panel, Stat } from "../components/ui";
 import { exportInvestigationTimelineCsv, getInvestigationSummary, getInvestigationTimeline } from "../lib/queries";
 import type { InvestigationItemType, InvestigationTimelineItem } from "../types";
+import { calendarDay, dateTime } from "../lib/format";
 
 const defaultFilters = {
   userId: "",
@@ -202,7 +203,7 @@ function TimelineDetail({ item }: { item: InvestigationTimelineItem }) {
 function groupTimeline(items: InvestigationTimelineItem[]) {
   const groups = new Map<string, InvestigationTimelineItem[]>();
   items.forEach((item) => {
-    const label = item.createdAt ? new Date(item.createdAt).toLocaleDateString() : "Unknown date";
+    const label = item.createdAt ? calendarDay(item.createdAt) : "Unknown date";
     groups.set(label, [...(groups.get(label) || []), item]);
   });
   return Array.from(groups.entries()).map(([label, groupItems]) => ({ label, items: groupItems }));
@@ -259,5 +260,5 @@ function formatNumber(value: number | undefined) {
 }
 
 function formatDate(value: string | undefined) {
-  return value ? new Date(value).toLocaleString() : "n/a";
+  return value ? dateTime(value) : "n/a";
 }

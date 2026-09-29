@@ -5,6 +5,7 @@ import { Badge, Button, EmptyState, Input, PageHeader, Panel, Select, Stat } fro
 import { addDisputeNote, claimDispute, getDisputeSummary, reimburseDispute, searchAdminDisputes, updateDisputeStatus } from "../lib/queries";
 import { createIdempotencyKey } from "../lib/idempotency";
 import type { DisputeReasonCode, DisputeStatus, TransactionDispute } from "../types";
+import { dateTime } from "../lib/format";
 
 const defaultFilters = {
   status: "",
@@ -319,5 +320,5 @@ function formatNumber(value: number | undefined) {
 }
 
 function formatDate(value: string | undefined) {
-  return value ? new Date(value).toLocaleString() : "n/a";
+  return value ? dateTime(value) : "n/a";
 }

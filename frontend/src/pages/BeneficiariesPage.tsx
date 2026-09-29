@@ -103,7 +103,7 @@ export function BeneficiariesPage() {
     <div className="grid gap-6">
       <div>
         <h1 className="text-2xl font-semibold">Recipients</h1>
-        <p className="text-sm text-muted">{beneficiaries.data?.totalElements ?? 0} active recipients</p>
+        <p className="text-sm text-muted">{beneficiaries.data?.totalElements ?? 0} active {(beneficiaries.data?.totalElements ?? 0) === 1 ? "recipient" : "recipients"}</p>
       </div>
       <ErrorNotice message={error} />
       <StatusNotice message={statusMessage} />

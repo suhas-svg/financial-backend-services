@@ -9,19 +9,23 @@ import {
 import { createIdempotencyKey } from "../lib/idempotency";
 import { Badge, Button, ErrorNotice, Field, Input, Panel, StatusNotice } from "./ui";
 import { ProductionIntegrationStatusPanel } from "./ProductionIntegrationStatusPanel";
+import { dateTime } from "../lib/format";
 
 export function AdminGuardrailControlPanel() {
   const queryClient = useQueryClient();
   const control = useQuery({ queryKey: ["admin", "guardrail-control"], queryFn: getAdminOutcomeGuardrailControl });
   const policies = useQuery({ queryKey: ["admin", "guardrail-policies"], queryFn: listAdminOutcomeGuardrailPolicies });
   const events = useQuery({ queryKey: ["admin", "guardrail-control-events"], queryFn: listAdminOutcomeGuardrailControlEvents });
-  const [reason, setReason] = useState("Operator reviewed emergency execution posture");
+  const [reason, setReason] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const update = useMutation({
     mutationFn: (enabled: boolean) => updateAdminOutcomeGuardrailControl(enabled, reason, createIdempotencyKey("guardrail-control")),
     onSuccess: () => {
       setConfirmed(false);
+      setReason("");
       queryClient.invalidateQueries({ queryKey: ["admin", "guardrail-control"] });
+      // Effective policy state is derived from the global control, so refresh it too.
+      queryClient.invalidateQueries({ queryKey: ["admin", "guardrail-policies"] });
       queryClient.invalidateQueries({ queryKey: ["admin", "guardrail-control-events"] });
     }
   });
@@ -42,9 +46,9 @@ export function AdminGuardrailControlPanel() {
         <p><strong>Changed by:</strong> {control.data.changedBy}</p>
         <p className="sm:col-span-2"><strong>Reason:</strong> {control.data.reason}</p>
         <p><strong>Visible policies:</strong> {policyRows.length}</p>
-        <p><strong>Effective states:</strong> {active} active · {suspended} suspended</p>
+        <p><strong>Effective states:</strong> {active} active Â· {suspended} suspended</p>
       </div> : null}
-      <Field label="Required operator reason"><Input value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
+      <Field label="Required operator reason"><Input value={reason} placeholder="Why is execution being enabled or stopped?" onChange={(event) => setReason(event.target.value)} /></Field>
       <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>I understand this global control immediately blocks or permits only customer-confirmed actions; it never initiates a transfer.</span></label>
       <div className="flex flex-wrap gap-2">
         <Button disabled={!confirmed || !reason.trim() || enabled || update.isPending} onClick={() => update.mutate(true)}>Enable explicit actions</Button>
@@ -52,7 +56,7 @@ export function AdminGuardrailControlPanel() {
       </div>
       <div className="rounded-lg border border-line p-3 text-xs text-muted">
         <p className="font-semibold text-ink">Latest immutable control evidence</p>
-        {controlEvents.slice(0, 5).map((event) => <p key={event.eventId} className="mt-2">{new Date(event.createdAt).toLocaleString()} · {event.executionEnabled ? "ENABLED" : "DISABLED"} · {event.actor} · {event.reason}</p>)}
+        {controlEvents.slice(0, 5).map((event) => <p key={event.eventId} className="mt-2">{dateTime(event.createdAt)} Â· {event.executionEnabled ? "ENABLED" : "DISABLED"} Â· {event.actor} Â· {event.reason}</p>)}
         {!events.isLoading && !controlEvents.length ? <p className="mt-2">No operator change has been recorded; migration default remains disabled.</p> : null}
       </div>
     </div>
