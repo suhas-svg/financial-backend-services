@@ -138,6 +138,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -171,6 +172,19 @@ public class GlobalExceptionHandler {
         return new ErrorResponse(
             "Validation Failed",
             msg,
+            req.getRequestURI(),
+            HttpStatus.BAD_REQUEST.value()
+        );
+    }
+
+    // 1b) Handle path/query values of the wrong type (e.g. a non-numeric account id)
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleTypeMismatch(final MethodArgumentTypeMismatchException ex,
+                                            final HttpServletRequest req) {
+        return new ErrorResponse(
+            "Bad Request",
+            "Invalid value for parameter '" + ex.getName() + "'",
             req.getRequestURI(),
             HttpStatus.BAD_REQUEST.value()
         );
