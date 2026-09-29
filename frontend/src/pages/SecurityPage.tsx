@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, ErrorNotice, Field, Input, Panel } from "../components/ui";
 import { confirmMfa, disableMfa, enrollMfa, getMfaStatus, regenerateRecoveryCodes, getSpendingLimits, updateSpendingLimits } from "../lib/queries";
 import type { MfaEnrollment } from "../types";
+import { dateTime } from "../lib/format";
 
 export function SecurityPage() {
   const queryClient = useQueryClient();
@@ -79,7 +80,7 @@ export function SecurityPage() {
                 <Field label="Daily withdrawal limit"><Input type="number" min="0" step="0.01" value={draft.withdrawal} onChange={(e) => setLimitDrafts((all) => ({ ...all, [limit.accountId]: { ...draft, withdrawal: e.target.value } }))} /></Field>
               </div>
               <Field label="Authenticator or recovery code (for increases)"><Input name={`spending-limit-credential-${limit.accountId}`} autoComplete="one-time-code" value={draft.credential} onChange={(e) => setLimitDrafts((all) => ({ ...all, [limit.accountId]: { ...draft, credential: e.target.value } }))} /></Field>
-              {limit.pendingEffectiveAt ? <p className="text-sm text-amber-700">Verified increase pending until {new Date(limit.pendingEffectiveAt).toLocaleString()}.</p> : null}
+              {limit.pendingEffectiveAt ? <p className="text-sm text-amber-700">Verified increase pending until {dateTime(limit.pendingEffectiveAt)}.</p> : null}
               <Button disabled={!draft.transfer || !draft.withdrawal || updateLimit.isPending} onClick={() => updateLimit.mutate({ accountId: limit.accountId, ...draft })}>Save limits</Button>
             </div>;
           })}

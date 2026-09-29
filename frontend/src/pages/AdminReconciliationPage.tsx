@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Badge, Button, EmptyState, ErrorNotice, Input, PageHeader, Panel, Select, Stat } from "../components/ui";
 import { addReconciliationExceptionNote, assignReconciliationException, listReconciliationExceptions, listReconciliationRuns, runReconciliation, updateReconciliationExceptionStatus } from "../lib/queries";
 import type { ReconciliationException, ReconciliationExceptionStatus, ReconciliationRun, ReconciliationSeverity } from "../types";
+import { dateTime } from "../lib/format";
 
 const emptyFilters: { status: ReconciliationExceptionStatus | ""; severity: ReconciliationSeverity | "" } = {
   status: "",
@@ -74,8 +75,10 @@ export function AdminReconciliationPage() {
   });
 
   const latestRun = runs.data?.[0];
-  const openExceptions = exceptions.data?.filter((item) => !["RESOLVED", "WAIVED"].includes(item.status)).length ?? 0;
-  const criticalExceptions = exceptions.data?.filter((item) => item.severity === "CRITICAL").length ?? 0;
+  const unresolved = exceptions.data?.filter((item) => !["RESOLVED", "WAIVED"].includes(item.status)) ?? [];
+  const openExceptions = unresolved.length;
+  // Resolved or waived history stays in the queue below; the headline counts only what still needs work.
+  const criticalExceptions = unresolved.filter((item) => item.severity === "CRITICAL").length;
 
   return (
     <div className="admin-page grid gap-6 lg:gap-8">
@@ -87,7 +90,7 @@ export function AdminReconciliationPage() {
         <Stat label="Latest run" value={latestRun ? latestRun.status : "No runs"} />
         <Stat label="Business date" value={latestRun?.businessDate || businessDate} />
         <Stat label="Open exceptions" value={<Badge tone={openExceptions ? "warn" : "good"}>{openExceptions}</Badge>} />
-        <Stat label="Critical exceptions" value={<Badge tone={criticalExceptions ? "bad" : "good"}>{criticalExceptions} critical</Badge>} />
+        <Stat label="Open critical exceptions" value={<Badge tone={criticalExceptions ? "bad" : "good"}>{criticalExceptions} critical</Badge>} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
@@ -374,7 +377,7 @@ function formatAmount(value: number | undefined, currency?: string) {
 }
 
 function formatDate(value: string | undefined) {
-  return value ? new Date(value).toLocaleString() : "n/a";
+  return value ? dateTime(value) : "n/a";
 }
 
 function errorMessage(error: unknown) {

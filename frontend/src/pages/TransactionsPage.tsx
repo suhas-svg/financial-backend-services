@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { compactDate, money } from "../lib/format";
+import { compactDate, money, utcDate } from "../lib/format";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { createDispute, getCustomerJournal, getReversalStatus, getReversals, getTransaction, getTransactions, listDisputes, reverseTransaction, searchTransactions } from "../lib/queries";
 import { disputeSchema, reversalSchema, type DisputeValues, type ReversalValues } from "../lib/schemas";
@@ -178,6 +178,7 @@ export function TransactionDetail({ transaction, allowReverse = false }: { trans
           </div>
         </div>
       ) : null}
+      {submittedDispute ? <p role="status" className="text-sm font-medium text-brand">Dispute {submittedDispute.disputeNumber} submitted. Track its review on the Disputes page.</p> : null}
       {existingDispute ? (
         <div className="grid gap-2 rounded-md border border-line bg-white p-3">
           <div className="flex items-center justify-between gap-3">
@@ -251,7 +252,7 @@ export function TransactionDetail({ transaction, allowReverse = false }: { trans
 
 function isWithinDays(value: string | undefined, days: number) {
   if (!value) return false;
-  return Date.now() - new Date(value).getTime() <= days * 24 * 60 * 60 * 1000;
+  return Date.now() - utcDate(value).getTime() <= days * 24 * 60 * 60 * 1000;
 }
 
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
