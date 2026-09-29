@@ -55,6 +55,12 @@ public interface TransactionRepository extends JpaRepository<Transaction, String
        // Count transactions by status
        Long countByStatus(TransactionStatus status);
 
+       // Status breakdown (status, count, amount) for a created-at window; shared by every replica
+       @Query("SELECT t.status, COUNT(t), COALESCE(SUM(t.amount), 0) FROM Transaction t " +
+                     "WHERE t.createdAt >= :start AND t.createdAt < :end GROUP BY t.status")
+       List<Object[]> summarizeByStatusBetween(@Param("start") LocalDateTime start,
+                     @Param("end") LocalDateTime end);
+
        // Find transactions by type and date range
        List<Transaction> findByTypeAndCreatedAtBetweenOrderByCreatedAtDesc(
                      TransactionType type, LocalDateTime startDate, LocalDateTime endDate);

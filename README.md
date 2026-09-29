@@ -239,6 +239,8 @@ $env:JWT_SECRET = "<set-via-secret-manager>"
 $env:INTERNAL_JWT_SECRET = "<set-via-secret-manager>"
 $env:MFA_ENCRYPTION_KEY = "local-development-mfa-encryption-key-change-me-at-least-32-characters"
 $env:STEP_UP_ENABLED = "true"
+# Optional: allow synthetic customer deposits so a fresh local stack can be funded.
+$env:CUSTOMER_DEPOSITS_ENABLED = "true"
 docker compose -f docker-compose.codex.yml -f docker-compose.codex.override.yml up --build -d
 docker compose -f docker-compose.codex.yml -f docker-compose.codex.override.yml ps
 ```
@@ -323,6 +325,7 @@ Risk-based step-up authorization uses these environment variables:
 | --- | --- | --- |
 | `MFA_ENCRYPTION_KEY` | empty | Private key material used by account-service to encrypt authenticator secrets at rest. Use at least 32 random characters and plan key rotation carefully. |
 | `STEP_UP_ENABLED` | `false` | Enables transfer policy enforcement. |
+| `CUSTOMER_DEPOSITS_ENABLED` | `false` | Allows controlled synthetic customer deposits in the local Compose stack. Keep `false` until a funding provider is activated. |
 | `STEP_UP_HIGH_VALUE_THRESHOLD` | `5000.00` | Transfer amount that triggers the high-value signal. |
 | `STEP_UP_BENEFICIARY_COOLING_HOURS` | `24` | Age window for newly saved recipients. |
 | `STEP_UP_RAPID_TRANSFER_WINDOW_MINUTES` | `10` | Lookback window for rapid-transfer detection. |

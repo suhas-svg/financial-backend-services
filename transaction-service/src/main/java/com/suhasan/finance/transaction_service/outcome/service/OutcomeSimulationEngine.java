@@ -118,6 +118,8 @@ public class OutcomeSimulationEngine {
         String explanation = state.capped
                 ? "A %d-shock failure was found in the bounded search; the evaluation cap was reached while comparing same-size candidates."
                 .formatted(best.shocks().size())
+                : best.shocks().size() == 1
+                ? "A single shock is enough to fail; this is the lowest-severity failing shock among all evaluated single shocks."
                 : "No combination with fewer than %d shocks failed; this is the lowest-severity failing set among all evaluated %d-shock combinations."
                 .formatted(best.shocks().size(), best.shocks().size());
         FailureProof proof = new FailureProof(true, false, best.shocks().size(), best.applied(),
