@@ -98,7 +98,7 @@ function AuditTable({ events, onSelect }: { events: AuditLogEntry[]; onSelect: (
               <td><Badge tone={toneForOutcome(event.outcome)}>{event.outcome}</Badge></td>
               <td>{event.userId || "system"}</td>
               <td className="font-mono text-xs">{event.transactionId || "n/a"}</td>
-              <td>{event.amount === undefined ? "n/a" : `${event.amount} ${event.currency || ""}`}</td>
+              <td>{event.amount == null ? "n/a" : `${event.amount} ${event.currency || ""}`}</td>
               <td>{formatDate(event.createdAt)}</td>
               <td className="text-right">
                 <Button variant="secondary" onClick={() => onSelect(event)}>View {event.eventId}</Button>
@@ -121,7 +121,7 @@ function AuditDetail({ event }: { event: AuditLogEntry }) {
     ["Transaction", event.transactionId],
     ["From account", event.fromAccountId],
     ["To account", event.toAccountId],
-    ["Amount", event.amount === undefined ? undefined : `${event.amount} ${event.currency || ""}`],
+    ["Amount", event.amount == null ? undefined : `${event.amount} ${event.currency || ""}`],
     ["IP address", event.ipAddress],
     ["Details", event.details],
     ["Error", event.errorMessage || event.errorCode],

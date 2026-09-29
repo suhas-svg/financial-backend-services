@@ -5,6 +5,7 @@ import { Bell, Check, CheckCheck } from "lucide-react";
 import { Badge, Button, EmptyState, Field, Panel, Select } from "../components/ui";
 import { getNotificationSummary, listNotifications, markAllNotificationsRead, markNotificationRead } from "../lib/queries";
 import type { Notification, NotificationSeverity, NotificationStatus, NotificationType } from "../types";
+import { dateTime } from "../lib/format";
 
 const notificationTypes: Array<NotificationType | ""> = ["", "TRANSACTION_COMPLETED", "TRANSACTION_FAILED", "ACCOUNT_FROZEN", "ACCOUNT_UNFROZEN", "DISPUTE_CREATED", "DISPUTE_STATUS_UPDATED", "SCHEDULED_TRANSFER_CREATED", "SCHEDULED_TRANSFER_PAUSED", "SCHEDULED_TRANSFER_RESUMED", "SCHEDULED_TRANSFER_CANCELED", "SCHEDULED_TRANSFER_EXECUTED", "SCHEDULED_TRANSFER_FAILED", "OUTCOME_PROTECTION_AT_RISK", "SECURITY_ACTION_REQUIRED", "SECURITY_ALERT", "TRANSFER_AUTHORIZED"];
 const severities: Array<NotificationSeverity | ""> = ["", "INFO", "SUCCESS", "WARNING", "CRITICAL"];
@@ -85,7 +86,7 @@ function NotificationList({ notifications, onMarkRead, markingId }: { notificati
               <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted">
                 <span>{notification.type}</span>
                 <SourceLink notification={notification} />
-                <span>{new Date(notification.createdAt).toLocaleString()}</span>
+                <span>{dateTime(notification.createdAt)}</span>
               </div>
             </div>
             {notification.status === "UNREAD" ? (

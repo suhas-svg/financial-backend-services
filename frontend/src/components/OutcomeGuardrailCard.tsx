@@ -150,7 +150,7 @@ export function OutcomeGuardrailCard({
       </div>
       <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={consentConfirmed} onChange={(event) => setConsentConfirmed(event.target.checked)} /><span>I reviewed the exact terms, accounts, limits, expiry, and understand that every transfer still requires my explicit action.</span></label>
       <Button disabled={!terms.data || !fundingAccountId || !protectedAccountId || !consentConfirmed || consent.isPending} onClick={() => consent.mutate()}>{consent.isPending ? "Recording consent..." : "Record consent and request MFA"}</Button>
-      {control.data && !control.data.executionEnabled ? <p className="text-xs text-amber-800 dark:text-amber-300">Operator kill switch is currently off: {control.data.reason}. Consent may be recorded, but execution remains suspended.</p> : null}
+      {control.data && !control.data.executionEnabled ? <p className="text-xs text-amber-800 dark:text-amber-300">Operator kill switch is active: {control.data.reason}. Consent may be recorded, but execution remains suspended until operations re-enables it.</p> : null}
     </div> : null}
 
     {policy ? <div className="mt-4 grid gap-4 rounded-xl border border-line p-4">

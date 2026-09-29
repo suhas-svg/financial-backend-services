@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Badge, Button, EmptyState, Input, PageHeader, Panel, Select, Stat } from "../components/ui";
 import { addRiskCaseNote, claimRiskCase, getRiskCaseSummary, searchRiskCases, updateRiskCaseStatus } from "../lib/queries";
 import type { RiskCase, RiskCasePriority, RiskCaseStatus } from "../types";
+import { dateTime } from "../lib/format";
 
 const defaultFilters = {
   status: "",
@@ -293,5 +294,5 @@ function formatNumber(value: number | undefined) {
 }
 
 function formatDate(value: string | undefined) {
-  return value ? new Date(value).toLocaleString() : "n/a";
+  return value ? dateTime(value) : "n/a";
 }

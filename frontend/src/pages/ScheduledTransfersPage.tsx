@@ -93,6 +93,8 @@ export function ScheduledTransfersPage() {
     mutationFn: pauseScheduledTransfer,
     onSuccess: (schedule) => {
       setStatusOverrides((current) => ({ ...current, [schedule.scheduleId]: schedule.status }));
+      // Keep the schedule the customer just changed in view instead of filtering it away.
+      if (status && status !== schedule.status) setStatus("");
       invalidate();
     }
   });
@@ -100,6 +102,8 @@ export function ScheduledTransfersPage() {
     mutationFn: resumeScheduledTransfer,
     onSuccess: (schedule) => {
       setStatusOverrides((current) => ({ ...current, [schedule.scheduleId]: schedule.status }));
+      // Keep the schedule the customer just changed in view instead of filtering it away.
+      if (status && status !== schedule.status) setStatus("");
       invalidate();
     }
   });
@@ -118,7 +122,7 @@ export function ScheduledTransfersPage() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Scheduled transfers</h1>
-          <p className="text-sm text-muted">{schedules.data?.totalElements ?? 0} schedules</p>
+          <p className="text-sm text-muted">{schedules.data?.totalElements ?? 0} {(schedules.data?.totalElements ?? 0) === 1 ? "schedule" : "schedules"}</p>
         </div>
         <Field label="Status">
           <Select className="min-w-44" value={status} onChange={(event) => setStatus(event.target.value as ScheduledTransferStatus | "")}>
