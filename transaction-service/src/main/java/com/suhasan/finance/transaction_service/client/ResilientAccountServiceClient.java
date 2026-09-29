@@ -19,8 +19,6 @@ import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -63,10 +61,11 @@ public class ResilientAccountServiceClient {
      * Uses the end-user JWT from security context for ownership-aware access.
      * Without an end-user JWT (scheduled workers) the account service can only answer 401,
      * so no request is made and callers fall back to {@link #getAccountInternal(String)}.
-     * Null results are never cached, so a missing account or an unauthenticated worker
-     * lookup cannot hide a real account from a later user request.
+     * The result is deliberately never cached. It carries mutable state (account status,
+     * available balance) that callers use for debit decisions, and the account service can
+     * change that state on its own (an admin freeze or unfreeze). A cached copy let a frozen
+     * account be debited for up to an hour.
      */
-    @Cacheable(value = "account:validation", key = "#accountId", unless = "#result == null")
     public AccountDto getAccount(String accountId) {
         log.debug("Fetching account information for ID: {}", accountId);
         String jwtToken = getCurrentJwtToken();
@@ -108,7 +107,6 @@ public class ResilientAccountServiceClient {
                 .transformDeferred(TimeLimiterOperator.of(accountServiceTimeLimiter));
     }
 
-    @CacheEvict(value = "account:validation", key = "#accountId")
     public BalanceOperationResponse applyBalanceOperation(String accountId,
                                                           String operationId,
                                                           BigDecimal delta,
@@ -150,7 +148,6 @@ public class ResilientAccountServiceClient {
                 .transformDeferred(TimeLimiterOperator.of(accountServiceTimeLimiter));
     }
 
-    @CacheEvict(value = "account:validation", key = "#accountId")
     public DebitHoldResponse placeDebitHold(String accountId,
                                             String holdId,
                                             BigDecimal amount,
@@ -188,7 +185,6 @@ public class ResilientAccountServiceClient {
                 .transformDeferred(TimeLimiterOperator.of(accountServiceTimeLimiter));
     }
 
-    @CacheEvict(value = "account:validation", key = "#accountId")
     public DebitHoldResponse captureDebitHold(String accountId,
                                               String holdId,
                                               String transactionId,
@@ -200,7 +196,6 @@ public class ResilientAccountServiceClient {
         }
     }
 
-    @CacheEvict(value = "account:validation", key = "#accountId")
     public DebitHoldResponse releaseDebitHold(String accountId,
                                               String holdId,
                                               String transactionId,
@@ -337,7 +332,6 @@ public class ResilientAccountServiceClient {
         }
     }
 
-    @CacheEvict(value = "account:validation", key = "#accountId")
     public AccountDto closeAccount(String accountId, String reason) {
         String serviceToken = generateInternalServiceToken();
         try {
@@ -407,7 +401,6 @@ public class ResilientAccountServiceClient {
         }
     }
 
-    @CacheEvict(value = "account:validation", key = "#accountId")
     public LedgerProjectionUpdateResponse applyLedgerProjection(
             String accountId,
             LedgerProjectionUpdateRequest request) {
