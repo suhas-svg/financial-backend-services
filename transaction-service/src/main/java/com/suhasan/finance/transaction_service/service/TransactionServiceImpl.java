@@ -1578,11 +1578,15 @@ public class TransactionServiceImpl implements TransactionService {
 
     private String transactionMessage(Transaction transaction, boolean completed) {
         String status = completed ? "completed" : "failed";
+        // Request scale varies (400 vs 50.00); customers should always see a money amount.
+        BigDecimal amount = transaction.getAmount() == null
+                ? null
+                : transaction.getAmount().setScale(2, RoundingMode.HALF_UP);
         return "%s %s for %s %s.".formatted(
                 transaction.getType(),
                 status,
                 transaction.getCurrency(),
-                transaction.getAmount());
+                amount == null ? null : amount.toPlainString());
     }
 
     private TransactionResponse mapToResponse(Transaction transaction) {

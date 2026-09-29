@@ -59,6 +59,11 @@ class ResilientAccountServiceClientTest {
         ReflectionTestUtils.setField(client, "internalJwtSecret", INTERNAL_SECRET);
     }
 
+    private static void signIn() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("alice", "user-jwt-token"));
+    }
+
     @AfterEach
     void tearDown() {
         SecurityContextHolder.clearContext();
@@ -90,6 +95,7 @@ class ResilientAccountServiceClientTest {
                 .willReturn(aResponse().withStatus(404)));
         server.stubFor(get(urlEqualTo("/api/accounts/failing"))
                 .willReturn(aResponse().withStatus(503).withBody("maintenance")));
+        signIn();
 
         assertThat(client.getAccount("missing")).isNull();
         assertThatThrownBy(() -> client.getAccount("failing"))
@@ -98,8 +104,20 @@ class ResilientAccountServiceClientTest {
     }
 
     @Test
+    void getAccountWithoutEndUserTokenSkipsTheAnonymousCallSoWorkersUseInternalLookup() {
+        server.stubFor(get(urlEqualTo("/api/accounts/42"))
+                .willReturn(aResponse().withStatus(401)));
+
+        assertThat(client.getAccount("42")).isNull();
+
+        server.verify(0, getRequestedFor(urlEqualTo("/api/accounts/42")));
+        assertThat(circuitBreaker.getMetrics().getNumberOfFailedCalls()).isZero();
+    }
+
+    @Test
     void openCircuitProducesExplicitUnavailableErrorWithoutCallingAccountService() {
         circuitBreaker.transitionToOpenState();
+        signIn();
 
         assertThatThrownBy(() -> client.getAccount("42"))
                 .isInstanceOf(AccountServiceUnavailableException.class)

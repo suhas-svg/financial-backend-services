@@ -1,6 +1,7 @@
 package com.suhasan.finance.transaction_service.controller;
 
 import com.suhasan.finance.transaction_service.service.AlertingService;
+import com.suhasan.finance.transaction_service.service.DailyTransactionStatsService;
 import com.suhasan.finance.transaction_service.service.MetricsService;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
@@ -28,6 +29,7 @@ import static org.mockito.Mockito.when;
 class MonitoringControllerTest {
     @Mock MetricsService metricsService;
     @Mock AlertingService alertingService;
+    @Mock DailyTransactionStatsService dailyTransactionStatsService;
 
     private SimpleMeterRegistry meterRegistry;
     private MonitoringController controller;
@@ -35,14 +37,13 @@ class MonitoringControllerTest {
     @BeforeEach
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
-        controller = new MonitoringController(metricsService, alertingService, meterRegistry);
+        controller = new MonitoringController(metricsService, alertingService, meterRegistry, dailyTransactionStatsService);
     }
 
     @Test
     void detailedHealthCombinesTransactionAlertAndSystemMetrics() {
-        when(metricsService.getTransactionSuccessRate()).thenReturn(0.975d);
-        when(metricsService.getDailyTransactionVolume()).thenReturn(120L);
-        when(metricsService.getDailyTransactionAmount()).thenReturn(new BigDecimal("3456.78"));
+        when(dailyTransactionStatsService.today()).thenReturn(
+                new DailyTransactionStatsService.DailyTransactionStats(120L, new BigDecimal("3456.78"), 0.975d));
         when(metricsService.getActiveTransactionsCount()).thenReturn(3L);
         when(alertingService.getAlertStatistics()).thenReturn(Map.of("criticalAlerts", 0.0d));
         AtomicInteger memoryUsed = new AtomicInteger(512);
@@ -68,7 +69,7 @@ class MonitoringControllerTest {
 
     @Test
     void detailedHealthReportsDownWhenMetricsCannotBeRead() {
-        when(metricsService.getTransactionSuccessRate()).thenThrow(new IllegalStateException("metrics unavailable"));
+        when(dailyTransactionStatsService.today()).thenThrow(new IllegalStateException("metrics unavailable"));
 
         var response = controller.getDetailedHealth();
 
@@ -80,9 +81,8 @@ class MonitoringControllerTest {
 
     @Test
     void transactionStatsExposeBusinessCountersErrorsAndTimers() {
-        when(metricsService.getTransactionSuccessRate()).thenReturn(0.8d);
-        when(metricsService.getDailyTransactionVolume()).thenReturn(10L);
-        when(metricsService.getDailyTransactionAmount()).thenReturn(new BigDecimal("100.00"));
+        when(dailyTransactionStatsService.today()).thenReturn(
+                new DailyTransactionStatsService.DailyTransactionStats(10L, new BigDecimal("100.00"), 0.8d));
         when(metricsService.getActiveTransactionsCount()).thenReturn(2L);
         Counter.builder("transaction.initiated.total").register(meterRegistry).increment(5);
         Counter.builder("transaction.completed.total").register(meterRegistry).increment(4);

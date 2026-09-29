@@ -1,6 +1,7 @@
 package com.suhasan.finance.transaction_service.controller;
 
 import com.suhasan.finance.transaction_service.service.AlertingService;
+import com.suhasan.finance.transaction_service.service.DailyTransactionStatsService;
 import com.suhasan.finance.transaction_service.service.MetricsService;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.search.Search;
@@ -27,6 +28,7 @@ public class MonitoringController {
     private final MetricsService metricsService;
     private final AlertingService alertingService;
     private final MeterRegistry meterRegistry;
+    private final DailyTransactionStatsService dailyTransactionStatsService;
     
     /**
      * Get comprehensive system health status for dashboards
@@ -43,10 +45,12 @@ public class MonitoringController {
             health.put("status", "UP");
             
             // Transaction metrics
+            // Daily figures come from the shared database; in-memory gauges reset per restart and replica.
+            DailyTransactionStatsService.DailyTransactionStats today = dailyTransactionStatsService.today();
             Map<String, Object> transactionMetrics = new HashMap<>();
-            transactionMetrics.put("successRate", String.format("%.2f%%", metricsService.getTransactionSuccessRate() * 100));
-            transactionMetrics.put("dailyVolume", metricsService.getDailyTransactionVolume());
-            transactionMetrics.put("dailyAmount", metricsService.getDailyTransactionAmount());
+            transactionMetrics.put("successRate", String.format("%.2f%%", today.successRate() * 100));
+            transactionMetrics.put("dailyVolume", today.volume());
+            transactionMetrics.put("dailyAmount", today.amount());
             transactionMetrics.put("activeTransactions", metricsService.getActiveTransactionsCount());
             health.put("transactions", transactionMetrics);
             
@@ -80,9 +84,10 @@ public class MonitoringController {
         
         try {
             // Current metrics
-            stats.put("successRate", metricsService.getTransactionSuccessRate());
-            stats.put("dailyVolume", metricsService.getDailyTransactionVolume());
-            stats.put("dailyAmount", metricsService.getDailyTransactionAmount());
+            DailyTransactionStatsService.DailyTransactionStats today = dailyTransactionStatsService.today();
+            stats.put("successRate", today.successRate());
+            stats.put("dailyVolume", today.volume());
+            stats.put("dailyAmount", today.amount());
             stats.put("activeTransactions", metricsService.getActiveTransactionsCount());
             
             // Counter values

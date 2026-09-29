@@ -61,12 +61,21 @@ public class ResilientAccountServiceClient {
     /**
      * Get account information by ID with resilience patterns.
      * Uses the end-user JWT from security context for ownership-aware access.
+     * Without an end-user JWT (scheduled workers) the account service can only answer 401,
+     * so no request is made and callers fall back to {@link #getAccountInternal(String)}.
+     * Null results are never cached, so a missing account or an unauthenticated worker
+     * lookup cannot hide a real account from a later user request.
      */
-    @Cacheable(value = "account:validation", key = "#accountId")
+    @Cacheable(value = "account:validation", key = "#accountId", unless = "#result == null")
     public AccountDto getAccount(String accountId) {
         log.debug("Fetching account information for ID: {}", accountId);
+        String jwtToken = getCurrentJwtToken();
+        if (jwtToken == null) {
+            log.debug("No end-user token for account {} lookup; caller must use the internal lookup", accountId);
+            return null;
+        }
         try {
-            return getAccountAsync(accountId).block();
+            return getAccountAsync(accountId, jwtToken).block();
         } catch (Exception e) {
             log.error("Failed to get account {}: {}", accountId, e.getMessage());
             if (accountServiceCircuitBreaker.getState() == CircuitBreaker.State.OPEN) {
@@ -85,18 +94,13 @@ public class ResilientAccountServiceClient {
         }
     }
 
-    private Mono<AccountDto> getAccountAsync(String accountId) {
+    private Mono<AccountDto> getAccountAsync(String accountId, String jwtToken) {
         WebClient webClient = webClientBuilder.baseUrl(accountServiceBaseUrl).build();
-        String jwtToken = getCurrentJwtToken();
-        WebClient.RequestHeadersSpec<?> requestSpec = webClient.get()
+        return webClient.get()
                 .uri("/api/accounts/{id}", accountId)
-                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
-
-        if (jwtToken != null) {
-            requestSpec = requestSpec.header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtToken);
-        }
-
-        return requestSpec.retrieve()
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtToken)
+                .retrieve()
                 .bodyToMono(AccountDto.class)
                 .timeout(Duration.ofMillis(timeout))
                 .transformDeferred(RetryOperator.of(accountServiceRetry))

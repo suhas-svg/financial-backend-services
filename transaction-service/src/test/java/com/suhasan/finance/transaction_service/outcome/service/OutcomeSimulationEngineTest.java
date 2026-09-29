@@ -27,6 +27,9 @@ class OutcomeSimulationEngineTest {
         assertThat(result.baseline().lowestBalance()).isEqualByComparingTo("13000.00");
         assertThat(result.reverseStress().failureFound()).isTrue();
         assertThat(result.reverseStress().minimalShockCount()).isEqualTo(1);
+        assertThat(result.reverseStress().minimalityExplanation())
+                .startsWith("A single shock is enough to fail")
+                .doesNotContain("fewer than 1");
         assertThat(result.reverseStress().failureDate()).isEqualTo(start.plusDays(5));
         assertThat(result.reverseStress().lowestBalance()).isEqualByComparingTo("8000.00");
         assertThat(result.reverseStress().triggeringEvents()).extracting(TimelineEvent::eventId).containsExactly("rent");
