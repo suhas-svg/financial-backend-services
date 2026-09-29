@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -65,6 +66,21 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().getMessage()).isEqualTo("Bad credentials");
         assertThat(response.getBody().getPath()).isEqualTo("/api/auth/login");
         assertThat(response.getBody().getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    void handleTypeMismatch_Returns400InsteadOfServerError() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getRequestURI()).thenReturn("/api/internal/accounts/phase1-inr");
+        MethodArgumentTypeMismatchException exception = new MethodArgumentTypeMismatchException(
+                "phase1-inr", Long.class, "id", null, new NumberFormatException("For input string: \"phase1-inr\""));
+
+        ErrorResponse response = handler.handleTypeMismatch(exception, request);
+
+        assertThat(response.getError()).isEqualTo("Bad Request");
+        assertThat(response.getMessage()).isEqualTo("Invalid value for parameter 'id'");
+        assertThat(response.getPath()).isEqualTo("/api/internal/accounts/phase1-inr");
+        assertThat(response.getStatus()).isEqualTo(400);
     }
 
     @Test
