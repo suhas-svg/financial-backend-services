@@ -417,7 +417,7 @@ jobs:
   # evidence archive (kept 90 days) and prints the reference and evidenceSha256 for the
   # external readiness manifest. See docs/operations/load-soak-restore-drills.md.
   load-soak-drill:
-    name: ${{ (github.event.schedule == '17 4 * * 0' || inputs.drill == 'soak') && 'Soak' || 'Load' }} Drill (k6 transfers)
+    name: Load or Soak Drill (k6 transfers)
     if: >-
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && (inputs.drill == 'load' || inputs.drill == 'soak'))
