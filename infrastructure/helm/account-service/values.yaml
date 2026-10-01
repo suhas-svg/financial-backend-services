@@ -226,6 +226,21 @@ monitoring:
     path: /actuator/prometheus
     labels:
       app: account-service
+    # Secret holding a >= 32 character bearer token Prometheus presents to
+    # /actuator/prometheus (also injected into the pod as METRICS_SCRAPE_TOKEN).
+    # Without it every scrape is rejected with 401 and no metrics are collected.
+    scrapeToken:
+      secretName: ""
+      key: token
+
+# Distributed tracing. Spans go over OTLP/HTTP to a collector (OpenTelemetry
+# Collector, Tempo, Jaeger). An empty endpoint turns export off; trace IDs are
+# still written to logs. Setting it also opens NetworkPolicy egress to the collector.
+tracing:
+  otlpEndpoint: ""  # e.g. http://otel-collector.monitoring:4318/v1/traces
+  samplingProbability: "0.1"
+  collectorNamespace: monitoring
+  collectorPort: 4318
 
 # Network policy
 networkPolicy:

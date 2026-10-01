@@ -1,0 +1,148 @@
+# promtool test rules slo-rules.test.yml
+# Counters advance once a minute; "0+600x90" means 600 requests/minute (10 req/s).
+rule_files:
+  - slo-rules.yml
+evaluation_interval: 1m
+
+tests:
+  # 5% of account-service requests fail: 50x the 0.1% budget -> page.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{application="account-service",uri="/api/accounts",outcome="SUCCESS"}'
+        values: '0+570x90'
+      - series: 'http_server_requests_seconds_count{application="account-service",uri="/api/accounts",outcome="SERVER_ERROR"}'
+        values: '0+30x90'
+      - series: 'http_server_requests_seconds_bucket{application="account-service",uri="/api/accounts",outcome="SUCCESS",le="0.5"}'
+        values: '0+570x90'
+      - series: 'http_server_requests_seconds_bucket{application="account-service",uri="/api/accounts",outcome="SERVER_ERROR",le="0.5"}'
+        values: '0+30x90'
+      # Health checks are excluded and must not dilute the error ratio.
+      - series: 'http_server_requests_seconds_count{application="account-service",uri="/actuator/health",outcome="SUCCESS"}'
+        values: '0+6000x90'
+    promql_expr_test:
+      - expr: slo:sli_errors:ratio_rate1h
+        eval_time: 70m
+        exp_samples:
+          - labels: 'slo:sli_errors:ratio_rate1h{application="account-service"}'
+            value: 0.05
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: AvailabilityErrorBudgetBurnFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: availability
+              application: account-service
+            exp_annotations:
+              summary: "account-service is burning its availability error budget fast"
+              description: "5xx ratio over the last hour is 5% against a 0.1% budget. At this rate the 30-day budget is gone within days. Check recent deploys, dependency health and traces with error status."
+      - eval_time: 70m
+        alertname: LatencyErrorBudgetBurnFast
+        exp_alerts: []
+
+  # Healthy service: 0.01% errors, everything fast -> no alerts.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions",outcome="SUCCESS"}'
+        values: '0+9999x90'
+      - series: 'http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions",outcome="SERVER_ERROR"}'
+        values: '0+1x90'
+      - series: 'http_server_requests_seconds_bucket{application="transaction-service",uri="/api/transactions",outcome="SUCCESS",le="0.5"}'
+        values: '0+9999x90'
+      - series: 'http_server_requests_seconds_bucket{application="transaction-service",uri="/api/transactions",outcome="SERVER_ERROR",le="0.5"}'
+        values: '0+1x90'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: AvailabilityErrorBudgetBurnFast
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: LatencyErrorBudgetBurnFast
+        exp_alerts: []
+
+  # 10% of transaction-service requests are slower than 500 ms -> latency page.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",outcome="SUCCESS"}'
+        values: '0+600x90'
+      - series: 'http_server_requests_seconds_bucket{application="transaction-service",uri="/api/transactions/transfer",outcome="SUCCESS",le="0.5"}'
+        values: '0+540x90'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: LatencyErrorBudgetBurnFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: latency
+              application: transaction-service
+            exp_annotations:
+              summary: "transaction-service is burning its latency error budget fast"
+              description: "10% of requests took longer than 500 ms over the last hour against a 1% budget. Look at slow traces and database/connection-pool saturation."
+
+  # Idle service: a few requests, half failing -> below the traffic guard, no page.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{application="account-service",uri="/api/accounts",outcome="SUCCESS"}'
+        values: '0+1x90'
+      - series: 'http_server_requests_seconds_count{application="account-service",uri="/api/accounts",outcome="SERVER_ERROR"}'
+        values: '0+1x90'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: AvailabilityErrorBudgetBurnFast
+        exp_alerts: []
+
+  # 2% of transfers fail with a 5xx, all fast -> transfer success page only.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST",outcome="SUCCESS"}'
+        values: '0+588x90'
+      - series: 'http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST",outcome="SERVER_ERROR"}'
+        values: '0+12x90'
+      - series: 'http_server_requests_seconds_bucket{application="transaction-service",uri="/api/transactions/transfer",method="POST",outcome="SUCCESS",le="1.0"}'
+        values: '0+588x90'
+      - series: 'http_server_requests_seconds_bucket{application="transaction-service",uri="/api/transactions/transfer",method="POST",outcome="SERVER_ERROR",le="1.0"}'
+        values: '0+12x90'
+      # Declined transfers (4xx) are correct answers and must not spend the budget.
+      - series: 'http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST",outcome="CLIENT_ERROR"}'
+        values: '0+0x90'
+    promql_expr_test:
+      - expr: slo:transfer_errors:ratio_rate1h
+        eval_time: 70m
+        exp_samples:
+          - labels: 'slo:transfer_errors:ratio_rate1h{application="transaction-service"}'
+            value: 0.02
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: TransferSuccessBudgetBurnFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: transfer-success
+              application: transaction-service
+            exp_annotations:
+              summary: "Transfers are burning the transfer success error budget fast"
+              description: "2% of transfers failed with a 5xx over the last hour against a 0.1% budget. Follow a failed transfer's trace from transaction-service into account-service and the database to find the failing hop."
+      - eval_time: 70m
+        alertname: TransferLatencyBudgetBurnFast
+        exp_alerts: []
+
+  # 20% of transfers take longer than 1 s (p99 > 1 s), none fail -> latency page only.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST",outcome="SUCCESS"}'
+        values: '0+600x90'
+      - series: 'http_server_requests_seconds_bucket{application="transaction-service",uri="/api/transactions/transfer",method="POST",outcome="SUCCESS",le="1.0"}'
+        values: '0+480x90'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: TransferLatencyBudgetBurnFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: transfer-latency
+              application: transaction-service
+            exp_annotations:
+              summary: "Transfers are burning the transfer p99 latency error budget fast"
+              description: "20% of transfers took longer than 1 s over the last hour, so p99 is above the 1 s objective. Look at slow transfer traces for the hop that grew."
+      - eval_time: 70m
+        alertname: TransferSuccessBudgetBurnFast
+        exp_alerts: []

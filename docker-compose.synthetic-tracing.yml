@@ -1,0 +1,29 @@
+# Opt-in distributed tracing for the synthetic sandbox.
+#
+#   docker compose -f docker-compose.synthetic-sandbox.yml -f docker-compose.synthetic-tracing.yml up -d
+#
+# Both services export OTLP spans to Jaeger. A transfer then shows up as one trace:
+# gateway request -> transaction-service -> account-service, with a span per SQL
+# statement in each service. UI: http://127.0.0.1:16686
+name: financial-synthetic-sandbox
+services:
+  jaeger:
+    # jaegertracing/jaeger:2.21.0 (all-in-one, in-memory storage, OTLP on 4317/4318)
+    image: jaegertracing/jaeger@sha256:3d0ac795ff98aa04d1be04311d2dac6c25b4bfc8322dc02e53bc5b170c5018c3
+    ports:
+      - "127.0.0.1:${JAEGER_UI_PORT:-16686}:16686"
+    networks: [services, edge]
+
+  account-service:
+    environment:
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
+      TRACING_SAMPLING_PROBABILITY: "1.0"
+    depends_on:
+      jaeger: { condition: service_started }
+
+  transaction-service:
+    environment:
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
+      TRACING_SAMPLING_PROBABILITY: "1.0"
+    depends_on:
+      jaeger: { condition: service_started }

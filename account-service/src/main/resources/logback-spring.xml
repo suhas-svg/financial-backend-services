@@ -10,6 +10,9 @@
       <includeMdcKeyName>requestId</includeMdcKeyName>
       <includeMdcKeyName>method</includeMdcKeyName>
       <includeMdcKeyName>path</includeMdcKeyName>
+      <!-- Set by Micrometer Tracing; links each log line to its trace. -->
+      <includeMdcKeyName>traceId</includeMdcKeyName>
+      <includeMdcKeyName>spanId</includeMdcKeyName>
     </encoder>
   </appender>
 

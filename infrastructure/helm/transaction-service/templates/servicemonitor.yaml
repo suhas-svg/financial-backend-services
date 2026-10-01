@@ -18,13 +18,18 @@ spec:
       path: {{ .Values.monitoring.serviceMonitor.path }}
       interval: {{ .Values.monitoring.serviceMonitor.interval }}
       scrapeTimeout: {{ .Values.monitoring.serviceMonitor.scrapeTimeout }}
-      # H3 note: Prometheus scrape auth should be configured via basicAuth or
-      # bearerTokenSecret when the /actuator/prometheus endpoint requires
-      # ADMIN/INTERNAL_SERVICE role. Configure via values.yaml:
-      #   monitoring.serviceMonitor.authorization.credentials.key
+      # /actuator/prometheus requires authentication. Prefer scrapeToken (the
+      # service accepts it via METRICS_SCRAPE_TOKEN); the same secret must exist in
+      # the ServiceMonitor's namespace for the Prometheus Operator to read it.
       {{- if .Values.monitoring.serviceMonitor.authorization }}
       authorization:
         {{- toYaml .Values.monitoring.serviceMonitor.authorization | nindent 8 }}
+      {{- else if .Values.monitoring.serviceMonitor.scrapeToken.secretName }}
+      authorization:
+        type: Bearer
+        credentials:
+          name: {{ .Values.monitoring.serviceMonitor.scrapeToken.secretName }}
+          key: {{ .Values.monitoring.serviceMonitor.scrapeToken.key | default "token" }}
       {{- end }}
   namespaceSelector:
     matchNames:

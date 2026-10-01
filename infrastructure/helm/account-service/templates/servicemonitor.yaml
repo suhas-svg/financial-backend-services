@@ -22,4 +22,15 @@ spec:
       interval: {{ .Values.monitoring.serviceMonitor.interval }}
       scrapeTimeout: {{ .Values.monitoring.serviceMonitor.scrapeTimeout }}
       honorLabels: true
+      {{- with .Values.monitoring.serviceMonitor.scrapeToken }}
+      {{- if .secretName }}
+      # /actuator/prometheus requires authentication; the same secret must exist
+      # in the ServiceMonitor's namespace for the Prometheus Operator to read it.
+      authorization:
+        type: Bearer
+        credentials:
+          name: {{ .secretName }}
+          key: {{ .key | default "token" }}
+      {{- end }}
+      {{- end }}
 {{- end }}

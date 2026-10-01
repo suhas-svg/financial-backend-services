@@ -12,6 +12,7 @@ rule_files:
   - /etc/prometheus/transaction_service_alerts.yml
   - /etc/prometheus/phase4_operational_alerts.yml
   - /etc/prometheus/account_service_alerts.yml
+  - /etc/prometheus/slo-rules.yml
 scrape_configs:
   - job_name: transaction-service
     metrics_path: /actuator/prometheus

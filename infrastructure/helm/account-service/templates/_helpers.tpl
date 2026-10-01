@@ -198,6 +198,23 @@ Create environment variables
     secretKeyRef:
       name: {{ include "account-service.databaseSecretName" . }}
       key: {{ .Values.database.secretKeys.password | default "password" }}
+{{- with .Values.monitoring.serviceMonitor.scrapeToken }}
+{{- if .secretName }}
+- name: METRICS_SCRAPE_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ .secretName }}
+      key: {{ .key | default "token" }}
+{{- end }}
+{{- end }}
+{{- with .Values.tracing }}
+{{- if .otlpEndpoint }}
+- name: MANAGEMENT_OTLP_TRACING_ENDPOINT
+  value: {{ .otlpEndpoint | quote }}
+{{- end }}
+- name: TRACING_SAMPLING_PROBABILITY
+  value: {{ .samplingProbability | default "0.1" | quote }}
+{{- end }}
 {{- range .Values.env }}
 - name: {{ .name }}
   value: {{ .value | quote }}
