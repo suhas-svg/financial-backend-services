@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "./api";
 import { clearSession, getRawToken, saveSession, SESSION_EXPIRED_EVENT } from "./session";
-import { endSession, refreshSession } from "./sessionRefresh";
+import { endSession, IDLE_TIMEOUT_MS, isIdle, markActivity, refreshSession } from "./sessionRefresh";
 
 function tokenFor(payload: object) {
   const encoded = btoa(JSON.stringify(payload)).replace(/=/g, "");
@@ -17,7 +17,9 @@ const inOneHour = () => Math.floor(Date.now() / 1000) + 3600;
 describe("session refresh", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
     clearSession();
+    localStorage.clear();
   });
 
   it("shares one refresh request between concurrent callers", async () => {
@@ -91,5 +93,27 @@ describe("session refresh", () => {
 
     expect(getRawToken()).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith("/account-api/api/auth/logout", expect.objectContaining({ method: "POST" }));
+  });
+
+  it("stops renewing once nobody has used the console for the idle window", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    markActivity(Date.now());
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(json({ accessToken: "unused" }));
+
+    vi.setSystemTime(Date.now() + IDLE_TIMEOUT_MS + 1000);
+
+    expect(isIdle()).toBe(true);
+    expect(await refreshSession()).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("treats activity in another tab as activity", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const later = Date.now() + IDLE_TIMEOUT_MS + 1000;
+    localStorage.setItem("financial-console-last-activity", String(later - 1000));
+
+    vi.setSystemTime(later);
+
+    expect(isIdle()).toBe(false);
   });
 });

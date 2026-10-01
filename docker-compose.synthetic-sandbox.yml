@@ -67,6 +67,9 @@ services:
       # Only the gateway (internal services network) reaches this service, and it
       # overwrites X-Forwarded-For, so login throttling sees real client addresses.
       TRUSTED_PROXY_ADDRESSES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+      # Drill and validation scripts log in once and reuse the access token; they
+      # cannot use the browser's refresh cookie. Browsers still renew silently.
+      JWT_EXPIRATION_MS: "3600000"
       APP_TIME_ZONE: UTC
       TZ: UTC
       JAVA_OPTS: -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Duser.timezone=UTC

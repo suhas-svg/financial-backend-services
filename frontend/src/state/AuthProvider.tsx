@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { clearSession, getSession, saveSession, SESSION_EXPIRED_EVENT, type Session } from "../lib/session";
-import { endSession, refreshSession, SESSION_UPDATED_EVENT } from "../lib/sessionRefresh";
+import { getSession, saveSession, SESSION_EXPIRED_EVENT, type Session } from "../lib/session";
+import { endSession, markActivity, refreshSession, SESSION_UPDATED_EVENT } from "../lib/sessionRefresh";
 import { AuthContext, type AuthContextValue } from "./authContext";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -28,6 +28,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [restoring]);
 
   useEffect(() => {
+    const active = () => markActivity();
+    const events = ["pointerdown", "keydown", "wheel", "touchstart"] as const;
+    events.forEach((name) => window.addEventListener(name, active, { passive: true }));
+    return () => events.forEach((name) => window.removeEventListener(name, active));
+  }, []);
+
+  useEffect(() => {
     const updated = () => setSession(getSession());
     window.addEventListener(SESSION_UPDATED_EVENT, updated);
     return () => window.removeEventListener(SESSION_UPDATED_EVENT, updated);
@@ -39,7 +46,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!current.startsWith("/login") && !current.startsWith("/register")) {
         window.sessionStorage.setItem("financial-console-return-to", current);
       }
-      clearSession();
+      // Revoke the server session too, so a reload cannot silently restore a
+      // session the user was just told had ended.
+      endSession();
       queryClient.clear();
       setSession(null);
       const portal = current.startsWith("/admin") ? "&portal=admin" : "";
