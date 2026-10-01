@@ -24,8 +24,8 @@ RUN apt-get update && apt-get install -y wget apt-transport-https software-prope
     && rm -rf /var/lib/apt/lists/*
 
 # Copy JAR files for both services (these would be built beforehand)
-COPY account-service/target/account-service-1.0.0.jar /app/account-service.jar
-COPY transaction-service/target/transaction-service-1.0.0.jar /app/transaction-service.jar
+COPY account-service/target/account-service-*.jar /app/account-service.jar
+COPY transaction-service/target/transaction-service-*.jar /app/transaction-service.jar
 
 # Create test script
 RUN echo '#!/bin/bash\n\
