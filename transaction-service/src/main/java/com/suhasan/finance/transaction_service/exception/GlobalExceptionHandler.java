@@ -103,6 +103,17 @@ public class GlobalExceptionHandler {
                         ex.getMessage(), req));
     }
 
+    /** Load shedding: answer fast with 503 rather than queue on the connection pool. */
+    @ExceptionHandler(MoneyMovementBusyException.class)
+    public ResponseEntity<ProblemDetail> handleMoneyMovementBusyException(MoneyMovementBusyException ex,
+                                                                         HttpServletRequest req) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, "1")
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(problem(HttpStatus.SERVICE_UNAVAILABLE, "money-movement-busy", "Service Busy",
+                        ex.getMessage(), req));
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ProblemDetail> handleAccessDeniedException(AccessDeniedException ex,
                                                                     HttpServletRequest req) {
