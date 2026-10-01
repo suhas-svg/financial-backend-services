@@ -1,7 +1,8 @@
 # API surface used by the frontend
 
-A readable tour of the endpoints the consoles call. The OpenAPI specs (`docs/api/*.openapi.json`,
-once generated) are the complete reference.
+A readable tour of the endpoints the consoles call. The OpenAPI specs in this folder
+(`account-service.openapi.json`, `transaction-service.openapi.json`, see [README](README.md))
+are the complete, authoritative reference.
 
 ## Endpoints by area
 

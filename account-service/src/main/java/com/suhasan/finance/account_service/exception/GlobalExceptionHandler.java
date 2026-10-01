@@ -1,305 +1,167 @@
-// // src/main/java/com/suhasan/finance/account_service/exception/GlobalExceptionHandler.java
-// package com.suhasan.finance.account_service.exception;
-
-// import com.suhasan.finance.account_service.dto.ErrorResponse;
-// import jakarta.servlet.http.HttpServletRequest;
-// import org.springframework.http.*;
-// import org.springframework.validation.FieldError;
-// import org.springframework.web.bind.MethodArgumentNotValidException;
-// import org.springframework.web.bind.annotation.*;
-
-// @RestControllerAdvice
-// public class GlobalExceptionHandler {
-
-//   // 1) Handle bean-validation failures
-//   @ExceptionHandler(MethodArgumentNotValidException.class)
-//   @ResponseStatus(HttpStatus.BAD_REQUEST)
-//   public ErrorResponse handleValidation(MethodArgumentNotValidException ex,
-//                                         HttpServletRequest req) {
-//     // Grab first field error (or you can concatenate them)
-//     FieldError fe = ex.getBindingResult().getFieldErrors().get(0);
-//     String msg = fe.getField() + ": " + fe.getDefaultMessage();
-//     return new ErrorResponse(
-//       "Validation Failed",
-//       msg,
-//       req.getRequestURI(),
-//       HttpStatus.BAD_REQUEST.value()
-//     );
-//   }
-
-//   // 2) Handle “not found” or illegal-arg exceptions
-//   @ExceptionHandler(IllegalArgumentException.class)
-//   public ResponseEntity<ErrorResponse> handleNotFound(IllegalArgumentException ex,
-//                                                       HttpServletRequest req) {
-//     ErrorResponse err = new ErrorResponse(
-//       "Not Found",
-//       ex.getMessage(),
-//       req.getRequestURI(),
-//       HttpStatus.NOT_FOUND.value()
-//     );
-//     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(err);
-//   }
-
-//   // 3) Catch‐all for any uncaught exception
-//   @ExceptionHandler(Exception.class)
-//   @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-//   public ErrorResponse handleAll(Exception ex,
-//                                  HttpServletRequest req) {
-//     return new ErrorResponse(
-//       "Internal Server Error",
-//       ex.getMessage(),
-//       req.getRequestURI(),
-//       HttpStatus.INTERNAL_SERVER_ERROR.value()
-//     );
-//   }
-// }
-
-// package com.suhasan.finance.account_service.exception;
-
-// import com.suhasan.finance.account_service.dto.ErrorResponse;
-// import jakarta.servlet.http.HttpServletRequest;
-// import org.springframework.http.*;
-// import org.springframework.validation.FieldError;
-// import org.springframework.web.bind.MethodArgumentNotValidException;
-// import org.springframework.web.bind.annotation.*;
-// +import org.springframework.http.converter.HttpMessageNotReadableException;
-
-// @RestControllerAdvice
-// public class GlobalExceptionHandler {
-
-//   // 0) Malformed JSON → 400 Bad Request
-//   @ExceptionHandler(HttpMessageNotReadableException.class)
-//   @ResponseStatus(HttpStatus.BAD_REQUEST)
-//   public ErrorResponse handleJsonParse(
-//       HttpMessageNotReadableException ex,
-//       HttpServletRequest req
-//   ) {
-//     return new ErrorResponse(
-//       "Malformed JSON",
-//       ex.getMostSpecificCause().getMessage(),
-//       req.getRequestURI(),
-//       HttpStatus.BAD_REQUEST.value()
-//     );
-//   }
-
-//   // 1) Handle bean-validation failures
-//   @ExceptionHandler(MethodArgumentNotValidException.class)
-//   @ResponseStatus(HttpStatus.BAD_REQUEST)
-//   public ErrorResponse handleValidation(MethodArgumentNotValidException ex,
-//                                         HttpServletRequest req) {
-//     FieldError fe = ex.getBindingResult().getFieldErrors().get(0);
-//     String msg = fe.getField() + ": " + fe.getDefaultMessage();
-//     return new ErrorResponse(
-//       "Validation Failed",
-//       msg,
-//       req.getRequestURI(),
-//       HttpStatus.BAD_REQUEST.value()
-//     );
-//   }
-
-//   // 2) Handle “not found” or illegal-arg exceptions
-//   @ExceptionHandler(IllegalArgumentException.class)
-//   public ResponseEntity<ErrorResponse> handleNotFound(IllegalArgumentException ex,
-//                                                       HttpServletRequest req) {
-//     ErrorResponse err = new ErrorResponse(
-//       "Not Found",
-//       ex.getMessage(),
-//       req.getRequestURI(),
-//       HttpStatus.NOT_FOUND.value()
-//     );
-//     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(err);
-//   }
-
-//   // 3) Catch-all for any uncaught exception
-//   @ExceptionHandler(Exception.class)
-//   @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-//   public ErrorResponse handleAll(Exception ex,
-//                                  HttpServletRequest req) {
-//     return new ErrorResponse(
-//       "Internal Server Error",
-//       ex.getMessage(),
-//       req.getRequestURI(),
-//       HttpStatus.INTERNAL_SERVER_ERROR.value()
-//     );
-//   }
-// }
-
 package com.suhasan.finance.account_service.exception;
 
-import com.suhasan.finance.account_service.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.ErrorResponse;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import java.util.Map;
+
+import static com.suhasan.finance.account_service.exception.ApiProblems.problem;
+import static com.suhasan.finance.account_service.exception.ApiProblems.response;
+
+/** Maps exceptions to RFC 9457 Problem Details; see {@link ApiProblems}. */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    // 0) Handle malformed JSON (missing subtype or syntax errors)
+    private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse handleJsonParse(final HttpMessageNotReadableException ex,
-                                         final HttpServletRequest req) {
+    public ResponseEntity<ProblemDetail> handleJsonParse(final HttpMessageNotReadableException ex,
+                                                         final HttpServletRequest req) {
         String msg = ex.getMostSpecificCause().getMessage();
         if (msg == null || msg.isBlank()) {
             msg = ex.getMessage();
         }
-        return new ErrorResponse(
-            "Malformed JSON",
-            msg,
-            req.getRequestURI(),
-            HttpStatus.BAD_REQUEST.value()
-        );
+        return response(HttpStatus.BAD_REQUEST, "malformed-json", "Malformed JSON", msg, req);
     }
 
-    // 1) Handle bean-validation failures
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse handleValidation(final MethodArgumentNotValidException ex,
-                                          final HttpServletRequest req) {
-        final FieldError fe = ex.getBindingResult().getFieldErrors().get(0);
-        final String msg = fe.getField() + ": " + fe.getDefaultMessage();
-        return new ErrorResponse(
-            "Validation Failed",
-            msg,
-            req.getRequestURI(),
-            HttpStatus.BAD_REQUEST.value()
-        );
+    public ResponseEntity<ProblemDetail> handleValidation(final MethodArgumentNotValidException ex,
+                                                          final HttpServletRequest req) {
+        final FieldError first = ex.getBindingResult().getFieldErrors().get(0);
+        final Map<String, String> fields = new LinkedHashMap<>();
+        ex.getBindingResult().getFieldErrors()
+                .forEach(error -> fields.putIfAbsent(error.getField(), error.getDefaultMessage()));
+        final ProblemDetail body = problem(HttpStatus.BAD_REQUEST, "validation-failed", "Validation Failed",
+                first.getField() + ": " + first.getDefaultMessage(), req);
+        body.setProperty("validationErrors", fields);
+        return response(body);
     }
 
-    // 1b) Handle path/query values of the wrong type (e.g. a non-numeric account id)
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse handleTypeMismatch(final MethodArgumentTypeMismatchException ex,
-                                            final HttpServletRequest req) {
-        return new ErrorResponse(
-            "Bad Request",
-            "Invalid value for parameter '" + ex.getName() + "'",
-            req.getRequestURI(),
-            HttpStatus.BAD_REQUEST.value()
-        );
+    public ResponseEntity<ProblemDetail> handleTypeMismatch(final MethodArgumentTypeMismatchException ex,
+                                                            final HttpServletRequest req) {
+        return response(HttpStatus.BAD_REQUEST, "bad-request", "Bad Request",
+                "Invalid value for parameter '" + ex.getName() + "'", req);
     }
 
-    // 2) Handle not-found or illegal-arg exceptions
+    @ExceptionHandler({MissingServletRequestParameterException.class, ServletRequestBindingException.class})
+    public ResponseEntity<ProblemDetail> handleBinding(final ServletRequestBindingException ex,
+                                                       final HttpServletRequest req) {
+        return response(HttpStatus.BAD_REQUEST, "bad-request", "Bad Request", ex.getMessage(), req);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ErrorResponse> handleNotFound(final IllegalArgumentException ex,
+    public ResponseEntity<ProblemDetail> handleNotFound(final IllegalArgumentException ex,
                                                         final HttpServletRequest req) {
-        final ErrorResponse err = new ErrorResponse(
-            "Not Found",
-            ex.getMessage(),
-            req.getRequestURI(),
-            HttpStatus.NOT_FOUND.value()
-        );
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(err);
+        return response(HttpStatus.NOT_FOUND, "not-found", "Not Found", ex.getMessage(), req);
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
-    public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex,
+    public ResponseEntity<ProblemDetail> handleMethodNotSupported(final HttpRequestMethodNotSupportedException ex,
                                                                   final HttpServletRequest req) {
-        final ErrorResponse err = new ErrorResponse(
-            "Method Not Allowed",
-            "HTTP method is not supported for this resource",
-            req.getRequestURI(),
-            HttpStatus.METHOD_NOT_ALLOWED.value()
-        );
-        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(err);
+        return response(HttpStatus.METHOD_NOT_ALLOWED, "method-not-allowed", "Method Not Allowed",
+                "HTTP method is not supported for this resource", req);
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ProblemDetail> handleMediaType(final HttpMediaTypeNotSupportedException ex,
+                                                         final HttpServletRequest req) {
+        return response(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "unsupported-media-type", "Unsupported Media Type",
+                "Content type must be application/json", req);
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
-    public ResponseEntity<ErrorResponse> handleNoResourceFound(final NoResourceFoundException ex,
+    public ResponseEntity<ProblemDetail> handleNoResourceFound(final NoResourceFoundException ex,
                                                                final HttpServletRequest req) {
-        final ErrorResponse err = new ErrorResponse(
-            "Not Found",
-            ex.getMessage(),
-            req.getRequestURI(),
-            HttpStatus.NOT_FOUND.value()
-        );
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(err);
+        return response(HttpStatus.NOT_FOUND, "not-found", "Not Found", ex.getMessage(), req);
     }
 
     @ExceptionHandler(MfaVerificationException.class)
-    public ResponseEntity<ErrorResponse> handleMfaVerification(final MfaVerificationException ex,
-                                                                final HttpServletRequest req) {
-        final ErrorResponse err = new ErrorResponse(
-            "Verification Failed",
-            ex.getMessage(),
-            req.getRequestURI(),
-            HttpStatus.BAD_REQUEST.value()
-        );
-        return ResponseEntity.badRequest().body(err);
+    public ResponseEntity<ProblemDetail> handleMfaVerification(final MfaVerificationException ex,
+                                                               final HttpServletRequest req) {
+        return response(HttpStatus.BAD_REQUEST, "verification-failed", "Verification Failed", ex.getMessage(), req);
     }
 
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<ErrorResponse> handleAccessDenied(final AccessDeniedException ex,
-                                                             final HttpServletRequest req) {
-        final ErrorResponse err = new ErrorResponse(
-            "Forbidden",
-            ex.getMessage(),
-            req.getRequestURI(),
-            HttpStatus.FORBIDDEN.value()
-        );
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(err);
+    public ResponseEntity<ProblemDetail> handleAccessDenied(final AccessDeniedException ex,
+                                                            final HttpServletRequest req) {
+        return response(HttpStatus.FORBIDDEN, "forbidden", "Forbidden", ex.getMessage(), req);
     }
 
     @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<ErrorResponse> handleConflict(final IllegalStateException ex,
-                                                         final HttpServletRequest req) {
-        final ErrorResponse err = new ErrorResponse(
-            "Conflict",
-            ex.getMessage(),
-            req.getRequestURI(),
-            HttpStatus.CONFLICT.value()
-        );
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(err);
+    public ResponseEntity<ProblemDetail> handleConflict(final IllegalStateException ex,
+                                                        final HttpServletRequest req) {
+        return response(HttpStatus.CONFLICT, "conflict", "Conflict", ex.getMessage(), req);
     }
 
     @ExceptionHandler(AuthenticationException.class)
-    public ResponseEntity<ErrorResponse> handleAuthenticationException(final AuthenticationException ex,
+    public ResponseEntity<ProblemDetail> handleAuthenticationException(final AuthenticationException ex,
                                                                        final HttpServletRequest req) {
-        final ErrorResponse err = new ErrorResponse(
-            "Unauthorized",
-            ex.getMessage(),
-            req.getRequestURI(),
-            HttpStatus.UNAUTHORIZED.value()
-        );
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(err);
+        return response(HttpStatus.UNAUTHORIZED, "unauthorized", "Unauthorized", ex.getMessage(), req);
     }
 
     @ExceptionHandler(TooManyAttemptsException.class)
-    public ResponseEntity<ErrorResponse> handleTooManyAttempts(final TooManyAttemptsException ex,
+    public ResponseEntity<ProblemDetail> handleTooManyAttempts(final TooManyAttemptsException ex,
                                                                final HttpServletRequest req) {
-        final ErrorResponse err = new ErrorResponse(
-            "Too Many Requests",
-            ex.getMessage(),
-            req.getRequestURI(),
-            HttpStatus.TOO_MANY_REQUESTS.value()
-        );
+        final ProblemDetail body = problem(HttpStatus.TOO_MANY_REQUESTS, "too-many-requests", "Too Many Requests",
+                ex.getMessage(), req);
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-            .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
-            .body(err);
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(body);
     }
 
-    // 3) Catch-all for any uncaught exceptions
+    /** ResponseStatusException and other Spring exceptions that already carry a status. */
+    @ExceptionHandler(ErrorResponseException.class)
+    public ResponseEntity<ProblemDetail> handleErrorResponse(final ErrorResponseException ex,
+                                                             final HttpServletRequest req) {
+        final HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        final HttpStatus resolved = status == null ? HttpStatus.INTERNAL_SERVER_ERROR : status;
+        final String detail = ex.getBody().getDetail() == null ? resolved.getReasonPhrase() : ex.getBody().getDetail();
+        return response(resolved, slug(resolved), resolved.getReasonPhrase(), detail, req);
+    }
+
     @ExceptionHandler(Exception.class)
-    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public ErrorResponse handleAll(final Exception ex,
-                                   final HttpServletRequest req) {
-        return new ErrorResponse(
-            "Internal Server Error",
-            ex.getMessage(),
-            req.getRequestURI(),
-            HttpStatus.INTERNAL_SERVER_ERROR.value()
-        );
+    public ResponseEntity<ProblemDetail> handleAll(final Exception ex, final HttpServletRequest req) {
+        if (ex instanceof ErrorResponse withStatus) {
+            final HttpStatus status = HttpStatus.resolve(withStatus.getStatusCode().value());
+            if (status != null && status.is4xxClientError()) {
+                return response(status, slug(status), status.getReasonPhrase(),
+                        withStatus.getBody().getDetail(), req);
+            }
+        }
+        // Never echo internal exception text to the caller; it is in the log.
+        if (LOG.isErrorEnabled()) {
+            LOG.error("Unhandled exception on {}", req.getRequestURI(), ex);
+        }
+        return response(HttpStatus.INTERNAL_SERVER_ERROR, "internal-error", "Internal Server Error",
+                "An unexpected error occurred", req);
+    }
+
+    private static String slug(final HttpStatus status) {
+        return status.getReasonPhrase().toLowerCase(Locale.ROOT).replace(' ', '-');
     }
 }

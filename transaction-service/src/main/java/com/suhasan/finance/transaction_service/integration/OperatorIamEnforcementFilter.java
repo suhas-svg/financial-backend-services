@@ -8,7 +8,9 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
+import com.suhasan.finance.transaction_service.exception.ApiProblems;
 import org.springframework.core.Ordered;
+import org.springframework.http.HttpStatus;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -63,7 +65,8 @@ public class OperatorIamEnforcementFilter extends OncePerRequestFilter {
             if (contains(claims.get("roles"), "ROLE_ADMIN")) validateOperator(claims);
             chain.doFilter(request, response);
         } catch (RuntimeException invalid) {
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Operator identity validation failed");
+            ApiProblems.write(response, HttpStatus.UNAUTHORIZED, "operator-identity-invalid", "Unauthorized",
+                    "Operator identity validation failed", request);
         }
     }
 
