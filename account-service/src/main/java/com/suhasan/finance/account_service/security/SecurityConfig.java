@@ -1,11 +1,12 @@
 package com.suhasan.finance.account_service.security;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import jakarta.servlet.http.HttpServletResponse;
+import com.suhasan.finance.account_service.exception.ApiProblems;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -43,9 +44,11 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, authException) ->
-                                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED))
+                                ApiProblems.write(response, HttpStatus.UNAUTHORIZED, "unauthorized", "Unauthorized",
+                                        "Authentication is required to access this resource", request))
                         .accessDeniedHandler((request, response, accessDeniedException) ->
-                                response.setStatus(HttpServletResponse.SC_FORBIDDEN)))
+                                ApiProblems.write(response, HttpStatus.FORBIDDEN, "forbidden", "Forbidden",
+                                        "You do not have permission to access this resource", request)))
                 .authorizeHttpRequests(auth -> auth
                         // ── Auth (login, register) — always public ─────────────────────────
                         .requestMatchers("/api/auth/**").permitAll()
@@ -59,6 +62,9 @@ public class SecurityConfig {
 
                         // ── Actuator read-only probes — public (for K8s liveness/readiness) ─
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+
+                        // ── API docs — exist only when API_DOCS_ENABLED=true (never by default) ─
+                        .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**").permitAll()
 
                         // ── Privileged actuator ─────────────────────────────────────────────
                         // Prometheus may also use the dedicated scrape token (MetricsScrapeTokenFilter).

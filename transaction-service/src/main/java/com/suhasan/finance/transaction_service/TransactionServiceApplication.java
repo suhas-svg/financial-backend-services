@@ -6,7 +6,6 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 @SpringBootApplication
 @EnableTransactionManagement
-@org.springframework.scheduling.annotation.EnableScheduling
 @org.springframework.scheduling.annotation.EnableAsync
 public class TransactionServiceApplication {
 

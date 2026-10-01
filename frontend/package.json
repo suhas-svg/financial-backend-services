@@ -12,7 +12,9 @@
     "e2e": "playwright test --config playwright.sandbox.config.ts",
     "lint": "eslint .",
     "test:a11y": "playwright test --config playwright.accessibility.config.ts",
-    "check:bundle": "node scripts/check-initial-bundle.mjs"
+    "check:bundle": "node scripts/check-initial-bundle.mjs",
+    "api:types": "openapi-typescript ../docs/api/account-service.openapi.json -o src/api/generated/account-service.ts && openapi-typescript ../docs/api/transaction-service.openapi.json -o src/api/generated/transaction-service.ts",
+    "api:types:check": "npm run api:types && git diff --exit-code -- src/api/generated"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -22,8 +24,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.54.2",
-    "wouter": "^3.9.0",
     "recharts": "^2.15.1",
+    "wouter": "^3.9.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -41,6 +43,7 @@
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.18",
     "jsdom": "^26.0.0",
+    "openapi-typescript": "^7.13.0",
     "postcss": "^8.5.23",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3",

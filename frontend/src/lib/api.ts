@@ -56,11 +56,7 @@ export async function apiRequest<T>(service: ServiceName, path: string, options:
     if (response.status === 401 && token) {
       notifySessionExpired();
     }
-    const message =
-      typeof payload === "object" && payload && "message" in payload
-        ? String((payload as { message: unknown }).message)
-        : `Request failed with status ${response.status}`;
-    throw new ApiError(response.status, message, payload);
+    throw new ApiError(response.status, problemMessage(payload, response.status), payload);
   }
 
   return payload as T;
@@ -99,4 +95,15 @@ export function toQuery(params: Record<string, string | number | undefined | nul
   });
   const text = query.toString();
   return text ? `?${text}` : "";
+}
+
+/** Errors are RFC 9457 Problem Details; `message` is the pre-RFC field, kept as a fallback. */
+export function problemMessage(payload: unknown, status: number): string {
+  if (typeof payload === "object" && payload) {
+    const problem = payload as { detail?: unknown; message?: unknown; title?: unknown };
+    for (const candidate of [problem.detail, problem.message, problem.title]) {
+      if (typeof candidate === "string" && candidate.trim()) return candidate;
+    }
+  }
+  return `Request failed with status ${status}`;
 }
