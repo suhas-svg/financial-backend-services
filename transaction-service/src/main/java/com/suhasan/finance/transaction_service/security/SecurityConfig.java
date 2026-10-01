@@ -16,6 +16,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final MetricsScrapeTokenFilter metricsScrapeTokenFilter;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -34,7 +35,9 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
 
                         // â”€â”€ Privileged actuator endpoints (Prometheus scrape, metrics) â”€â”€â”€â”€â”€â”€â”€
-                        .requestMatchers("/actuator/prometheus", "/actuator/metrics", "/actuator/metrics/**")
+                        // Prometheus may also use the dedicated scrape token (MetricsScrapeTokenFilter).
+                        .requestMatchers("/actuator/prometheus").hasAnyRole("ADMIN", "INTERNAL_SERVICE", "METRICS_SCRAPER")
+                        .requestMatchers("/actuator/metrics", "/actuator/metrics/**")
                         .hasAnyRole("ADMIN", "INTERNAL_SERVICE")
 
                         // â”€â”€ Monitoring API â€” internal/admin only (H1 fix) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -63,7 +66,8 @@ public class SecurityConfig {
 
                         // â”€â”€ Catch-all â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         .anyRequest().authenticated())
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(metricsScrapeTokenFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }

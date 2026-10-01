@@ -17,8 +17,20 @@ spec:
   ingress:
     {{- toYaml .Values.networkPolicy.ingress | nindent 4 }}
   {{- end }}
-  {{- if .Values.networkPolicy.egress }}
+  {{- if or .Values.networkPolicy.egress .Values.tracing.otlpEndpoint }}
   egress:
-    {{- toYaml .Values.networkPolicy.egress | nindent 4 }}
+    {{- with .Values.networkPolicy.egress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if .Values.tracing.otlpEndpoint }}
+    # OTLP span export to the tracing collector.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.tracing.collectorNamespace }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.tracing.collectorPort }}
+    {{- end }}
   {{- end }}
 {{- end }}

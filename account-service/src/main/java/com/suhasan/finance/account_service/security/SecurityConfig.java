@@ -24,6 +24,7 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final MetricsScrapeTokenFilter metricsScrapeTokenFilter;
 
     @Bean
     public AuthenticationManager authenticationManager(final AuthenticationConfiguration config) throws Exception {
@@ -60,7 +61,9 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
 
                         // ── Privileged actuator ─────────────────────────────────────────────
-                        .requestMatchers("/actuator/prometheus", "/actuator/metrics", "/actuator/metrics/**")
+                        // Prometheus may also use the dedicated scrape token (MetricsScrapeTokenFilter).
+                        .requestMatchers("/actuator/prometheus").hasAnyRole("ADMIN", "INTERNAL_SERVICE", "METRICS_SCRAPER")
+                        .requestMatchers("/actuator/metrics", "/actuator/metrics/**")
                         .hasAnyRole("ADMIN", "INTERNAL_SERVICE")
 
                         // ── Internal service-to-service API ────────────────────────────────
@@ -73,7 +76,8 @@ public class SecurityConfig {
 
                         // ── Everything else requires authentication ─────────────────────────
                         .anyRequest().authenticated())
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(metricsScrapeTokenFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }

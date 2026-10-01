@@ -207,6 +207,15 @@ jobs:
               --set "image.repository=${repository}" \
               --set "image.tag=1.0.0" > "/tmp/${chart}-prod.yaml"
           done
+      - name: Validate and unit-test SLO alert rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          # prom/prometheus:v3.5.0
+          image=prom/prometheus@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+          rules="$PWD/infrastructure/observability/prometheus"
+          docker run --rm -v "$rules:/rules:ro" -w /rules --entrypoint promtool "$image" check rules slo-rules.yml
+          docker run --rm -v "$rules:/rules:ro" -w /rules --entrypoint promtool "$image" test rules slo-rules.test.yml
       - name: Check Terraform formatting
         run: terraform -chdir=infrastructure/terraform fmt -check -recursive
       - name: Initialize and validate every Terraform root without a backend

@@ -38,6 +38,7 @@ services:
       - ./transaction-service/src/main/resources/transaction_service_alerts.yml:/etc/prometheus/transaction_service_alerts.yml:ro
       - ./transaction-service/src/main/resources/phase4_operational_alerts.yml:/etc/prometheus/phase4_operational_alerts.yml:ro
       - ./account-service/monitoring/alert_rules.yml:/etc/prometheus/account_service_alerts.yml:ro
+      - ./infrastructure/observability/prometheus/slo-rules.yml:/etc/prometheus/slo-rules.yml:ro
       - ${PROMETHEUS_INTERNAL_TOKEN_FILE:?PROMETHEUS_INTERNAL_TOKEN_FILE must reference a runtime token file}:/run/secrets/internal_scrape_token:ro
     depends_on: [alertmanager, account-postgres-exporter, transaction-postgres-exporter, redis-exporter]
     networks: [services, data]

@@ -1,0 +1,286 @@
+# Service level objectives for account-service and transaction-service.
+#
+# SLIs come from Spring Boot's http.server.requests metrics, grouped by the
+# `application` label every service already sets. Actuator endpoints are excluded,
+# and only 5xx responses spend the availability budget (4xx are client errors).
+#
+#   availability: 99.9% of requests succeed (error budget 0.1%)
+#   latency:      99% of requests complete within 500 ms (budget 1%); needs the
+#                 0.5 s bucket from management.metrics.distribution.slo.http.server.requests
+#
+# Alerts use multi-window, multi-burn-rate rules (Google SRE workbook, ch. 5): page
+# when the budget burns fast enough to be gone in ~2 days (14.4x over 1 h) or ~5 days
+# (6x over 6 h); open a ticket for slow burns. The short window makes alerts reset
+# quickly once the problem stops. A minimum request rate keeps idle services from
+# paging on a single failed request.
+groups:
+  - name: slo-sli-recordings
+    interval: 30s
+    rules:
+      # Request volume (non-actuator), used for the low-traffic guard.
+      - record: slo:http_requests:rate5m
+        expr: sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[5m]))
+
+      # Availability SLI: share of requests answered with a 5xx.
+      - record: slo:sli_errors:ratio_rate5m
+        expr: >-
+          sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*",outcome="SERVER_ERROR"}[5m]))
+          / sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[5m]))
+      - record: slo:sli_errors:ratio_rate30m
+        expr: >-
+          sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*",outcome="SERVER_ERROR"}[30m]))
+          / sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[30m]))
+      - record: slo:sli_errors:ratio_rate1h
+        expr: >-
+          sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*",outcome="SERVER_ERROR"}[1h]))
+          / sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[1h]))
+      - record: slo:sli_errors:ratio_rate2h
+        expr: >-
+          sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*",outcome="SERVER_ERROR"}[2h]))
+          / sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[2h]))
+      - record: slo:sli_errors:ratio_rate6h
+        expr: >-
+          sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*",outcome="SERVER_ERROR"}[6h]))
+          / sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[6h]))
+      - record: slo:sli_errors:ratio_rate1d
+        expr: >-
+          sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*",outcome="SERVER_ERROR"}[1d]))
+          / sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[1d]))
+      - record: slo:sli_errors:ratio_rate3d
+        expr: >-
+          sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*",outcome="SERVER_ERROR"}[3d]))
+          / sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[3d]))
+
+      # Latency SLI: share of requests slower than 500 ms.
+      - record: slo:sli_slow:ratio_rate5m
+        expr: >-
+          1 - sum by (application) (rate(http_server_requests_seconds_bucket{uri!~"/actuator.*",le="0.5"}[5m]))
+          / sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[5m]))
+      - record: slo:sli_slow:ratio_rate30m
+        expr: >-
+          1 - sum by (application) (rate(http_server_requests_seconds_bucket{uri!~"/actuator.*",le="0.5"}[30m]))
+          / sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[30m]))
+      - record: slo:sli_slow:ratio_rate1h
+        expr: >-
+          1 - sum by (application) (rate(http_server_requests_seconds_bucket{uri!~"/actuator.*",le="0.5"}[1h]))
+          / sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[1h]))
+      - record: slo:sli_slow:ratio_rate2h
+        expr: >-
+          1 - sum by (application) (rate(http_server_requests_seconds_bucket{uri!~"/actuator.*",le="0.5"}[2h]))
+          / sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[2h]))
+      - record: slo:sli_slow:ratio_rate6h
+        expr: >-
+          1 - sum by (application) (rate(http_server_requests_seconds_bucket{uri!~"/actuator.*",le="0.5"}[6h]))
+          / sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[6h]))
+      - record: slo:sli_slow:ratio_rate1d
+        expr: >-
+          1 - sum by (application) (rate(http_server_requests_seconds_bucket{uri!~"/actuator.*",le="0.5"}[1d]))
+          / sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[1d]))
+      - record: slo:sli_slow:ratio_rate3d
+        expr: >-
+          1 - sum by (application) (rate(http_server_requests_seconds_bucket{uri!~"/actuator.*",le="0.5"}[3d]))
+          / sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[3d]))
+
+  - name: slo-burn-rate-alerts
+    rules:
+      - alert: AvailabilityErrorBudgetBurnFast
+        expr: >-
+          (
+            (slo:sli_errors:ratio_rate1h > (14.4 * 0.001) and slo:sli_errors:ratio_rate5m > (14.4 * 0.001))
+            or
+            (slo:sli_errors:ratio_rate6h > (6 * 0.001) and slo:sli_errors:ratio_rate30m > (6 * 0.001))
+          )
+          and on (application) slo:http_requests:rate5m > 0.1
+        labels:
+          severity: page
+          slo: availability
+        annotations:
+          summary: "{{ $labels.application }} is burning its availability error budget fast"
+          description: >-
+            5xx ratio over the last hour is {{ $value | humanizePercentage }} against a 0.1% budget.
+            At this rate the 30-day budget is gone within days. Check recent deploys, dependency health
+            and traces with error status.
+
+      - alert: AvailabilityErrorBudgetBurnSlow
+        expr: >-
+          (
+            (slo:sli_errors:ratio_rate1d > (3 * 0.001) and slo:sli_errors:ratio_rate2h > (3 * 0.001))
+            or
+            (slo:sli_errors:ratio_rate3d > 0.001 and slo:sli_errors:ratio_rate6h > 0.001)
+          )
+          and on (application) slo:http_requests:rate5m > 0.1
+        labels:
+          severity: ticket
+          slo: availability
+        annotations:
+          summary: "{{ $labels.application }} is steadily consuming its availability error budget"
+          description: "Sustained 5xx ratio above the 0.1% budget; investigate during working hours."
+
+      - alert: LatencyErrorBudgetBurnFast
+        expr: >-
+          (
+            (slo:sli_slow:ratio_rate1h > (14.4 * 0.01) and slo:sli_slow:ratio_rate5m > (14.4 * 0.01))
+            or
+            (slo:sli_slow:ratio_rate6h > (6 * 0.01) and slo:sli_slow:ratio_rate30m > (6 * 0.01))
+          )
+          and on (application) slo:http_requests:rate5m > 0.1
+        labels:
+          severity: page
+          slo: latency
+        annotations:
+          summary: "{{ $labels.application }} is burning its latency error budget fast"
+          description: >-
+            {{ $value | humanizePercentage }} of requests took longer than 500 ms over the last hour
+            against a 1% budget. Look at slow traces and database/connection-pool saturation.
+
+      - alert: LatencyErrorBudgetBurnSlow
+        expr: >-
+          (
+            (slo:sli_slow:ratio_rate1d > (3 * 0.01) and slo:sli_slow:ratio_rate2h > (3 * 0.01))
+            or
+            (slo:sli_slow:ratio_rate3d > 0.01 and slo:sli_slow:ratio_rate6h > 0.01)
+          )
+          and on (application) slo:http_requests:rate5m > 0.1
+        labels:
+          severity: ticket
+          slo: latency
+        annotations:
+          summary: "{{ $labels.application }} is steadily consuming its latency error budget"
+          description: "More than 1% of requests are slower than 500 ms over days; investigate during working hours."
+
+  # Transfer SLOs. POST /api/transactions/transfer is the money-moving path, so it
+  # gets its own objectives instead of sharing the service-wide budget.
+  #
+  #   transfer success: 99.9% of transfer requests do not fail with a 5xx
+  #                     (declines such as insufficient funds are 4xx and count as
+  #                     correct answers, not failures)
+  #   transfer p99:     99% of transfers complete within 1 s, i.e. p99 <= 1 s; needs
+  #                     the 1 s bucket from management.metrics.distribution.slo
+  - name: slo-transfer-recordings
+    interval: 30s
+    rules:
+      - record: slo:transfer_requests:rate5m
+        expr: sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST"}[5m]))
+      - record: slo:transfer_errors:ratio_rate5m
+        expr: >-
+          sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST",outcome="SERVER_ERROR"}[5m]))
+          / sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST"}[5m]))
+      - record: slo:transfer_errors:ratio_rate30m
+        expr: >-
+          sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST",outcome="SERVER_ERROR"}[30m]))
+          / sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST"}[30m]))
+      - record: slo:transfer_errors:ratio_rate1h
+        expr: >-
+          sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST",outcome="SERVER_ERROR"}[1h]))
+          / sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST"}[1h]))
+      - record: slo:transfer_errors:ratio_rate2h
+        expr: >-
+          sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST",outcome="SERVER_ERROR"}[2h]))
+          / sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST"}[2h]))
+      - record: slo:transfer_errors:ratio_rate6h
+        expr: >-
+          sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST",outcome="SERVER_ERROR"}[6h]))
+          / sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST"}[6h]))
+      - record: slo:transfer_errors:ratio_rate1d
+        expr: >-
+          sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST",outcome="SERVER_ERROR"}[1d]))
+          / sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST"}[1d]))
+      - record: slo:transfer_errors:ratio_rate3d
+        expr: >-
+          sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST",outcome="SERVER_ERROR"}[3d]))
+          / sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST"}[3d]))
+      - record: slo:transfer_slow:ratio_rate5m
+        expr: >-
+          1 - sum by (application) (rate(http_server_requests_seconds_bucket{application="transaction-service",uri="/api/transactions/transfer",method="POST",le="1.0"}[5m]))
+          / sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST"}[5m]))
+      - record: slo:transfer_slow:ratio_rate30m
+        expr: >-
+          1 - sum by (application) (rate(http_server_requests_seconds_bucket{application="transaction-service",uri="/api/transactions/transfer",method="POST",le="1.0"}[30m]))
+          / sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST"}[30m]))
+      - record: slo:transfer_slow:ratio_rate1h
+        expr: >-
+          1 - sum by (application) (rate(http_server_requests_seconds_bucket{application="transaction-service",uri="/api/transactions/transfer",method="POST",le="1.0"}[1h]))
+          / sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST"}[1h]))
+      - record: slo:transfer_slow:ratio_rate2h
+        expr: >-
+          1 - sum by (application) (rate(http_server_requests_seconds_bucket{application="transaction-service",uri="/api/transactions/transfer",method="POST",le="1.0"}[2h]))
+          / sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST"}[2h]))
+      - record: slo:transfer_slow:ratio_rate6h
+        expr: >-
+          1 - sum by (application) (rate(http_server_requests_seconds_bucket{application="transaction-service",uri="/api/transactions/transfer",method="POST",le="1.0"}[6h]))
+          / sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST"}[6h]))
+      - record: slo:transfer_slow:ratio_rate1d
+        expr: >-
+          1 - sum by (application) (rate(http_server_requests_seconds_bucket{application="transaction-service",uri="/api/transactions/transfer",method="POST",le="1.0"}[1d]))
+          / sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST"}[1d]))
+      - record: slo:transfer_slow:ratio_rate3d
+        expr: >-
+          1 - sum by (application) (rate(http_server_requests_seconds_bucket{application="transaction-service",uri="/api/transactions/transfer",method="POST",le="1.0"}[3d]))
+          / sum by (application) (rate(http_server_requests_seconds_count{application="transaction-service",uri="/api/transactions/transfer",method="POST"}[3d]))
+
+  - name: slo-transfer-alerts
+    rules:
+      - alert: TransferSuccessBudgetBurnFast
+        expr: >-
+          (
+            (slo:transfer_errors:ratio_rate1h > (14.4 * 0.001) and slo:transfer_errors:ratio_rate5m > (14.4 * 0.001))
+            or
+            (slo:transfer_errors:ratio_rate6h > (6 * 0.001) and slo:transfer_errors:ratio_rate30m > (6 * 0.001))
+          )
+          and on (application) slo:transfer_requests:rate5m > 0.05
+        labels:
+          severity: page
+          slo: transfer-success
+        annotations:
+          summary: "Transfers are burning the transfer success error budget fast"
+          description: >-
+            {{ $value | humanizePercentage }} of transfers failed with a 5xx over the last hour against a
+            0.1% budget. Follow a failed transfer's trace from transaction-service into
+            account-service and the database to find the failing hop.
+
+      - alert: TransferSuccessBudgetBurnSlow
+        expr: >-
+          (
+            (slo:transfer_errors:ratio_rate1d > (3 * 0.001) and slo:transfer_errors:ratio_rate2h > (3 * 0.001))
+            or
+            (slo:transfer_errors:ratio_rate3d > 0.001 and slo:transfer_errors:ratio_rate6h > 0.001)
+          )
+          and on (application) slo:transfer_requests:rate5m > 0.05
+        labels:
+          severity: ticket
+          slo: transfer-success
+        annotations:
+          summary: "Transfers are steadily consuming the transfer success error budget"
+          description: "Sustained transfer 5xx ratio above the 0.1% budget; investigate during working hours."
+
+      - alert: TransferLatencyBudgetBurnFast
+        expr: >-
+          (
+            (slo:transfer_slow:ratio_rate1h > (14.4 * 0.01) and slo:transfer_slow:ratio_rate5m > (14.4 * 0.01))
+            or
+            (slo:transfer_slow:ratio_rate6h > (6 * 0.01) and slo:transfer_slow:ratio_rate30m > (6 * 0.01))
+          )
+          and on (application) slo:transfer_requests:rate5m > 0.05
+        labels:
+          severity: page
+          slo: transfer-latency
+        annotations:
+          summary: "Transfers are burning the transfer p99 latency error budget fast"
+          description: >-
+            {{ $value | humanizePercentage }} of transfers took longer than 1 s over the last hour, so p99
+            is above the 1 s objective. Look at slow transfer traces for the hop that grew.
+
+      - alert: TransferLatencyBudgetBurnSlow
+        expr: >-
+          (
+            (slo:transfer_slow:ratio_rate1d > (3 * 0.01) and slo:transfer_slow:ratio_rate2h > (3 * 0.01))
+            or
+            (slo:transfer_slow:ratio_rate3d > 0.01 and slo:transfer_slow:ratio_rate6h > 0.01)
+          )
+          and on (application) slo:transfer_requests:rate5m > 0.05
+        labels:
+          severity: ticket
+          slo: transfer-latency
+        annotations:
+          summary: "Transfers are steadily consuming the transfer p99 latency error budget"
+          description: "Transfer p99 has been above 1 s for days; investigate during working hours."
