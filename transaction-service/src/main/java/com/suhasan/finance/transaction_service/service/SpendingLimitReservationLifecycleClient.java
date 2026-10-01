@@ -1,8 +1,8 @@
 package com.suhasan.finance.transaction_service.service;
 
+import com.suhasan.finance.transaction_service.security.InternalServiceTokens;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.suhasan.finance.transaction_service.exception.AccountServiceUnavailableException;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -13,11 +13,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.Date;
 import java.util.List;
 
 @Component
@@ -31,8 +28,8 @@ public class SpendingLimitReservationLifecycleClient {
     @Value("${account-service.timeout:30000}")
     private int timeout;
 
-    @Value("${security.jwt.internal-secret}")
-    private String internalJwtSecret;
+    @Autowired
+    private InternalServiceTokens internalServiceTokens;
 
     public ReservationResponse reserve(String accountId, String operationType, BigDecimal amount,
                                        String idempotencyKey, String userId, String currency,
@@ -136,16 +133,7 @@ public class SpendingLimitReservationLifecycleClient {
     }
 
     private String serviceToken() {
-        Instant now = Instant.now();
-        return Jwts.builder()
-                .subject("transaction-service")
-                .claim("aud", "account-service")
-                .claim("roles", List.of("ROLE_INTERNAL_SERVICE"))
-                .claim("token_type", "service")
-                .issuedAt(Date.from(now))
-                .expiration(Date.from(now.plusSeconds(60)))
-                .signWith(Keys.hmacShaKeyFor(internalJwtSecret.getBytes(StandardCharsets.UTF_8)))
-                .compact();
+        return internalServiceTokens.forAccountService();
     }
 
     public record ReservationRequest(

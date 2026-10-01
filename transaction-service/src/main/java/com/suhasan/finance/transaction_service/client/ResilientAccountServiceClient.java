@@ -1,5 +1,7 @@
 package com.suhasan.finance.transaction_service.client;
 
+import com.suhasan.finance.transaction_service.security.InternalServiceTokens;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.suhasan.finance.transaction_service.dto.AccountDto;
 import com.suhasan.finance.transaction_service.dto.BeneficiaryInfo;
 import com.suhasan.finance.transaction_service.dto.StepUpClientDtos;
@@ -10,8 +12,6 @@ import io.github.resilience4j.reactor.retry.RetryOperator;
 import io.github.resilience4j.reactor.timelimiter.TimeLimiterOperator;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.timelimiter.TimeLimiter;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -29,11 +29,8 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.Date;
 import java.util.List;
 
 @Component
@@ -53,8 +50,8 @@ public class ResilientAccountServiceClient {
     @Value("${account-service.timeout:30000}")
     private int timeout;
 
-    @Value("${security.jwt.internal-secret}")
-    private String internalJwtSecret;
+    @Autowired
+    private InternalServiceTokens internalServiceTokens;
 
     /**
      * Get account information by ID with resilience patterns.
@@ -477,18 +474,7 @@ public class ResilientAccountServiceClient {
     }
 
     private String generateInternalServiceToken() {
-        Instant now = Instant.now();
-        Instant exp = now.plusSeconds(60);
-        return Jwts.builder()
-                .subject("transaction-service")
-                // Keep aud as a plain string for compatibility with account-service JWT parser.
-                .claim("aud", "account-service")
-                .claim("roles", List.of("ROLE_INTERNAL_SERVICE"))
-                .claim("token_type", "service")
-                .issuedAt(Date.from(now))
-                .expiration(Date.from(exp))
-                .signWith(Keys.hmacShaKeyFor(internalJwtSecret.getBytes(StandardCharsets.UTF_8)))
-                .compact();
+        return internalServiceTokens.forAccountService();
     }
 
     @Data

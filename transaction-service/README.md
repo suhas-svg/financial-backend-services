@@ -145,8 +145,9 @@ spring.data.redis.port=6379
 account-service.base-url=http://localhost:8080
 account-service.timeout=5000
 
-# JWT Security (shared with Account Service)
-security.jwt.secret=${JWT_SECRET}
+# JWT security: RS256, nothing shared with account-service (docs/operations/token-signing-keys.md)
+security.jwt.jwks-uri=${JWT_JWKS_URI:${account-service.base-url}/.well-known/jwks.json}
+security.jwt.internal.signing.private-key=${JWT_INTERNAL_SIGNING_PRIVATE_KEY:}
 ```
 
 ### Environment Variables
@@ -164,8 +165,8 @@ REDIS_PASSWORD=
 # Account Service
 ACCOUNT_SERVICE_URL=http://localhost:8080
 
-# Security
-JWT_SECRET=your-jwt-secret-key
+# Security: PKCS#8 PEM for internal service tokens (generated at startup if unset, local only)
+JWT_INTERNAL_SIGNING_PRIVATE_KEY=
 ```
 
 ## Testing

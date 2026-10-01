@@ -1,8 +1,9 @@
 package com.suhasan.finance.transaction_service.integration;
 
+import com.suhasan.finance.transaction_service.security.UserTokenKeyLocator;
+import com.suhasan.finance.transaction_service.security.keys.RemoteJwks;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -16,7 +17,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
@@ -27,7 +27,9 @@ import java.util.stream.Collectors;
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
 public class OperatorIamEnforcementFilter extends OncePerRequestFilter {
-    private final String secret;
+    private final String jwksUri;
+    private final String publicKeyPem;
+    private volatile UserTokenKeyLocator keys;
     private final String issuer;
     private final String audience;
     private final Set<String> mappedAdminClaims;
@@ -35,13 +37,15 @@ public class OperatorIamEnforcementFilter extends OncePerRequestFilter {
     private final long maxReviewAgeDays;
 
     public OperatorIamEnforcementFilter(
-            @Value("${security.jwt.secret}") String secret,
+            @Value("${security.jwt.jwks-uri:}") String jwksUri,
+            @Value("${security.jwt.public-key:}") String publicKeyPem,
             @Value("${integration.iam.issuer:local-account-service}") String issuer,
             @Value("${integration.iam.audience:transaction-service}") String audience,
             @Value("${integration.iam.role-mappings:admin=ROLE_ADMIN}") String mappings,
             @Value("${integration.iam.strict:false}") boolean strict,
             @Value("${integration.iam.access-review-max-age-days:90}") long maxReviewAgeDays) {
-        this.secret = secret;
+        this.jwksUri = jwksUri;
+        this.publicKeyPem = publicKeyPem;
         this.issuer = issuer;
         this.audience = audience;
         this.strict = strict;
@@ -60,7 +64,7 @@ public class OperatorIamEnforcementFilter extends OncePerRequestFilter {
             return;
         }
         try {
-            Claims claims = Jwts.parser().verifyWith(Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)))
+            Claims claims = Jwts.parser().keyLocator(keys())
                     .build().parseSignedClaims(header.substring(7)).getPayload();
             if (contains(claims.get("roles"), "ROLE_ADMIN")) validateOperator(claims);
             chain.doFilter(request, response);
@@ -68,6 +72,20 @@ public class OperatorIamEnforcementFilter extends OncePerRequestFilter {
             ApiProblems.write(response, HttpStatus.UNAUTHORIZED, "operator-identity-invalid", "Unauthorized",
                     "Operator identity validation failed", request);
         }
+    }
+
+    // Built on first use, so a context without token configuration still starts.
+    private UserTokenKeyLocator keys() {
+        UserTokenKeyLocator locator = keys;
+        if (locator == null) {
+            synchronized (this) {
+                if (keys == null) {
+                    keys = new UserTokenKeyLocator(new RemoteJwks(jwksUri, publicKeyPem));
+                }
+                locator = keys;
+            }
+        }
+        return locator;
     }
 
     private void validateOperator(Claims claims) {

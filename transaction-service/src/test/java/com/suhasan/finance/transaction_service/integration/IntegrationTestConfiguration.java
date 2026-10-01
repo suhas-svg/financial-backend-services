@@ -1,14 +1,14 @@
 package com.suhasan.finance.transaction_service.integration;
 
+import java.security.PrivateKey;
+import com.suhasan.finance.transaction_service.security.keys.TestKeys;
 import com.suhasan.finance.transaction_service.service.SpendingLimitReservationLifecycleClient;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import javax.crypto.SecretKey;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -28,7 +28,6 @@ import java.util.concurrent.atomic.AtomicLong;
 @TestConfiguration
 public class IntegrationTestConfiguration {
 
-    private static final String JWT_SECRET = "testUserJwtSecretForUnitTests12345678901234567890";
     private static final long JWT_EXPIRATION = 3600000; // 1 hour
 
     /**
@@ -52,7 +51,8 @@ public class IntegrationTestConfiguration {
     }
 
     public static class JwtTestUtil {
-        private final SecretKey key = Keys.hmacShaKeyFor(JWT_SECRET.getBytes(StandardCharsets.UTF_8));
+        // RS256 like account-service; BaseIntegrationTest configures the matching public key.
+        private final PrivateKey key = TestKeys.USER.getPrivate();
 
         public String generateToken(String username) {
             return generateToken(username, new HashMap<>());
@@ -76,7 +76,7 @@ public class IntegrationTestConfiguration {
                     .subject(username)
                     .issuedAt(now)
                     .expiration(expiryDate)
-                    .signWith(key)
+                    .signWith(key, Jwts.SIG.RS256)
                     .compact();
         }
 
@@ -88,7 +88,7 @@ public class IntegrationTestConfiguration {
                     .subject(username)
                     .issuedAt(new Date(now.getTime() - 2000))
                     .expiration(expiryDate)
-                    .signWith(key)
+                    .signWith(key, Jwts.SIG.RS256)
                     .compact();
         }
 

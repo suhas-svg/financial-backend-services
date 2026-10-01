@@ -72,8 +72,8 @@ services:
       JAVA_OPTS: -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+UseStringDeduplication
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
       LOGGING_LEVEL_ROOT: INFO
-      JWT_SECRET: ${JWT_SECRET:?Env var JWT_SECRET must be set}
-      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?Env var INTERNAL_JWT_SECRET must be set}
+      # RS256 tokens; keys are generated at startup for local development.
+      INTERNAL_JWKS_URI: http://transaction-service:8081/.well-known/jwks.json
       MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:-}
     depends_on:
       account-postgres:
@@ -113,8 +113,6 @@ services:
       JAVA_OPTS: -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+UseStringDeduplication
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
       LOGGING_LEVEL_ROOT: INFO
-      JWT_SECRET: ${JWT_SECRET:?Env var JWT_SECRET must be set}
-      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?Env var INTERNAL_JWT_SECRET must be set}
       STEP_UP_ENABLED: ${STEP_UP_ENABLED:-false}
       # Fail closed: customer deposits stay off unless explicitly enabled for local synthetic funding.
       CUSTOMER_DEPOSITS_ENABLED: ${CUSTOMER_DEPOSITS_ENABLED:-false}

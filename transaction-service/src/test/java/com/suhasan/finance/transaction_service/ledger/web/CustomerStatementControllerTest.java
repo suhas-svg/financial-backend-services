@@ -33,8 +33,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(
-        controllers = CustomerStatementController.class,
-        properties = "security.jwt.secret=01234567890123456789012345678901")
+        controllers = CustomerStatementController.class)
 @Import(SecurityConfig.class)
 class CustomerStatementControllerTest {
 

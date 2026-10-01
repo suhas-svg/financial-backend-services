@@ -53,6 +53,9 @@ public class SecurityConfig {
                         // ── Auth (login, register) — always public ─────────────────────────
                         .requestMatchers("/api/auth/**").permitAll()
 
+                        // ── Public keys that verify user access tokens (RFC 7517) ──────────
+                        .requestMatchers(HttpMethod.GET, "/.well-known/jwks.json").permitAll()
+
                         // ── Health READ endpoints — safe for load balancers/probes ─────────
                         // GET /api/health/ping and GET /api/health/status are read-only.
                         // (H2 fix: POST /api/health/check and POST /api/health/deployment were

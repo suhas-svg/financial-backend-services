@@ -20,8 +20,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = OutcomeProtectionController.class,
-        properties = "security.jwt.secret=01234567890123456789012345678901")
+@WebMvcTest(controllers = OutcomeProtectionController.class)
 @Import({com.suhasan.finance.transaction_service.security.SecurityConfig.class, JwtFilterTestConfig.class})
 @EnableWebSecurity
 class OutcomeProtectionControllerTest {

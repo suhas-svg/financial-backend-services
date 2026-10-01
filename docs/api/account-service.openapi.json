@@ -1201,6 +1201,35 @@
   },
   "openapi" : "3.1.0",
   "paths" : {
+    "/.well-known/jwks.json" : {
+      "get" : {
+        "operationId" : "jwks",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "additionalProperties" : { },
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "jwks-controller" ]
+      }
+    },
     "/api/accounts" : {
       "get" : {
         "operationId" : "listAccounts",

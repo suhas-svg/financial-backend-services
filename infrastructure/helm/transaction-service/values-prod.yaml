@@ -88,6 +88,11 @@ affinity:
 env:
   - name: SPRING_PROFILES_ACTIVE
     value: "prod"
+  # RS256 internal service tokens: every replica must sign with the same key, supplied as
+  # JWT_INTERNAL_SIGNING_PRIVATE_KEY (+ _KEY_ID) in transaction-service-jwt-secrets.
+  # User tokens are verified against account-service's JWKS, derived from ACCOUNT_SERVICE_URL.
+  - name: JWT_INTERNAL_ALLOW_GENERATED_KEY
+    value: "false"
   - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
     value: "health,info,prometheus"
   - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS

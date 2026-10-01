@@ -18,11 +18,9 @@ The frontend expects:
 - Account service: `http://127.0.0.1:8080`
 - Transaction service: `http://127.0.0.1:8081`
 
-The verified Docker path uses `docker-compose.dev.yml` for the complete backend stack and `docker-compose.dev.override.yml` to expose both PostgreSQL instances on loopback-only host ports. Set local-only signing secrets before starting the stack; do not reuse these example values outside local development:
+The verified Docker path uses `docker-compose.dev.yml` for the complete backend stack and `docker-compose.dev.override.yml` to expose both PostgreSQL instances on loopback-only host ports. Set the local-only MFA key before starting the stack; do not reuse these example values outside local development. Token signing keys are generated at startup for local use (see [token signing keys](operations/token-signing-keys.md)):
 
 ```powershell
-$env:JWT_SECRET = "<set-via-secret-manager>"
-$env:INTERNAL_JWT_SECRET = "<set-via-secret-manager>"
 $env:MFA_ENCRYPTION_KEY = "local-development-mfa-encryption-key-change-me-at-least-32-characters"
 $env:STEP_UP_ENABLED = "true"
 # Optional: allow synthetic customer deposits so a fresh local stack can be funded.
@@ -99,11 +97,13 @@ Use environment-provided secrets. Do not commit real JWT secrets.
 Example backend configuration shape:
 
 ```properties
-security.jwt.secret=${JWT_SECRET}
-security.jwt.expiration-in-ms=3600000
+security.jwt.signing.private-key=${JWT_SIGNING_PRIVATE_KEY:}   # account-service, RS256
+security.jwt.expiration-in-ms=900000
 ```
 
-For service-to-service calls, keep the same JWT signing configuration across both services.
+Tokens are RS256 and no secret is shared between the services: each one signs with its own
+private key and publishes the public half at `/.well-known/jwks.json`. See
+[token signing keys](operations/token-signing-keys.md) for configuration and rotation.
 
 Risk-based step-up authorization uses these environment variables:
 
