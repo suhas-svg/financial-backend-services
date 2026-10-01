@@ -289,7 +289,15 @@ public final class OutcomeProtectionDtos {
             SourceSnapshot sourceSnapshot, SimulationProof simulation,
             List<GuardrailResponse> guardrails, Instant createdAt,
             OutcomeType outcomeType, String protectedScheduleId,
-            Long protectedScheduleVersion) {}
+            Long protectedScheduleVersion, MonitoringHealth monitoring) {}
+
+    /**
+     * Whether the background monitor can keep the scenario current. {@code degradedAt} is set after
+     * repeated consecutive failures; any successful check clears every field except {@code lastCheckedAt}.
+     */
+    public record MonitoringHealth(
+            Instant lastCheckedAt, int consecutiveFailures, Instant nextAttemptAt,
+            String lastError, Instant degradedAt) {}
 
     public record NotificationDeliveryEvidence(
             String deliveryId, String state, int attemptCount, Instant nextAttemptAt,

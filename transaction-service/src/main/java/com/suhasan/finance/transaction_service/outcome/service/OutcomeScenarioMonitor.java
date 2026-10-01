@@ -22,7 +22,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>Every replica runs this job. Each scenario is claimed with {@code FOR UPDATE SKIP LOCKED} and
  * processed in its own short transaction, so replicas split the work instead of evaluating the same
  * scenario at once (which collided on the scenario's {@code @Version} and rolled back the whole batch).
- * A scenario that fails rolls back alone, and is not retried again in the same run.
+ * A scenario that fails rolls back alone, is not retried again in the same run, and is backed off
+ * exponentially by {@link OutcomeMonitorHealth} so repeated failures cannot crowd out healthy scenarios.
  */
 @Component
 @RequiredArgsConstructor
@@ -38,6 +39,7 @@ public class OutcomeScenarioMonitor {
     private final OutcomeScenarioRepository scenarioRepository;
     private final OutcomeProtectionService protectionService;
     private final TransactionTemplate transactionTemplate;
+    private final OutcomeMonitorHealth monitorHealth;
 
     @Scheduled(fixedDelayString = "${outcome-protection.monitor.fixed-delay-ms:300000}",
             initialDelayString = "${outcome-protection.monitor.initial-delay-ms:60000}")
@@ -82,6 +84,12 @@ public class OutcomeScenarioMonitor {
             }
             visited.add(scenarioId);
             log.warn("Outcome Protection monitor failed for scenario {}: {}", scenarioId, failure.getMessage());
+            try {
+                monitorHealth.recordFailure(scenarioId, failure);
+            } catch (RuntimeException recordFailure) {
+                // Without the record the scenario simply retries next cycle, as it did before backoff existed.
+                log.warn("Could not record monitor failure for scenario {}: {}", scenarioId, recordFailure.getMessage());
+            }
             return true;
         }
     }

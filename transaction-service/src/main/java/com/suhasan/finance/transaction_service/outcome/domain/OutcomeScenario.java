@@ -33,6 +33,18 @@ public class OutcomeScenario {
     private String lastProtectionState;
     @Column(name = "last_checked_at")
     private Instant lastCheckedAt;
+    /** Consecutive failed monitor evaluations; reset by any successful evaluation. */
+    @Builder.Default
+    @Column(name = "monitor_failure_count", nullable = false)
+    private int monitorFailureCount = 0;
+    /** The monitor skips the scenario until this time (exponential backoff after failures). */
+    @Column(name = "monitor_next_attempt_at")
+    private Instant monitorNextAttemptAt;
+    @Column(name = "monitor_last_error", length = 500)
+    private String monitorLastError;
+    /** Set once repeated failures mean the scenario can no longer be kept current. */
+    @Column(name = "monitor_degraded_at")
+    private Instant monitorDegradedAt;
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
     @Column(name = "updated_at", nullable = false)

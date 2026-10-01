@@ -20,6 +20,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -31,13 +32,14 @@ class OutcomeScenarioMonitorTest {
     @Mock OutcomeScenarioRepository scenarioRepository;
     @Mock OutcomeProtectionService protectionService;
     @Mock PlatformTransactionManager transactionManager;
+    @Mock OutcomeMonitorHealth monitorHealth;
 
     private OutcomeScenarioMonitor monitor;
 
     @BeforeEach
     void setUp() {
         monitor = new OutcomeScenarioMonitor(scenarioRepository, protectionService,
-                new TransactionTemplate(transactionManager));
+                new TransactionTemplate(transactionManager), monitorHealth);
     }
 
     private static OutcomeScenario scenario(String id) {
@@ -107,6 +109,22 @@ class OutcomeScenarioMonitorTest {
         verify(protectionService).refreshClaimed(healthy);
         verify(transactionManager).rollback(any());
         verify(transactionManager, times(2)).commit(any());
+        verify(monitorHealth).recordFailure(eq("s-broken"), any(IllegalStateException.class));
+        verify(monitorHealth, never()).recordFailure(eq("s-ok"), any());
+    }
+
+    @Test
+    void aFailureToRecordTheFailureDoesNotStopTheRun() {
+        OutcomeScenario broken = scenario("s-broken");
+        OutcomeScenario healthy = scenario("s-ok");
+        when(claim()).thenReturn(Optional.of(broken), Optional.of(healthy), Optional.empty());
+        doThrow(new IllegalStateException("boom")).when(protectionService).refreshClaimed(broken);
+        doThrow(new IllegalStateException("database unavailable"))
+                .when(monitorHealth).recordFailure(eq("s-broken"), any());
+
+        monitor.monitorActiveScenarios();
+
+        verify(protectionService).refreshClaimed(healthy);
     }
 
     @Test
@@ -132,6 +150,7 @@ class OutcomeScenarioMonitorTest {
 
         verify(scenarioRepository, times(1)).claimNextActiveForMonitoring(any(LocalDateTime.class), anyCollection());
         verify(protectionService, never()).refreshClaimed(any());
+        verify(monitorHealth, never()).recordFailure(any(), any());
     }
 
     @Test

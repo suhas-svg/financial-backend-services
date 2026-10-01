@@ -41,6 +41,7 @@ class OutcomeRepairDraftSelectionTest {
     @Mock OutcomeNotificationDeliveryService notificationDeliveryService;
     @Mock OutcomeGuardrailService guardrailService;
     @Spy ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    @Mock OutcomeMonitorHealth monitorHealth;
     @InjectMocks OutcomeProtectionService service;
 
     @Test
