@@ -26,8 +26,11 @@ scheduled run or operation claim is stuck, nothing sits in a terminal outbox sta
 that is fast but corrupts a balance fails.
 
 The stack runs with [`docker-compose.synthetic-load.yml`](../../docker-compose.synthetic-load.yml),
-which lifts only the rapid-transfer step-up rule and per-IP auth throttling. Both exist to
-protect real customers and would otherwise answer the test instead of the transfer path.
+which lifts only the rapid-transfer step-up rule and per-IP auth throttling; the drill jobs
+also lift the per-account daily/monthly transfer *count* limits (20/day, 200/month for
+checking), because a load test is one customer making thousands of transfers. Amount limits
+stay. All of these protect real customers and would otherwise answer the test instead of the
+transfer path.
 
 Locally:
 

@@ -451,11 +451,20 @@ jobs:
         run: >-
           docker compose -f docker-compose.synthetic-sandbox.yml -f docker-compose.synthetic-load.yml
           up --build --detach --wait
+      - name: Lift per-account transfer count limits (load profile only)
+        # Checking accounts allow 20 transfers a day and 200 a month per customer; a load
+        # test is one customer making thousands. Amount limits stay in force.
+        run: >-
+          docker compose -f docker-compose.synthetic-sandbox.yml exec -T transaction-postgres
+          psql -U transaction_app -d transaction_sandbox -v ON_ERROR_STOP=1 -c
+          "UPDATE transaction_limits SET daily_count = NULL, monthly_count = NULL WHERE transaction_type = 'TRANSFER'"
       - name: Run the transfer scenario while checking financial invariants
         id: drill
         shell: bash
         run: |
-          set -uo pipefail
+          # Actions runs bash with -e; keep going after a failed k6 threshold so the final
+          # invariant check and the evidence summary are still recorded. The job fails later.
+          set +e -uo pipefail
           case "$DRILL" in
             soak) duration=4h; rate=3;  interval=15; run_minutes=245 ;;
             *)    duration=8m; rate=10; interval=5;  run_minutes=12 ;;
@@ -545,6 +554,13 @@ jobs:
         run: >-
           docker compose -f docker-compose.synthetic-sandbox.yml -f docker-compose.synthetic-load.yml
           up --build --detach --wait
+      - name: Lift per-account transfer count limits (load profile only)
+        # Checking accounts allow 20 transfers a day and 200 a month per customer; a load
+        # test is one customer making thousands. Amount limits stay in force.
+        run: >-
+          docker compose -f docker-compose.synthetic-sandbox.yml exec -T transaction-postgres
+          psql -U transaction_app -d transaction_sandbox -v ON_ERROR_STOP=1 -c
+          "UPDATE transaction_limits SET daily_count = NULL, monthly_count = NULL WHERE transaction_type = 'TRANSFER'"
       - name: Write ledger activity to back up, then pause writes
         run: >-
           k6 run --quiet -e PROFILE=load -e DURATION=2m -e RATE=5

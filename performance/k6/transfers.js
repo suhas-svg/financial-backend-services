@@ -16,6 +16,8 @@ import http from "k6/http";
 import crypto from "k6/crypto";
 import { check, fail, sleep } from "k6";
 import { Counter, Rate } from "k6/metrics";
+// Pinned jslib: renders the standard end-of-test summary alongside the JSON file.
+import { textSummary } from "https://jslib.k6.io/k6-summary/0.1.0/index.js";
 
 const BASE_URL = (__ENV.BASE_URL || "https://127.0.0.1:8443").replace(/\/$/, "");
 const PROFILE = __ENV.PROFILE || "load";
@@ -176,24 +178,33 @@ function authed(method, path, body, name, extraHeaders = {}) {
   return response;
 }
 
+// Log the first few failures with enough detail to diagnose a failed drill from its log.
+let loggedFailures = 0;
+function explain(response, what) {
+  if (loggedFailures >= 10) return;
+  loggedFailures += 1;
+  console.warn(`${what} failed: HTTP ${response.status} ${String(response.body).slice(0, 300)}`);
+}
+
 function transfer(from, to) {
   const response = authed("POST", "/transaction-api/api/transactions/transfer",
     { fromAccountId: from, toAccountId: to, amount: 0.01, currency: "USD", description: "k6 load", reference: "k6" },
     "transfer", { "Idempotency-Key": `k6-${__VU}-${__ITER}-${from}-${Date.now()}` });
   if (response.status === 202) transferAuthorizationRequired.add(1);
-  check(response, { "transfer completed": (r) => r.status === 201 && r.json("status") === "COMPLETED" });
+  const ok = check(response, { "transfer completed": (r) => r.status === 201 && r.json("status") === "COMPLETED" });
+  if (!ok) explain(response, `transfer ${from} -> ${to}`);
 }
 
 export default function (accounts) {
   transfer(accounts.funded, accounts.other);
   transfer(accounts.other, accounts.funded);
   const balances = authed("GET", "/transaction-api/api/ledger/accounts", null, "read");
-  check(balances, { "balances readable": (r) => r.status === 200 });
+  if (!check(balances, { "balances readable": (r) => r.status === 200 })) explain(balances, "balance read");
   const history = authed("GET", "/transaction-api/api/transactions/user?page=0&size=10", null, "read");
-  check(history, { "history readable": (r) => r.status === 200 });
+  if (!check(history, { "history readable": (r) => r.status === 200 })) explain(history, "history read");
 }
 
 export function handleSummary(data) {
   const out = __ENV.SUMMARY_PATH || "k6-summary.json";
-  return { [out]: JSON.stringify(data, null, 2), stdout: `\nk6 summary written to ${out}\n` };
+  return { [out]: JSON.stringify(data, null, 2), stdout: textSummary(data, { indent: " ", enableColors: false }) };
 }
