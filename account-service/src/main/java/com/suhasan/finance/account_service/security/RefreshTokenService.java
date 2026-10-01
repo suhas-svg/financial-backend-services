@@ -48,6 +48,7 @@ public class RefreshTokenService {
                                Instant rotatedAt, Instant revokedAt) {
     }
 
+    private static final String NOW = "now";
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -140,6 +141,23 @@ public class RefreshTokenService {
                 .ifPresent(familyId -> revokeFamily(familyId, "LOGOUT", now));
     }
 
+    /**
+     * Ends every session of a user, on every device (password change, account compromise).
+     * Access tokens already issued stay valid until they expire (minutes), since they are
+     * verified without a database lookup.
+     *
+     * @return how many active refresh tokens were revoked
+     */
+    public int revokeAll(final String username, final String reason) {
+        return jdbc.update("""
+                UPDATE refresh_tokens SET revoked_at = CAST(:now AS timestamptz), revoke_reason = :reason
+                 WHERE username = :username AND revoked_at IS NULL
+                """, new MapSqlParameterSource()
+                .addValue(NOW, Timestamp.from(clock.instant()))
+                .addValue("reason", reason)
+                .addValue("username", username));
+    }
+
     @Scheduled(fixedDelayString = "${security.refresh-token.cleanup-delay-ms:3600000}",
             initialDelayString = "${security.refresh-token.cleanup-initial-delay-ms:600000}")
     public void purgeExpired() {
@@ -165,7 +183,7 @@ public class RefreshTokenService {
                 .addValue("family", familyId)
                 .addValue("username", username)
                 .addValue("hash", hash(value))
-                .addValue("now", Timestamp.from(now))
+                .addValue(NOW, Timestamp.from(now))
                 .addValue("expiresAt", Timestamp.from(expiresAt))
                 .addValue("familyExpiresAt", Timestamp.from(familyExpiresAt)));
         return new IssuedToken(value, expiresAt);
@@ -176,7 +194,7 @@ public class RefreshTokenService {
                 UPDATE refresh_tokens SET revoked_at = CAST(:now AS timestamptz), revoke_reason = :reason
                  WHERE family_id = :family AND revoked_at IS NULL
                 """, new MapSqlParameterSource()
-                .addValue("now", Timestamp.from(now))
+                .addValue(NOW, Timestamp.from(now))
                 .addValue("reason", reason)
                 .addValue("family", familyId));
     }
@@ -184,7 +202,7 @@ public class RefreshTokenService {
     private static MapSqlParameterSource params(final String hash, final Instant now) {
         return new MapSqlParameterSource()
                 .addValue("hash", hash)
-                .addValue("now", Timestamp.from(now));
+                .addValue(NOW, Timestamp.from(now));
     }
 
     private static StoredToken mapToken(final java.sql.ResultSet rs) throws java.sql.SQLException {

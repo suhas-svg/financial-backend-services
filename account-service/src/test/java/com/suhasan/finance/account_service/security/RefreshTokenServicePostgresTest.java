@@ -115,6 +115,20 @@ class RefreshTokenServicePostgresTest {
     }
 
     @Test
+    void revokeAllEndsEverySessionOfThatUserOnly() {
+        IssuedToken laptop = service.issue("alice");
+        IssuedToken phone = service.issue("alice");
+        IssuedToken someoneElse = service.issue("bob");
+
+        assertThat(service.revokeAll("alice", "PASSWORD_CHANGED")).isEqualTo(2);
+
+        assertThat(service.refresh(laptop.value())).isEmpty();
+        assertThat(service.refresh(phone.value())).isEmpty();
+        assertThat(service.refresh(someoneElse.value())).isPresent();
+        assertThat(service.revokeAll("alice", "PASSWORD_CHANGED")).isZero();
+    }
+
+    @Test
     void idleTokensExpire() {
         IssuedToken token = service.issue("alice");
 
