@@ -65,6 +65,7 @@ services:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      AUTH_THROTTLE_ENABLED: ${AUTH_THROTTLE_ENABLED:-true}
       SPRING_DATASOURCE_URL: jdbc:postgresql://account-postgres:5432/myfirstdb
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}

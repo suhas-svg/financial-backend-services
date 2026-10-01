@@ -197,7 +197,8 @@ ingress:
   enabled: true
   className: "nginx"
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    # No rewrite: the backend serves /api/transactions itself. A bare "/" rewrite
+    # target would send every request to "/".
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
   hosts:
