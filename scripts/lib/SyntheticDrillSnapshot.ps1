@@ -34,11 +34,14 @@ select count(*) from (
 ) invalid
 "@
 
-# $Query is a scriptblock that takes SQL and returns the single value it selects.
-function Get-SyntheticDrillSnapshot([string]$Database, [scriptblock]$Query) {
+# $SqlRunner is a scriptblock that takes SQL and returns the single value it selects.
+# Parameter names are deliberately unusual: PowerShell resolves variables dynamically and
+# case-insensitively, so a parameter called $Database would hide the caller's $database
+# inside the scriptblock and send every query to the wrong database.
+function Get-SyntheticDrillSnapshot([string]$SnapshotLabel, [scriptblock]$SqlRunner) {
     $snapshot = [ordered]@{}
-    foreach ($entry in $SyntheticDrillSnapshotQueries[$Database].GetEnumerator()) {
-        $snapshot[$entry.Key] = ([string](& $Query $entry.Value)).Trim()
+    foreach ($entry in $SyntheticDrillSnapshotQueries[$SnapshotLabel].GetEnumerator()) {
+        $snapshot[$entry.Key] = ([string](& $SqlRunner $entry.Value)).Trim()
     }
     return $snapshot
 }

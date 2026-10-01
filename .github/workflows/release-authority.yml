@@ -538,6 +538,13 @@ jobs:
           else
             echo "passed=false" >> "$GITHUB_OUTPUT"
           fi
+      - name: Capture service logs for the evidence
+        if: always() && steps.drill.outcome != 'skipped'
+        run: |
+          mkdir -p evidence/service-logs
+          for service in account-service transaction-service gateway account-postgres transaction-postgres redis; do
+            docker compose -f docker-compose.synthetic-sandbox.yml -f docker-compose.synthetic-load.yml               logs --no-color --timestamps --tail 20000 "$service" > "evidence/service-logs/${service}.log" 2>&1 || true
+          done
       - name: Package evidence for the LOAD_SOAK gate
         if: always() && steps.drill.outcome != 'skipped'
         shell: pwsh
@@ -635,6 +642,13 @@ jobs:
           } else { "restore did not complete" }
           "passed=$($passed.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           "summary=$summary" >> $env:GITHUB_OUTPUT
+      - name: Capture service logs for the evidence
+        if: always() && steps.drill.outcome != 'skipped'
+        run: |
+          mkdir -p evidence/service-logs
+          for service in account-service transaction-service gateway account-postgres transaction-postgres redis; do
+            docker compose -f docker-compose.synthetic-sandbox.yml -f docker-compose.synthetic-load.yml               logs --no-color --timestamps --tail 20000 "$service" > "evidence/service-logs/${service}.log" 2>&1 || true
+          done
       - name: Package evidence for the BACKUP_RESTORE gate
         if: always() && steps.drill.outcome != 'skipped'
         shell: pwsh
