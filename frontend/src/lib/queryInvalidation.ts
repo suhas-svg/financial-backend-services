@@ -1,6 +1,9 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 
-export const MONEY_STATE_REFRESH_INTERVAL_MS = 2000;
+// Background refresh for balances changed outside this tab (scheduled transfers,
+// operator actions). The user's own mutations invalidate immediately, so this
+// only bounds how stale externally-caused changes can look.
+export const MONEY_STATE_REFRESH_INTERVAL_MS = 5000;
 
 /**
  * Refreshes projections in the background without extending a mutation's

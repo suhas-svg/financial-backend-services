@@ -83,15 +83,25 @@ class DefaultCustomerLedgerQueryServiceTest {
                 accountA.getLedgerAccountId(), new BigDecimal("125.00"));
         LedgerBalanceProjection projectionB = LedgerBalanceProjection.open(
                 accountB.getLedgerAccountId(), new BigDecimal("50.00"));
-        when(accountRepository.findByExternalAccountId("2002")).thenReturn(Optional.of(accountB));
-        when(accountRepository.findByExternalAccountId("1001")).thenReturn(Optional.of(accountA));
-        when(projectionRepository.findById(accountB.getLedgerAccountId())).thenReturn(Optional.of(projectionB));
-        when(projectionRepository.findById(accountA.getLedgerAccountId())).thenReturn(Optional.of(projectionA));
+        when(accountRepository.findByExternalAccountIdIn(any())).thenReturn(List.of(accountA, accountB));
+        when(projectionRepository.findAllById(any())).thenReturn(List.of(projectionA, projectionB));
 
         List<LedgerAccountSummaryResponse> response = service.getBalances("customer-1", List.of("2002", "1001"));
 
         assertThat(response).extracting(LedgerAccountSummaryResponse::externalAccountId)
                 .containsExactly("2002", "1001");
+        assertThat(response).extracting(LedgerAccountSummaryResponse::postedBalance)
+                .containsExactly(new BigDecimal("50.00"), new BigDecimal("125.00"));
+    }
+
+    @Test
+    void getBalancesRejectsBatchContainingAnUnownedAccount() {
+        LedgerAccount owned = customerAccount("1001", "customer-1");
+        LedgerAccount foreign = customerAccount("3003", "customer-2");
+        when(accountRepository.findByExternalAccountIdIn(any())).thenReturn(List.of(owned, foreign));
+
+        assertThatThrownBy(() -> service.getBalances("customer-1", List.of("1001", "3003")))
+                .isInstanceOf(LedgerAccountNotFoundException.class);
     }
 
     @Test

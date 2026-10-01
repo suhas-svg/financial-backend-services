@@ -75,14 +75,31 @@ class NotificationServiceAdditionalTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void returnsSummaryAcrossEveryEnumDimension() {
-        when(repository.countByUserId("user")).thenReturn(12L);
-        when(repository.countByUserIdAndStatus("user", NotificationStatus.UNREAD)).thenReturn(3L);
+        when(repository.countByUserGrouped("user")).thenReturn(List.of(
+                countRow(NotificationStatus.UNREAD, NotificationSeverity.CRITICAL, NotificationType.ACCOUNT_FROZEN,
+                        NotificationSourceType.ACCOUNT, 3L),
+                countRow(NotificationStatus.READ, NotificationSeverity.CRITICAL, NotificationType.TRANSACTION_COMPLETED,
+                        NotificationSourceType.TRANSACTION, 5L),
+                countRow(NotificationStatus.READ, NotificationSeverity.INFO, NotificationType.TRANSACTION_COMPLETED,
+                        NotificationSourceType.TRANSACTION, 4L)));
         var summary = service.summaryForUser("user");
         assertThat(summary).containsEntry("total", 12L).containsEntry("unread", 3L);
-        assertThat((java.util.Map<?, ?>) summary.get("bySeverity")).hasSize(NotificationSeverity.values().length);
-        assertThat((java.util.Map<?, ?>) summary.get("byType")).hasSize(NotificationType.values().length);
-        assertThat((java.util.Map<?, ?>) summary.get("bySourceType")).hasSize(NotificationSourceType.values().length);
+        var bySeverity = (java.util.Map<Object, Object>) summary.get("bySeverity");
+        var byType = (java.util.Map<Object, Object>) summary.get("byType");
+        var bySourceType = (java.util.Map<Object, Object>) summary.get("bySourceType");
+        assertThat(bySeverity).hasSize(NotificationSeverity.values().length)
+                .containsEntry(NotificationSeverity.CRITICAL, 8L)
+                .containsEntry(NotificationSeverity.INFO, 4L)
+                .containsEntry(NotificationSeverity.WARNING, 0L);
+        assertThat(byType).hasSize(NotificationType.values().length)
+                .containsEntry(NotificationType.TRANSACTION_COMPLETED, 9L)
+                .containsEntry(NotificationType.ACCOUNT_FROZEN, 3L)
+                .containsEntry(NotificationType.DISPUTE_CREATED, 0L);
+        assertThat(bySourceType).hasSize(NotificationSourceType.values().length)
+                .containsEntry(NotificationSourceType.TRANSACTION, 9L)
+                .containsEntry(NotificationSourceType.ACCOUNT, 3L);
     }
 
     @Test
@@ -94,13 +111,10 @@ class NotificationServiceAdditionalTest {
         when(repository.findByNotificationIdAndUserId(2L, "user")).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.markRead(2L, "user")).isInstanceOf(IllegalArgumentException.class);
 
-        Notification first = baseNotification();
-        Notification second = baseNotification();
-        when(repository.findByUserIdAndStatus("user", NotificationStatus.UNREAD)).thenReturn(List.of(first, second));
+        when(repository.markAllUnreadAsRead(org.mockito.ArgumentMatchers.eq("user"), any(LocalDateTime.class)))
+                .thenReturn(2);
         assertThat(service.markAllRead("user")).isEqualTo(2);
-        assertThat(first.getStatus()).isEqualTo(NotificationStatus.READ);
-        assertThat(second.getReadAt()).isNotNull();
-        verify(repository).saveAll(List.of(first, second));
+        verify(repository).markAllUnreadAsRead(org.mockito.ArgumentMatchers.eq("user"), any(LocalDateTime.class));
     }
 
     @Test
@@ -164,5 +178,17 @@ class NotificationServiceAdditionalTest {
                 .severity(NotificationSeverity.CRITICAL).title("title").message("message")
                 .sourceType(NotificationSourceType.ACCOUNT).sourceId("1")
                 .dedupeKey(key).deliveryId(delivery).build();
+    }
+
+    private static NotificationRepository.NotificationCountRow countRow(
+            NotificationStatus status, NotificationSeverity severity, NotificationType type,
+            NotificationSourceType sourceType, long total) {
+        return new NotificationRepository.NotificationCountRow() {
+            @Override public NotificationStatus getStatus() { return status; }
+            @Override public NotificationSeverity getSeverity() { return severity; }
+            @Override public NotificationType getType() { return type; }
+            @Override public NotificationSourceType getSourceType() { return sourceType; }
+            @Override public long getTotal() { return total; }
+        };
     }
 }

@@ -64,11 +64,24 @@ public class DefaultCustomerLedgerQueryService implements CustomerLedgerQuerySer
     @Override
     @Transactional(readOnly = true)
     public List<LedgerAccountSummaryResponse> getBalances(String customerId, List<String> externalAccountIds) {
-        if (externalAccountIds == null) {
+        if (externalAccountIds == null || externalAccountIds.isEmpty()) {
             return List.of();
         }
-        return externalAccountIds.stream()
-                .map(externalAccountId -> getBalance(customerId, externalAccountId))
+        // Two queries for the whole batch instead of two per requested account.
+        Map<String, LedgerAccount> ownedAccounts = accountRepository
+                .findByExternalAccountIdIn(new HashSet<>(externalAccountIds)).stream()
+                .filter(candidate -> candidate.getAccountKind() == LedgerAccountKind.CUSTOMER)
+                .filter(candidate -> customerId.equals(candidate.getOwnerId()))
+                .collect(Collectors.toMap(LedgerAccount::getExternalAccountId, Function.identity()));
+        List<LedgerAccount> accounts = externalAccountIds.stream()
+                .map(externalAccountId -> Optional.ofNullable(ownedAccounts.get(externalAccountId))
+                        .orElseThrow(() -> new LedgerAccountNotFoundException("Ledger account not found")))
+                .toList();
+        Map<UUID, LedgerBalanceProjection> projections = projectionMap(ownedAccounts.values().stream()
+                .map(LedgerAccount::getLedgerAccountId)
+                .toList());
+        return accounts.stream()
+                .map(account -> toSummary(account, requiredProjection(account.getLedgerAccountId(), projections)))
                 .toList();
     }
 
