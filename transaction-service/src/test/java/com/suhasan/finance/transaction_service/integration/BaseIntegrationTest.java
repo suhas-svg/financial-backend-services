@@ -1,5 +1,6 @@
 package com.suhasan.finance.transaction_service.integration;
 
+import com.suhasan.finance.transaction_service.security.keys.TestKeys;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
@@ -126,6 +127,8 @@ public abstract class BaseIntegrationTest {
 
         // Account Service configuration (WireMock)
         registry.add("account-service.base-url", () -> "http://localhost:" + wireMockServer.port());
+        // User access tokens in these tests are signed by IntegrationTestConfiguration.JwtTestUtil.
+        registry.add("security.jwt.public-key", () -> TestKeys.publicPem(TestKeys.USER.getPublic()));
     }
 
     @BeforeAll

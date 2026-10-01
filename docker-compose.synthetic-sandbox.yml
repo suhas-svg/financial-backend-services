@@ -58,8 +58,9 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://account-postgres:5432/account_sandbox
       SPRING_DATASOURCE_USERNAME: account_app
       SPRING_DATASOURCE_PASSWORD: ${ACCOUNT_DB_PASSWORD:?ACCOUNT_DB_PASSWORD is required}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?INTERNAL_JWT_SECRET is required}
+      # Tokens are RS256. Each service generates its signing key at startup (single replica);
+      # transaction-service's internal-token keys are published here:
+      INTERNAL_JWKS_URI: http://transaction-service:8081/.well-known/jwks.json
       MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?MFA_ENCRYPTION_KEY is required}
       SANDBOX_SYNTHETIC_ENABLED: "true"
       SANDBOX_BOOTSTRAP_TOKEN: ${SANDBOX_BOOTSTRAP_TOKEN:?SANDBOX_BOOTSTRAP_TOKEN is required}
@@ -100,8 +101,6 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?INTERNAL_JWT_SECRET is required}
       SANDBOX_SYNTHETIC_ENABLED: "true"
       SANDBOX_SEED_FUNDED_AMOUNT: "1000.00"
       CONTROLLED_BETA_SYNTHETIC_FUNDING_ENABLED: "true"

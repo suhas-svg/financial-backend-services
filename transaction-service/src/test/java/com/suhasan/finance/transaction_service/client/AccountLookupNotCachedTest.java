@@ -1,5 +1,7 @@
 package com.suhasan.finance.transaction_service.client;
 
+import com.suhasan.finance.transaction_service.security.keys.TestKeys;
+import com.suhasan.finance.transaction_service.security.InternalServiceTokens;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.suhasan.finance.transaction_service.dto.AccountDto;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -64,6 +66,11 @@ class AccountLookupNotCachedTest {
         }
 
         @Bean
+        InternalServiceTokens internalServiceTokens() {
+            return new InternalServiceTokens(TestKeys.internalSigningKeys());
+        }
+
+        @Bean
         ResilientAccountServiceClient client() {
             Retry retry = Retry.of("account-cache-test", RetryConfig.custom()
                     .maxAttempts(1).waitDuration(Duration.ZERO).build());
@@ -86,7 +93,8 @@ class AccountLookupNotCachedTest {
         client = context.getBean(ResilientAccountServiceClient.class);
         ReflectionTestUtils.setField(client, "accountServiceBaseUrl", server.baseUrl());
         ReflectionTestUtils.setField(client, "timeout", 10_000);
-        ReflectionTestUtils.setField(client, "internalJwtSecret", "test-only-" + "1".repeat(32));
+        ReflectionTestUtils.setField(client, "internalServiceTokens",
+                new InternalServiceTokens(TestKeys.internalSigningKeys()));
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("alice", "user-jwt-token"));
     }

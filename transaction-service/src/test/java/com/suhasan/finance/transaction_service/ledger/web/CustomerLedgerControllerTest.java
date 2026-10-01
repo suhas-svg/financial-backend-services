@@ -30,8 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(
-        controllers = CustomerLedgerController.class,
-        properties = "security.jwt.secret=01234567890123456789012345678901")
+        controllers = CustomerLedgerController.class)
 @Import(SecurityConfig.class)
 class CustomerLedgerControllerTest {
 

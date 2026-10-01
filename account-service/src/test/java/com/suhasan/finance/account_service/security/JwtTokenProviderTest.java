@@ -1,77 +1,106 @@
 package com.suhasan.finance.account_service.security;
 
+import com.suhasan.finance.account_service.security.keys.RemoteJwks;
+import com.suhasan.finance.account_service.security.keys.RsaSigningKeys;
+import com.suhasan.finance.account_service.security.keys.TestKeys;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.security.PrivateKey;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class JwtTokenProviderTest {
-    private static final String USER_SECRET = "test-only-" + "0".repeat(32);
-    private static final String INTERNAL_SECRET = "test-only-" + "1".repeat(32);
 
     private JwtTokenProvider provider;
 
     @BeforeEach
     void setUp() {
-        provider = new JwtTokenProvider();
-        ReflectionTestUtils.setField(provider, "jwtSecret", USER_SECRET);
-        ReflectionTestUtils.setField(provider, "internalJwtSecret", INTERNAL_SECRET);
-        ReflectionTestUtils.setField(provider, "jwtExpirationInMs", 60_000L);
+        RsaSigningKeys signingKeys = new RsaSigningKeys("user access token",
+                TestKeys.privatePem(TestKeys.USER.getPrivate()), "user-key-1", null, null, false);
+        RemoteJwks internalKeys = new RemoteJwks(null, TestKeys.publicPem(TestKeys.INTERNAL.getPublic()));
+        provider = new JwtTokenProvider(signingKeys, internalKeys, 60_000L);
+    }
+
+    private static UsernamePasswordAuthenticationToken alice() {
+        return new UsernamePasswordAuthenticationToken("alice", "ignored", List.of(
+                new SimpleGrantedAuthority("ROLE_USER"), new SimpleGrantedAuthority("ROLE_ADMIN")));
     }
 
     @Test
-    void generatedUserTokenContainsSubjectRolesAndValidExpiration() {
-        var authentication = new UsernamePasswordAuthenticationToken(
-                "alice", "ignored", List.of(
-                new SimpleGrantedAuthority("ROLE_USER"),
-                new SimpleGrantedAuthority("ROLE_ADMIN")));
-
-        String token = provider.generateToken(authentication);
+    void generatedUserTokenIsRs256WithKeyIdSubjectRolesAndExpiration() {
+        String token = provider.generateToken(alice());
 
         assertThat(provider.validateToken(token)).isTrue();
         assertThat(provider.getUsernameFromJWT(token)).isEqualTo("alice");
-        Claims claims = Jwts.parserBuilder()
-                .setSigningKey(Keys.hmacShaKeyFor(USER_SECRET.getBytes(StandardCharsets.UTF_8)))
-                .build().parseClaimsJws(token).getBody();
+        var jws = Jwts.parserBuilder().setSigningKey(TestKeys.USER.getPublic()).build().parseClaimsJws(token);
+        assertThat(jws.getHeader().getAlgorithm()).isEqualTo("RS256");
+        assertThat(jws.getHeader().getKeyId()).isEqualTo("user-key-1");
+        Claims claims = jws.getBody();
         assertThat(claims.get("roles", List.class)).containsExactly("ROLE_USER", "ROLE_ADMIN");
         assertThat(claims.getExpiration()).isAfter(claims.getIssuedAt());
     }
 
     @Test
-    void userValidationRejectsMalformedExpiredAndDifferentlySignedTokens() {
-        String expired = Jwts.builder()
-                .setSubject("alice")
-                .setIssuedAt(Date.from(Instant.now().minusSeconds(120)))
-                .setExpiration(Date.from(Instant.now().minusSeconds(60)))
-                .signWith(Keys.hmacShaKeyFor(USER_SECRET.getBytes(StandardCharsets.UTF_8)))
-                .compact();
-        String wrongSignature = Jwts.builder()
-                .setSubject("alice")
-                .setExpiration(Date.from(Instant.now().plusSeconds(60)))
-                .signWith(Keys.hmacShaKeyFor(INTERNAL_SECRET.getBytes(StandardCharsets.UTF_8)))
-                .compact();
+    void userValidationRejectsMalformedExpiredAndForeignKeyTokens() {
+        String expired = userToken(TestKeys.USER.getPrivate(), "user-key-1", Instant.now().minusSeconds(60));
+        String foreignKey = userToken(TestKeys.OTHER.getPrivate(), "user-key-1", Instant.now().plusSeconds(60));
+        String unknownKid = userToken(TestKeys.USER.getPrivate(), "someone-else", Instant.now().plusSeconds(60));
 
         assertThat(provider.validateToken("not-a-jwt")).isFalse();
         assertThat(provider.validateToken(expired)).isFalse();
-        assertThat(provider.validateToken(wrongSignature)).isFalse();
+        assertThat(provider.validateToken(foreignKey)).isFalse();
+        assertThat(provider.validateToken(unknownKid)).isFalse();
         assertThat(provider.validateToken(null)).isFalse();
+    }
+
+    @Test
+    void hs256TokensAreRejectedEvenWhenTheHmacKeyIsThePublishedPublicKey() {
+        // Algorithm confusion: an attacker signs HS256 using the public key as the "secret".
+        byte[] publicKeyBytes = Base64.getEncoder().encode(TestKeys.USER.getPublic().getEncoded());
+        String confused = Jwts.builder().setHeaderParam("kid", "user-key-1").setSubject("alice")
+                .setExpiration(Date.from(Instant.now().plusSeconds(60)))
+                .signWith(Keys.hmacShaKeyFor(publicKeyBytes), SignatureAlgorithm.HS256).compact();
+        String plainHs256 = Jwts.builder().setSubject("alice")
+                .setExpiration(Date.from(Instant.now().plusSeconds(60)))
+                .signWith(Keys.hmacShaKeyFor("x".repeat(40).getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertThat(provider.validateToken(confused)).isFalse();
+        assertThat(provider.validateToken(plainHs256)).isFalse();
+    }
+
+    @Test
+    void tokensSignedWithTheRotatedOutKeyStillVerifyUntilTheyExpire() {
+        RsaSigningKeys rotated = new RsaSigningKeys("user access token",
+                TestKeys.privatePem(TestKeys.OTHER.getPrivate()), "user-key-2",
+                TestKeys.publicPem(TestKeys.USER.getPublic()), "user-key-1", false);
+        JwtTokenProvider afterRotation = new JwtTokenProvider(rotated,
+                new RemoteJwks(null, TestKeys.publicPem(TestKeys.INTERNAL.getPublic())), 60_000L);
+
+        String issuedBefore = provider.generateToken(alice());
+        String issuedAfter = afterRotation.generateToken(alice());
+
+        assertThat(afterRotation.validateToken(issuedBefore)).isTrue();
+        assertThat(afterRotation.validateToken(issuedAfter)).isTrue();
+        assertThat((List<?>) rotated.jwks().get("keys")).hasSize(2);
     }
 
     @Test
     void validInternalServiceTokenRequiresServiceTypeAudienceAndRole() {
         String token = internalToken("transaction-service", "service", "account-service",
-                List.of("ROLE_INTERNAL_SERVICE"));
+                List.of("ROLE_INTERNAL_SERVICE"), TestKeys.INTERNAL.getPrivate());
 
         assertThat(provider.validateInternalServiceToken(token)).isTrue();
         assertThat(provider.getInternalSubject(token)).isEqualTo("transaction-service");
@@ -79,35 +108,40 @@ class JwtTokenProviderTest {
     }
 
     @Test
-    void internalValidationRejectsWrongTypeAudienceRoleAndSignature() {
+    void internalValidationRejectsWrongTypeAudienceRoleAndSigner() {
+        PrivateKey internal = TestKeys.INTERNAL.getPrivate();
         assertThat(provider.validateInternalServiceToken(internalToken(
-                "transaction-service", "user", "account-service", List.of("ROLE_INTERNAL_SERVICE")))).isFalse();
+                "transaction-service", "user", "account-service", List.of("ROLE_INTERNAL_SERVICE"), internal)))
+                .isFalse();
         assertThat(provider.validateInternalServiceToken(internalToken(
-                "transaction-service", "service", "other-service", List.of("ROLE_INTERNAL_SERVICE")))).isFalse();
+                "transaction-service", "service", "other-service", List.of("ROLE_INTERNAL_SERVICE"), internal)))
+                .isFalse();
         assertThat(provider.validateInternalServiceToken(internalToken(
-                "transaction-service", "service", "account-service", List.of("ROLE_USER")))).isFalse();
-
-        String userSigned = Jwts.builder()
-                .setSubject("transaction-service")
-                .claim("token_type", "service")
-                .setAudience("account-service")
-                .claim("roles", List.of("ROLE_INTERNAL_SERVICE"))
-                .setExpiration(Date.from(Instant.now().plusSeconds(60)))
-                .signWith(Keys.hmacShaKeyFor(USER_SECRET.getBytes(StandardCharsets.UTF_8)))
-                .compact();
-        assertThat(provider.validateInternalServiceToken(userSigned)).isFalse();
+                "transaction-service", "service", "account-service", List.of("ROLE_USER"), internal))).isFalse();
+        // The user-token signer (this service) cannot mint internal service tokens.
+        assertThat(provider.validateInternalServiceToken(internalToken(
+                "transaction-service", "service", "account-service", List.of("ROLE_INTERNAL_SERVICE"),
+                TestKeys.USER.getPrivate()))).isFalse();
         assertThat(provider.validateInternalServiceToken("invalid")).isFalse();
     }
 
     @Test
     void internalRolesAreEmptyWhenClaimIsNotAList() {
-        String token = internalToken("transaction-service", "service", "account-service", "ROLE_INTERNAL_SERVICE");
+        String token = internalToken("transaction-service", "service", "account-service", "ROLE_INTERNAL_SERVICE",
+                TestKeys.INTERNAL.getPrivate());
 
         assertThat(provider.getInternalRoles(token)).isEmpty();
         assertThat(provider.validateInternalServiceToken(token)).isFalse();
     }
 
-    private String internalToken(String subject, String tokenType, String audience, Object roles) {
+    private static String userToken(PrivateKey key, String kid, Instant expiresAt) {
+        return Jwts.builder().setHeaderParam("kid", kid).setSubject("alice")
+                .setIssuedAt(Date.from(expiresAt.minusSeconds(120))).setExpiration(Date.from(expiresAt))
+                .signWith(key, SignatureAlgorithm.RS256).compact();
+    }
+
+    private static String internalToken(String subject, String tokenType, String audience, Object roles,
+                                        PrivateKey key) {
         return Jwts.builder()
                 .setSubject(subject)
                 .claim("token_type", tokenType)
@@ -115,7 +149,7 @@ class JwtTokenProviderTest {
                 .claim("roles", roles)
                 .setIssuedAt(Date.from(Instant.now()))
                 .setExpiration(Date.from(Instant.now().plusSeconds(60)))
-                .signWith(Keys.hmacShaKeyFor(INTERNAL_SECRET.getBytes(StandardCharsets.UTF_8)))
+                .signWith(key, SignatureAlgorithm.RS256)
                 .compact();
     }
 }

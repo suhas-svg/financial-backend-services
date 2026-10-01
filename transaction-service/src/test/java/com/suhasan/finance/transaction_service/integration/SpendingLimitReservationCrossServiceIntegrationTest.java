@@ -1,5 +1,7 @@
 package com.suhasan.finance.transaction_service.integration;
 
+import com.suhasan.finance.transaction_service.security.keys.TestKeys;
+import com.suhasan.finance.transaction_service.security.InternalServiceTokens;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.suhasan.finance.transaction_service.service.SpendingLimitReservationLifecycleClient;
 import org.junit.jupiter.api.AfterEach;
@@ -29,8 +31,8 @@ class SpendingLimitReservationCrossServiceIntegrationTest {
         client = new SpendingLimitReservationLifecycleClient(WebClient.builder());
         ReflectionTestUtils.setField(client, "accountServiceBaseUrl", accountService.baseUrl());
         ReflectionTestUtils.setField(client, "timeout", 5000);
-        ReflectionTestUtils.setField(client, "internalJwtSecret",
-                "cross-service-test-internal-signing-secret-at-least-32-bytes");
+        ReflectionTestUtils.setField(client, "internalServiceTokens",
+                new InternalServiceTokens(TestKeys.internalSigningKeys()));
     }
 
     @AfterEach

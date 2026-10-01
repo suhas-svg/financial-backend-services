@@ -1,8 +1,7 @@
 package com.suhasan.finance.account_service.integration;
 
+import com.suhasan.finance.account_service.security.JwtTokenProvider;
 import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -16,18 +15,18 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
 public class OperatorIamEnforcementFilter extends OncePerRequestFilter {
-    private final String secret;
+    private final JwtTokenProvider tokens;
     private final String issuer;
     private final String audience;
     private final Set<String> mappedAdminClaims;
@@ -35,13 +34,13 @@ public class OperatorIamEnforcementFilter extends OncePerRequestFilter {
     private final long maxReviewAgeDays;
 
     public OperatorIamEnforcementFilter(
-            @Value("${security.jwt.secret}") final String secret,
+            final JwtTokenProvider tokens,
             @Value("${integration.iam.issuer:local-account-service}") final String issuer,
             @Value("${integration.iam.audience:account-service}") final String audience,
             @Value("${integration.iam.role-mappings:admin=ROLE_ADMIN}") final String mappings,
             @Value("${integration.iam.strict:false}") final boolean strict,
             @Value("${integration.iam.access-review-max-age-days:90}") final long maxReviewAgeDays) {
-        this.secret = secret;
+        this.tokens = tokens;
         this.issuer = issuer;
         this.audience = audience;
         this.strict = strict;
@@ -60,17 +59,14 @@ public class OperatorIamEnforcementFilter extends OncePerRequestFilter {
             return;
         }
 
-        final Claims claims;
-        try {
-            claims = Jwts.parserBuilder()
-                    .setSigningKey(Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)))
-                    .build().parseClaimsJws(header.substring(7)).getBody();
-        } catch (RuntimeException notAUserToken) {
-            // Internal-service tokens use a separate key and are validated by
-            // the existing authentication filter. Invalid tokens remain unauthenticated.
+        // Internal-service tokens are signed by another key and validated by the
+        // authentication filter. Invalid tokens remain unauthenticated.
+        final Optional<Claims> verified = tokens.parseUserClaimsIfValid(header.substring(7));
+        if (verified.isEmpty()) {
             chain.doFilter(request, response);
             return;
         }
+        final Claims claims = verified.get();
 
         try {
             if (contains(claims.get("roles"), "ROLE_ADMIN")) {
