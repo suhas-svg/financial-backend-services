@@ -7,6 +7,8 @@ package com.suhasan.finance.account_service.exception;
  */
 public class TooManyAttemptsException extends RuntimeException {
 
+    private static final long serialVersionUID = 1L;
+
     private final long retryAfterSeconds;
 
     public TooManyAttemptsException(final long retryAfterSeconds) {
