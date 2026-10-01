@@ -43,7 +43,13 @@ try{
   $mismatches=@()
   $expected=$receipt.snapshots.$label
   if($null -eq $expected){$mismatches+="backup receipt has no snapshot for $label (taken before snapshots were recorded)"}
-  else{foreach($key in $restored.Keys){if([string]$expected.$key -ne [string]$restored[$key]){$mismatches+="$key expected $($expected.$key) restored $($restored[$key])"}}}
+  else{foreach($key in $restored.Keys){
+   # ConvertFrom-Json turns ISO timestamps in the receipt into DateTime; compare in the
+   # format the snapshot query produced, not in the current culture's date format.
+   $want=$expected.$key
+   if($want -is [datetime]){$want=$want.ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff",[Globalization.CultureInfo]::InvariantCulture)}
+   if([string]$want -ne [string]$restored[$key]){$mismatches+="$key expected $want restored $($restored[$key])"}
+  }}
   $unbalanced=$null
   if($label -eq "transaction"){
    $unbalanced=[int]([string](& $query $SyntheticDrillUnbalancedJournalsQuery)).Trim()
