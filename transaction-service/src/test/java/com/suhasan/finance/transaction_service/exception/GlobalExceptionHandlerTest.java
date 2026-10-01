@@ -185,6 +185,17 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void moneyMovementBusy_IsAFastRetryable503() {
+        ResponseEntity<ProblemDetail> response = globalExceptionHandler.handleMoneyMovementBusyException(
+                new MoneyMovementBusyException(), request("/api/transactions/transfer"));
+
+        ProblemDetail body = assertProblem(response, HttpStatus.SERVICE_UNAVAILABLE, "money-movement-busy",
+                "Service Busy", "/api/transactions/transfer");
+        assertEquals("1", response.getHeaders().getFirst("Retry-After"));
+        assertTrue(body.getDetail().contains("Nothing was charged"));
+    }
+
+    @Test
     void typeMismatch_IsABadRequestNotAServerError() {
         MethodArgumentTypeMismatchException exception = new MethodArgumentTypeMismatchException(
                 "abc", Long.class, "id", null, new NumberFormatException("abc"));

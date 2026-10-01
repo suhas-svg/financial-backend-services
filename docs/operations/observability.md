@@ -60,3 +60,22 @@ The sandbox Prometheus (`docker-compose.synthetic-alerting.yml`) loads these rul
 In Kubernetes, load the same file through a `PrometheusRule` or your rule sidecar.
 Prometheus scrapes `/actuator/prometheus` with the bearer token in
 `monitoring.serviceMonitor.scrapeToken` (`METRICS_SCRAPE_TOKEN` in the pod).
+
+## Money-movement capacity
+
+Deposits, withdrawals and transfers pass through a bulkhead (`MoneyMovementBulkhead`) that caps
+how many run at once. Each movement can hold two database connections (its transaction plus
+independently committed idempotency claims and effect records), so the cap keeps the pool from
+deadlocking. Over the cap, a request waits up to `MONEY_MOVEMENT_MAX_WAIT_MS` and then gets a
+fast `503` Problem Detail (`urn:financial:problem:money-movement-busy`, `Retry-After: 1`);
+nothing is claimed or moved, so retrying with the same `Idempotency-Key` is safe.
+
+| Setting | Env var | Default |
+| --- | --- | --- |
+| Concurrent movements | `MONEY_MOVEMENT_MAX_CONCURRENCY` | `8` |
+| Wait for a slot | `MONEY_MOVEMENT_MAX_WAIT_MS` | `5000` |
+| Connection pool | `DB_POOL_MAX_SIZE` | `20` (keep above 2 × concurrency) |
+| Pool wait | `DB_POOL_CONNECTION_TIMEOUT_MS` | `10000` |
+
+Gauges: `money_movement_in_flight`, `money_movement_waiting`. A sustained non-zero `waiting`
+means the service needs more capacity (replicas, or a larger pool and cap together).

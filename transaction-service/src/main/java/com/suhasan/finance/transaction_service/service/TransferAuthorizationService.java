@@ -32,7 +32,10 @@ public class TransferAuthorizationService {
     private final AuditService auditService;
     private final TransferAuthorizationStateService authorizationStateService;
 
-    @Transactional
+    // Deliberately not @Transactional: the direct path hands off to processTransfer, which runs
+    // its own transaction, and an outer one here would hold an extra database connection for the
+    // whole transfer (including account-service calls). The step-up path's save and audit each
+    // commit on their own, like authorize() below.
     public TransactionResponse submit(TransferRequest request, String userId, String idempotencyKey) {
         if (request.getFromAccountId() != null && request.getFromAccountId().equals(request.getToAccountId())) {
             throw new IllegalArgumentException("Source and destination accounts must be different");
