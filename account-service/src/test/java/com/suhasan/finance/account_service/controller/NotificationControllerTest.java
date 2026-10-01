@@ -102,11 +102,14 @@ class NotificationControllerTest {
     @Test
     @DisplayName("Summary delegates to current user")
     void summaryDelegatesToCurrentUser() {
-        when(notificationService.summaryForUser("customer")).thenReturn(Map.of("total", 2L, "unread", 1L));
+        when(notificationService.summaryForUser("customer"))
+                .thenReturn(new com.suhasan.finance.account_service.dto.NotificationSummaryResponse(2L, 1L, Map.of(), Map.of(), Map.of()));
 
         var response = controller.summary(auth("customer", "ROLE_USER"));
 
-        assertThat(response.getBody()).containsEntry("total", 2L);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().total()).isEqualTo(2L);
+        assertThat(response.getBody().unread()).isEqualTo(1L);
         verify(notificationService).summaryForUser("customer");
     }
 

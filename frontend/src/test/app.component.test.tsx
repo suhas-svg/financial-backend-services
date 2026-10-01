@@ -1865,8 +1865,8 @@ describe("admin reconciliation", () => {
       severity: "CRITICAL",
       status: "OPEN",
       fingerprint: "projection:ledger-1:posted-balance",
-      title: "Projection drift",
-      description: "Ledger account 101 projection differs from posted journals.",
+      // Shape of ReconciliationExceptionResponse: there is no title/description field.
+      summary: "Projection drift",
       ledgerAccountId: "ledger-1",
       externalAccountId: "101",
       currency: "USD",
@@ -1880,8 +1880,6 @@ describe("admin reconciliation", () => {
       ...exception,
       status: "RESOLVED",
       resolutionNote: "Projection will be rebuilt after journal replay.",
-      resolvedBy: "ops",
-      resolvedAt: "2026-06-25T02:00:00Z",
       version: 4
     };
     const assignedException = {

@@ -1,6 +1,7 @@
 package com.suhasan.finance.account_service.service;
 
 import com.suhasan.finance.account_service.dto.NotificationCreateRequest;
+import com.suhasan.finance.account_service.dto.NotificationSummaryResponse;
 import com.suhasan.finance.account_service.dto.NotificationFilter;
 import com.suhasan.finance.account_service.entity.Notification;
 import com.suhasan.finance.account_service.entity.NotificationSeverity;
@@ -21,7 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -90,7 +90,7 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> summaryForUser(final String userId) {
+    public NotificationSummaryResponse summaryForUser(final String userId) {
         final Map<NotificationSeverity, Long> bySeverity = zeroCounts(NotificationSeverity.class);
         final Map<NotificationType, Long> byType = zeroCounts(NotificationType.class);
         final Map<NotificationSourceType, Long> bySourceType = zeroCounts(NotificationSourceType.class);
@@ -108,13 +108,7 @@ public class NotificationService {
             bySourceType.merge(row.getSourceType(), count, Long::sum);
         }
 
-        final Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("total", total);
-        summary.put("unread", unread);
-        summary.put("bySeverity", bySeverity);
-        summary.put("byType", byType);
-        summary.put("bySourceType", bySourceType);
-        return summary;
+        return new NotificationSummaryResponse(total, unread, bySeverity, byType, bySourceType);
     }
 
     @Transactional

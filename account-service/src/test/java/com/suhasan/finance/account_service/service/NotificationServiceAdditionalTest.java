@@ -85,10 +85,11 @@ class NotificationServiceAdditionalTest {
                 countRow(NotificationStatus.READ, NotificationSeverity.INFO, NotificationType.TRANSACTION_COMPLETED,
                         NotificationSourceType.TRANSACTION, 4L)));
         var summary = service.summaryForUser("user");
-        assertThat(summary).containsEntry("total", 12L).containsEntry("unread", 3L);
-        var bySeverity = (java.util.Map<Object, Object>) summary.get("bySeverity");
-        var byType = (java.util.Map<Object, Object>) summary.get("byType");
-        var bySourceType = (java.util.Map<Object, Object>) summary.get("bySourceType");
+        assertThat(summary.total()).isEqualTo(12L);
+        assertThat(summary.unread()).isEqualTo(3L);
+        var bySeverity = summary.bySeverity();
+        var byType = summary.byType();
+        var bySourceType = summary.bySourceType();
         assertThat(bySeverity).hasSize(NotificationSeverity.values().length)
                 .containsEntry(NotificationSeverity.CRITICAL, 8L)
                 .containsEntry(NotificationSeverity.INFO, 4L)

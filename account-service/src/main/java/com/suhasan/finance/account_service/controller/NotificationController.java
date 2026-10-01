@@ -1,5 +1,6 @@
 package com.suhasan.finance.account_service.controller;
 
+import com.suhasan.finance.account_service.dto.NotificationSummaryResponse;
 import com.suhasan.finance.account_service.dto.NotificationCreateRequest;
 import com.suhasan.finance.account_service.dto.NotificationFilter;
 import com.suhasan.finance.account_service.dto.PageResponse;
@@ -55,7 +56,7 @@ public class NotificationController {
     }
 
     @GetMapping("/notifications/summary")
-    public ResponseEntity<Map<String, Object>> summary(final Authentication authentication) {
+    public ResponseEntity<NotificationSummaryResponse> summary(final Authentication authentication) {
         return ResponseEntity.ok(notificationService.summaryForUser(authentication.getName()));
     }
 
