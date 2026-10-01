@@ -2,29 +2,24 @@ apiVersion: v2
 name: account-service
 description: A Helm chart for the Account Service financial microservice
 type: application
-version: 0.1.0
-appVersion: "0.1.0" # x-release-please-version
-
+version: 0.2.0
+appVersion: 0.1.0
 keywords:
   - financial
   - microservice
   - spring-boot
   - account-service
-
 home: https://github.com/suhas-svg/financial-backend-services
 sources:
   - https://github.com/suhas-svg/financial-backend-services
-
 maintainers:
   - name: Development Team
     email: dev-team@company.com
-
 dependencies:
   - name: postgresql
-    version: "12.1.9"
-    repository: "https://charts.bitnami.com/bitnami"
+    version: 12.1.9
+    repository: https://charts.bitnami.com/bitnami
     condition: postgresql.enabled
-
 annotations:
   category: Financial Services
   licenses: Apache-2.0
