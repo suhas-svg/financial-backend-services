@@ -129,17 +129,23 @@ ingress:
   enabled: true
   className: "nginx"
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    # Strip the /account-service prefix. ingress-nginx (>= 0.22) only forwards the
+    # parts of the URI captured by the path regex; a bare "/" target sends every
+    # request to "/".
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/rate-limit: "100"
-    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    # Per-client-IP request limit, enforced per controller replica (burst = 5x).
+    # Rejections use the controller's limit-req-status-code (503 unless set to 429
+    # in the controller ConfigMap). Login/registration also have app-level limits.
+    nginx.ingress.kubernetes.io/limit-rpm: "100"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
   hosts:
     - host: api.company.com
       paths:
-        - path: /account-service
-          pathType: Prefix
+        - path: /account-service(/|$)(.*)
+          pathType: ImplementationSpecific
   tls:
     - secretName: account-service-prod-tls
       hosts:

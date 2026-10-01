@@ -64,6 +64,9 @@ services:
       SANDBOX_SYNTHETIC_ENABLED: "true"
       SANDBOX_BOOTSTRAP_TOKEN: ${SANDBOX_BOOTSTRAP_TOKEN:?SANDBOX_BOOTSTRAP_TOKEN is required}
       AUDIT_TRUSTED_PROXY_ENABLED: "false"
+      # Only the gateway (internal services network) reaches this service, and it
+      # overwrites X-Forwarded-For, so login throttling sees real client addresses.
+      TRUSTED_PROXY_ADDRESSES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
       APP_TIME_ZONE: UTC
       TZ: UTC
       JAVA_OPTS: -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Duser.timezone=UTC

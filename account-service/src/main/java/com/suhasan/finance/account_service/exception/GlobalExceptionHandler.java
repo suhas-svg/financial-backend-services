@@ -128,6 +128,7 @@ package com.suhasan.finance.account_service.exception;
 
 import com.suhasan.finance.account_service.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -273,6 +274,20 @@ public class GlobalExceptionHandler {
             HttpStatus.UNAUTHORIZED.value()
         );
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(err);
+    }
+
+    @ExceptionHandler(TooManyAttemptsException.class)
+    public ResponseEntity<ErrorResponse> handleTooManyAttempts(final TooManyAttemptsException ex,
+                                                               final HttpServletRequest req) {
+        final ErrorResponse err = new ErrorResponse(
+            "Too Many Requests",
+            ex.getMessage(),
+            req.getRequestURI(),
+            HttpStatus.TOO_MANY_REQUESTS.value()
+        );
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+            .body(err);
     }
 
     // 3) Catch-all for any uncaught exceptions

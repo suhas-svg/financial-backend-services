@@ -96,4 +96,18 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().getError()).isEqualTo("Verification Failed");
         assertThat(response.getBody().getStatus()).isEqualTo(400);
     }
+
+    @Test
+    void handleTooManyAttempts_Returns429WithRetryAfter() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getRequestURI()).thenReturn("/api/auth/login");
+
+        ResponseEntity<ErrorResponse> response = handler.handleTooManyAttempts(new TooManyAttemptsException(120), request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+        assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("120");
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getMessage()).isEqualTo("Too many attempts. Try again later.");
+        assertThat(response.getBody().getStatus()).isEqualTo(429);
+    }
 }

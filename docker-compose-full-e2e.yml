@@ -46,6 +46,8 @@ services:
     container_name: account-service-full-e2e
     environment:
       SPRING_PROFILES_ACTIVE: e2e
+      # E2E suites register many users and test bad passwords from one IP.
+      AUTH_THROTTLE_ENABLED: "false"
       TZ: UTC
       JAVA_TOOL_OPTIONS: -Duser.timezone=UTC
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-e2e:5432/fullsystem_test?currentSchema=account_service

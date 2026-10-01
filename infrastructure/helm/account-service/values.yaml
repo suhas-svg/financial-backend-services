@@ -134,6 +134,12 @@ env:
     value: "health,info,prometheus"
   - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS
     value: "always"
+  # Addresses/CIDRs whose X-Forwarded-For is trusted for per-client-IP login
+  # throttling. Without it every request appears to come from the ingress
+  # controller and the per-IP limits apply to all users together. Narrow this to
+  # the ingress controller's pod CIDR where possible.
+  - name: TRUSTED_PROXY_ADDRESSES
+    value: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 
 # Environment variables from secrets/configmaps
 envFrom:
