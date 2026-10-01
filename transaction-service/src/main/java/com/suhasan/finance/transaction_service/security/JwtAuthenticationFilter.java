@@ -1,8 +1,8 @@
 package com.suhasan.finance.transaction_service.security;
 
+import com.suhasan.finance.transaction_service.security.keys.RemoteJwks;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,9 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import javax.crypto.SecretKey;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -31,8 +29,15 @@ import java.util.stream.Collectors;
 @Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     
-    @Value("${security.jwt.secret}")
-    private String jwtSecret;
+    // User access tokens are RS256, signed by account-service and verified against the public
+    // keys it publishes (JWKS). A fixed PEM public key can be configured instead (tests).
+    @Value("${security.jwt.jwks-uri:}")
+    private String jwksUri;
+
+    @Value("${security.jwt.public-key:}")
+    private String publicKeyPem;
+
+    private volatile UserTokenKeyLocator keyLocator;
     
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
@@ -95,7 +100,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
         try {
             return Jwts.parser()
-                    .verifyWith(resolveSigningKey())
+                    .keyLocator(keyLocator())
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
@@ -105,9 +110,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
     }
     
-    private SecretKey resolveSigningKey() {
-        byte[] keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
-        return Keys.hmacShaKeyFor(keyBytes);
+    private UserTokenKeyLocator keyLocator() {
+        UserTokenKeyLocator locator = keyLocator;
+        if (locator == null) {
+            synchronized (this) {
+                if (keyLocator == null) {
+                    keyLocator = new UserTokenKeyLocator(new RemoteJwks(jwksUri, publicKeyPem));
+                }
+                locator = keyLocator;
+            }
+        }
+        return locator;
     }
     
     private List<String> extractRolesFromClaims(Claims claims) {

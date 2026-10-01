@@ -1,5 +1,7 @@
 package com.suhasan.finance.transaction_service.security;
 
+import com.suhasan.finance.transaction_service.security.keys.TestKeys;
+import java.security.PrivateKey;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -18,9 +20,7 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import javax.crypto.SecretKey;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -45,18 +45,17 @@ class JwtAuthenticationFilterTest {
     @InjectMocks
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    private SecretKey secretKey;
+    private PrivateKey secretKey;
     private String validToken;
     private String expiredToken;
     private String invalidToken;
 
     @BeforeEach
     void setUp() {
-        String secretKeyString = "test-only-jwt-secret-key-32-bytes-min";
-        secretKey = Keys.hmacShaKeyFor(secretKeyString.getBytes(StandardCharsets.UTF_8));
-        
-        // Set the secret key in the filter using reflection
-        ReflectionTestUtils.setField(jwtAuthenticationFilter, "jwtSecret", secretKeyString);
+        // account-service signs user tokens with RS256; the filter verifies with the public key.
+        secretKey = TestKeys.USER.getPrivate();
+        ReflectionTestUtils.setField(jwtAuthenticationFilter, "publicKeyPem",
+                TestKeys.publicPem(TestKeys.USER.getPublic()));
         
         // Create valid token
         validToken = Jwts.builder()
@@ -65,7 +64,7 @@ class JwtAuthenticationFilterTest {
                 .claim("username", "testuser")
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + 86400000)) // 24 hours
-                .signWith(secretKey)
+                .signWith(secretKey, Jwts.SIG.RS256)
                 .compact();
         
         // Create expired token
@@ -75,7 +74,7 @@ class JwtAuthenticationFilterTest {
                 .claim("username", "testuser")
                 .issuedAt(new Date(System.currentTimeMillis() - 86400000)) // 24 hours ago
                 .expiration(new Date(System.currentTimeMillis() - 3600000)) // 1 hour ago
-                .signWith(secretKey)
+                .signWith(secretKey, Jwts.SIG.RS256)
                 .compact();
         
         // Create invalid token
@@ -221,7 +220,7 @@ class JwtAuthenticationFilterTest {
                 // Missing userId claim
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + 86400000))
-                .signWith(secretKey)
+                .signWith(secretKey, Jwts.SIG.RS256)
                 .compact();
         
         when(request.getHeader("Authorization")).thenReturn("Bearer " + tokenWithoutUserId);
@@ -344,5 +343,20 @@ class JwtAuthenticationFilterTest {
 
         // Assert
         assertNull(claims);
+    }
+
+    @Test
+    void doFilterInternal_Hs256TokenSignedWithThePublicKey_IsRejected() throws ServletException, IOException {
+        byte[] publicKeyAsSecret = java.util.Base64.getEncoder().encode(TestKeys.USER.getPublic().getEncoded());
+        String confused = Jwts.builder().subject("attacker")
+                .expiration(new Date(System.currentTimeMillis() + 60_000))
+                .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(publicKeyAsSecret), Jwts.SIG.HS256)
+                .compact();
+        when(request.getHeader("Authorization")).thenReturn("Bearer " + confused);
+
+        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
+
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+        verify(filterChain).doFilter(request, response);
     }
 }

@@ -302,8 +302,6 @@ jobs:
       ACCOUNT_DB_PASSWORD: ci-${{ github.run_id }}-account-db
       TRANSACTION_DB_PASSWORD: ci-${{ github.run_id }}-transaction-db
       REDIS_PASSWORD: ci-${{ github.run_id }}-redis
-      JWT_SECRET: ci-${{ github.run_id }}-jwt-signing-material-at-least-32-bytes
-      INTERNAL_JWT_SECRET: ci-${{ github.run_id }}-internal-signing-material-at-least-32-bytes
       MFA_ENCRYPTION_KEY: ci-${{ github.run_id }}-mfa-encryption-material-at-least-32-bytes
       SANDBOX_BOOTSTRAP_TOKEN: ci-${{ github.run_id }}-bootstrap-token-at-least-32-bytes
     steps:
@@ -478,8 +476,6 @@ jobs:
       ACCOUNT_DB_PASSWORD: drill-${{ github.run_id }}-account-db
       TRANSACTION_DB_PASSWORD: drill-${{ github.run_id }}-transaction-db
       REDIS_PASSWORD: drill-${{ github.run_id }}-redis
-      JWT_SECRET: drill-${{ github.run_id }}-jwt-signing-material-at-least-32-bytes
-      INTERNAL_JWT_SECRET: drill-${{ github.run_id }}-internal-signing-material-at-least-32-bytes
       MFA_ENCRYPTION_KEY: drill-${{ github.run_id }}-mfa-encryption-material-at-least-32-bytes
       SANDBOX_BOOTSTRAP_TOKEN: drill-${{ github.run_id }}-bootstrap-token-at-least-32-bytes
     steps:
@@ -585,8 +581,6 @@ jobs:
       ACCOUNT_DB_PASSWORD: drill-${{ github.run_id }}-account-db
       TRANSACTION_DB_PASSWORD: drill-${{ github.run_id }}-transaction-db
       REDIS_PASSWORD: drill-${{ github.run_id }}-redis
-      JWT_SECRET: drill-${{ github.run_id }}-jwt-signing-material-at-least-32-bytes
-      INTERNAL_JWT_SECRET: drill-${{ github.run_id }}-internal-signing-material-at-least-32-bytes
       MFA_ENCRYPTION_KEY: drill-${{ github.run_id }}-mfa-encryption-material-at-least-32-bytes
       SANDBOX_BOOTSTRAP_TOKEN: drill-${{ github.run_id }}-bootstrap-token-at-least-32-bytes
       # Recovery objectives; override with repository variables once the real ones are set.

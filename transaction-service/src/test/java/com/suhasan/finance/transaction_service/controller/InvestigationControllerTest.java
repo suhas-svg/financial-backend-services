@@ -36,8 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(
-        controllers = InvestigationController.class,
-        properties = "security.jwt.secret=01234567890123456789012345678901")
+        controllers = InvestigationController.class)
 @Import({com.suhasan.finance.transaction_service.security.SecurityConfig.class, InvestigationControllerTest.JwtFilterTestConfig.class})
 @EnableWebSecurity
 class InvestigationControllerTest {

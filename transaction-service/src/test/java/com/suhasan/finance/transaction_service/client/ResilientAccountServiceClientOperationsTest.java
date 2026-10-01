@@ -1,5 +1,7 @@
 package com.suhasan.finance.transaction_service.client;
 
+import com.suhasan.finance.transaction_service.security.keys.TestKeys;
+import com.suhasan.finance.transaction_service.security.InternalServiceTokens;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.suhasan.finance.transaction_service.dto.StepUpClientDtos;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -43,8 +45,8 @@ class ResilientAccountServiceClientOperationsTest {
                         .timeoutDuration(Duration.ofSeconds(10)).build()));
         ReflectionTestUtils.setField(client, "accountServiceBaseUrl", server.baseUrl());
         ReflectionTestUtils.setField(client, "timeout", 10_000);
-        ReflectionTestUtils.setField(client, "internalJwtSecret",
-                "internal-jwt-secret-that-is-at-least-32-bytes");
+        ReflectionTestUtils.setField(client, "internalServiceTokens",
+                new InternalServiceTokens(TestKeys.internalSigningKeys()));
     }
 
     @AfterEach

@@ -3,7 +3,7 @@ param([string]$ComposeFile = "docker-compose.synthetic-sandbox.yml")
 $ErrorActionPreference = "Stop"
 $required = @(
     "SANDBOX_IMAGE_TAG", "ACCOUNT_DB_PASSWORD", "TRANSACTION_DB_PASSWORD", "REDIS_PASSWORD",
-    "JWT_SECRET", "INTERNAL_JWT_SECRET", "MFA_ENCRYPTION_KEY", "SANDBOX_BOOTSTRAP_TOKEN"
+    "MFA_ENCRYPTION_KEY", "SANDBOX_BOOTSTRAP_TOKEN"
 )
 $missing = @($required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) })
 if ($missing.Count -gt 0) { throw "Missing required variables: $($missing -join ', ')" }

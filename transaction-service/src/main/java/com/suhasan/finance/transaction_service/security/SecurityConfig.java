@@ -35,6 +35,8 @@ public class SecurityConfig {
                         // â”€â”€ Public read-only health probes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         .requestMatchers("/api/transactions/health").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+                        // Public keys that verify this service's internal service tokens (RFC 7517).
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/.well-known/jwks.json").permitAll()
                         // API docs exist only when API_DOCS_ENABLED=true (never by default).
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**").permitAll()
 

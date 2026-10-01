@@ -1,5 +1,7 @@
 package com.suhasan.finance.transaction_service.client;
 
+import com.suhasan.finance.transaction_service.security.keys.TestKeys;
+import com.suhasan.finance.transaction_service.security.InternalServiceTokens;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import com.suhasan.finance.transaction_service.dto.AccountDto;
@@ -11,7 +13,6 @@ import io.github.resilience4j.retry.RetryConfig;
 import io.github.resilience4j.timelimiter.TimeLimiter;
 import io.github.resilience4j.timelimiter.TimeLimiterConfig;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,7 +23,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 
@@ -34,7 +34,6 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 
 class ResilientAccountServiceClientTest {
-    private static final String INTERNAL_SECRET = "test-only-" + "1".repeat(32);
 
     private WireMockServer server;
     private CircuitBreaker circuitBreaker;
@@ -56,7 +55,8 @@ class ResilientAccountServiceClientTest {
         client = new ResilientAccountServiceClient(WebClient.builder(), retry, circuitBreaker, timeLimiter);
         ReflectionTestUtils.setField(client, "accountServiceBaseUrl", server.baseUrl());
         ReflectionTestUtils.setField(client, "timeout", 10_000);
-        ReflectionTestUtils.setField(client, "internalJwtSecret", INTERNAL_SECRET);
+        ReflectionTestUtils.setField(client, "internalServiceTokens",
+                new InternalServiceTokens(TestKeys.internalSigningKeys()));
     }
 
     private static void signIn() {
@@ -187,7 +187,8 @@ class ResilientAccountServiceClientTest {
         assertThat(requests).hasSize(1);
         String token = requests.get(0).getHeader(HttpHeaders.AUTHORIZATION).substring("Bearer ".length());
         var claims = Jwts.parser()
-                .verifyWith(Keys.hmacShaKeyFor(INTERNAL_SECRET.getBytes(StandardCharsets.UTF_8)))
+                // RS256 with transaction-service's own key, as account-service verifies it via JWKS.
+                .verifyWith(TestKeys.INTERNAL.getPublic())
                 .build().parseSignedClaims(token).getPayload();
         assertThat(claims.getSubject()).isEqualTo("transaction-service");
         assertThat(claims.getAudience()).containsExactly("account-service");

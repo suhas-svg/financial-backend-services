@@ -24,8 +24,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(
-        controllers = AdminReconciliationController.class,
-        properties = "security.jwt.secret=01234567890123456789012345678901")
+        controllers = AdminReconciliationController.class)
 @Import(SecurityConfig.class)
 class AdminReconciliationControllerTest {
 

@@ -28,8 +28,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(
-        controllers = AdminLedgerBootstrapController.class,
-        properties = "security.jwt.secret=01234567890123456789012345678901")
+        controllers = AdminLedgerBootstrapController.class)
 @Import(SecurityConfig.class)
 class AdminLedgerBootstrapControllerTest {
 
