@@ -24,6 +24,9 @@ Required signals cover reconciliation exceptions, scheduled work age/stuck proce
 
 ## Failure drills and soak
 
+Scheduled CI versions of the load, soak and backup-restore drills, with evidence for the
+readiness gate, are described in [load-soak-restore-drills.md](load-soak-restore-drills.md).
+
 Run `scripts/run-synthetic-failure-drills.ps1 -Confirmation "RUN SYNTHETIC FAILURE DRILLS"`. The bounded drill covers transaction-service restart during worker activity, transaction PostgreSQL restart, Redis loss/recovery, duplicate request and stuck-schedule regression, and receiver fail-closed configuration. Review the durable JSON receipt and ledger/reconciliation evidence after ambiguous timeouts.
 
 `run-synthetic-soak.ps1` is restartable, takes a single-runner file lock, and appends durable NDJSON checks. Every checkpoint requires exactly seven healthy services plus zero unbalanced journals, completed transactions without journals, duplicate transaction idempotency records, stuck scheduled-transfer runs, stale or failed financial-operation claims, terminal ledger outbox rows, and terminal unreconciled notification receipts.

@@ -1,0 +1,18 @@
+# Load-test profile for the synthetic sandbox (scheduled load/soak drills only).
+#
+#   docker compose -f docker-compose.synthetic-sandbox.yml -f docker-compose.synthetic-load.yml up -d --wait
+#
+# A load test is one operator moving money between their own two accounts many times a
+# second. Two protections built for real customers would otherwise answer every request:
+# the rapid-transfer step-up rule (more than 5 transfers in 10 minutes asks for a TOTP
+# step-up) and per-IP auth throttling. Everything else, including step-up for high-value
+# transfers, stays on. Never use this file outside the synthetic sandbox.
+name: financial-synthetic-sandbox
+services:
+  account-service:
+    environment:
+      AUTH_THROTTLE_ENABLED: "false"
+
+  transaction-service:
+    environment:
+      STEP_UP_RAPID_TRANSFER_COUNT: "1000000000"

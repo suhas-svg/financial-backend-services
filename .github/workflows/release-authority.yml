@@ -5,14 +5,25 @@ on:
     branches: [main, develop]
   push:
     branches: [main, develop]
+  schedule:
+    - cron: '17 2 * * *' # daily: acceptance on main, load drill, backup/restore drill
+    - cron: '17 4 * * 0' # weekly (Sunday): acceptance on main, 4-hour soak drill
   workflow_dispatch:
+    inputs:
+      drill:
+        description: Also run an operational drill (evidence for the readiness gate)
+        type: choice
+        options: [none, load, soak, restore]
+        default: none
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-authority-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Scheduled and manual runs get their own group, and only pull requests cancel an
+  # in-progress run, so a push to main never kills a running soak or restore drill.
+  group: release-authority-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}-${{ github.event.schedule || inputs.drill || 'run' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   authority-policy:
@@ -400,3 +411,190 @@ jobs:
           failed = {name: result for name, result in results.items() if result != "success"}
           print(json.dumps(results, indent=2, sort_keys=True))
           sys.exit(1 if failed else 0)
+
+  # ── Operational drills (scheduled on main, or on demand) ───────────────────────────
+  # Evidence for the LOAD_SOAK and BACKUP_RESTORE readiness gates. Each run uploads an
+  # evidence archive (kept 90 days) and prints the reference and evidenceSha256 for the
+  # external readiness manifest. See docs/operations/load-soak-restore-drills.md.
+  load-soak-drill:
+    name: ${{ (github.event.schedule == '17 4 * * 0' || inputs.drill == 'soak') && 'Soak' || 'Load' }} Drill (k6 transfers)
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && (inputs.drill == 'load' || inputs.drill == 'soak'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      # Weekly cron or drill=soak: 4 h at 3 transfers/s pairs. Otherwise a 10 min ramp to 10/s.
+      DRILL: ${{ (github.event.schedule == '17 4 * * 0' || inputs.drill == 'soak') && 'soak' || 'load' }}
+      SANDBOX_IMAGE_TAG: drill-${{ github.sha }}
+      SANDBOX_PROFILE: synthetic-sandbox
+      BASE_URL: https://127.0.0.1:8443
+      SANDBOX_OPERATOR_USERNAME: drill_operator
+      SANDBOX_OPERATOR_PASSWORD: drill-${{ github.run_id }}-operator-password
+      ACCOUNT_DB_PASSWORD: drill-${{ github.run_id }}-account-db
+      TRANSACTION_DB_PASSWORD: drill-${{ github.run_id }}-transaction-db
+      REDIS_PASSWORD: drill-${{ github.run_id }}-redis
+      JWT_SECRET: drill-${{ github.run_id }}-jwt-signing-material-at-least-32-bytes
+      INTERNAL_JWT_SECRET: drill-${{ github.run_id }}-internal-signing-material-at-least-32-bytes
+      MFA_ENCRYPTION_KEY: drill-${{ github.run_id }}-mfa-encryption-material-at-least-32-bytes
+      SANDBOX_BOOTSTRAP_TOKEN: drill-${{ github.run_id }}-bootstrap-token-at-least-32-bytes
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install k6 v2.3.0 (checksum-verified)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/k6.tgz https://github.com/grafana/k6/releases/download/v2.3.0/k6-v2.3.0-linux-amd64.tar.gz
+          echo "39c3117b6af817592dcd0ce4242105c0a7af10948c2a425306f0be8f7a8a8ab1  /tmp/k6.tgz" | sha256sum -c -
+          tar -xzf /tmp/k6.tgz -C /tmp
+          sudo install /tmp/k6-v2.3.0-linux-amd64/k6 /usr/local/bin/k6
+      - name: Start a fresh synthetic sandbox with the load profile
+        run: >-
+          docker compose -f docker-compose.synthetic-sandbox.yml -f docker-compose.synthetic-load.yml
+          up --build --detach --wait
+      - name: Run the transfer scenario while checking financial invariants
+        id: drill
+        shell: bash
+        run: |
+          set -uo pipefail
+          case "$DRILL" in
+            soak) duration=4h; rate=3;  interval=15; run_minutes=245 ;;
+            *)    duration=8m; rate=10; interval=5;  run_minutes=12 ;;
+          esac
+          mkdir -p evidence/invariants
+          # Invariant checkpoints (balanced journals, no duplicate idempotency keys, no stuck
+          # runs or terminal outbox entries) for the whole run, recorded as NDJSON.
+          pwsh -NoProfile -File scripts/run-synthetic-soak.ps1 -EvidenceDirectory evidence/invariants \
+            -RunMinutes "$run_minutes" -IntervalMinutes "$interval" > evidence/invariants/runner.log 2>&1 &
+          checker=$!
+          k6 run --quiet -e PROFILE="$DRILL" -e DURATION="$duration" -e RATE="$rate" \
+            -e SUMMARY_PATH=evidence/k6-summary.json performance/k6/transfers.js | tee evidence/k6-output.txt
+          k6_status=${PIPESTATUS[0]}
+          kill "$checker" 2>/dev/null || true
+          wait "$checker" 2>/dev/null || true
+          # One last checkpoint after the load stops.
+          pwsh -NoProfile -File scripts/run-synthetic-soak.ps1 -EvidenceDirectory evidence/invariants -SingleCheck
+          final_status=$?
+          unhealthy=$(grep -c '"healthy":false' evidence/invariants/checks.ndjson || true)
+          metric() { jq -r "$1 // \"n/a\"" evidence/k6-summary.json 2>/dev/null || echo n/a; }
+          p99=$(metric '.metrics["http_req_duration{name:transfer}"].values["p(99)"]')
+          errors=$(metric '.metrics["server_errors{name:transfer}"].values.rate')
+          iterations=$(metric '.metrics.iterations.values.count')
+          echo "summary=transfer p99 ${p99} ms; transfer 5xx rate ${errors}; iterations ${iterations} (2 transfers each); unhealthy invariant checkpoints ${unhealthy}" >> "$GITHUB_OUTPUT"
+          if [ "$k6_status" -eq 0 ] && [ "$final_status" -eq 0 ] && [ "$unhealthy" -eq 0 ]; then
+            echo "passed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Package evidence for the LOAD_SOAK gate
+        if: always() && steps.drill.outcome != 'skipped'
+        shell: pwsh
+        env:
+          PASSED: ${{ steps.drill.outputs.passed }}
+          SUMMARY: ${{ steps.drill.outputs.summary }}
+        run: >-
+          ./scripts/package-drill-evidence.ps1 -Gate LOAD_SOAK -Drill $env:DRILL
+          -EvidenceDirectory evidence -OutputDirectory evidence-out
+          -Passed ($env:PASSED -eq 'true') -Summary "$env:SUMMARY"
+      - name: Upload evidence
+        if: always() && steps.drill.outcome != 'skipped'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: evidence-${{ env.DRILL }}-${{ github.run_id }}
+          path: evidence-out
+          retention-days: 90
+      - name: Fail when the drill missed a threshold or broke an invariant
+        if: steps.drill.outputs.passed != 'true'
+        run: exit 1
+      - name: Remove the disposable sandbox and its volumes
+        if: always()
+        run: docker compose -f docker-compose.synthetic-sandbox.yml -f docker-compose.synthetic-load.yml down --volumes --remove-orphans
+
+  backup-restore-drill:
+    name: Backup Restore Drill (RTO/RPO)
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '17 2 * * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.drill == 'restore')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SANDBOX_IMAGE_TAG: drill-${{ github.sha }}
+      SANDBOX_PROFILE: synthetic-sandbox
+      BASE_URL: https://127.0.0.1:8443
+      SANDBOX_OPERATOR_USERNAME: drill_operator
+      SANDBOX_OPERATOR_PASSWORD: drill-${{ github.run_id }}-operator-password
+      ACCOUNT_DB_PASSWORD: drill-${{ github.run_id }}-account-db
+      TRANSACTION_DB_PASSWORD: drill-${{ github.run_id }}-transaction-db
+      REDIS_PASSWORD: drill-${{ github.run_id }}-redis
+      JWT_SECRET: drill-${{ github.run_id }}-jwt-signing-material-at-least-32-bytes
+      INTERNAL_JWT_SECRET: drill-${{ github.run_id }}-internal-signing-material-at-least-32-bytes
+      MFA_ENCRYPTION_KEY: drill-${{ github.run_id }}-mfa-encryption-material-at-least-32-bytes
+      SANDBOX_BOOTSTRAP_TOKEN: drill-${{ github.run_id }}-bootstrap-token-at-least-32-bytes
+      # Recovery objectives; override with repository variables once the real ones are set.
+      RTO_TARGET_SECONDS: ${{ vars.DRILL_RTO_TARGET_SECONDS || '900' }}
+      RPO_TARGET_SECONDS: ${{ vars.DRILL_RPO_TARGET_SECONDS || '900' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install k6 v2.3.0 (checksum-verified)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/k6.tgz https://github.com/grafana/k6/releases/download/v2.3.0/k6-v2.3.0-linux-amd64.tar.gz
+          echo "39c3117b6af817592dcd0ce4242105c0a7af10948c2a425306f0be8f7a8a8ab1  /tmp/k6.tgz" | sha256sum -c -
+          tar -xzf /tmp/k6.tgz -C /tmp
+          sudo install /tmp/k6-v2.3.0-linux-amd64/k6 /usr/local/bin/k6
+      - name: Start a fresh synthetic sandbox
+        run: >-
+          docker compose -f docker-compose.synthetic-sandbox.yml -f docker-compose.synthetic-load.yml
+          up --build --detach --wait
+      - name: Write ledger activity to back up, then pause writes
+        run: >-
+          k6 run --quiet -e PROFILE=load -e DURATION=2m -e RATE=5
+          -e SUMMARY_PATH=/tmp/seed-load-summary.json performance/k6/transfers.js
+      - name: Back up both databases, restore into isolated targets, verify against RTO/RPO
+        id: drill
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force evidence | Out-Null
+          $bundle = ./scripts/backup-synthetic-sandbox.ps1 -OutputDirectory backups | Select-Object -Last 1
+          Copy-Item (Join-Path $bundle "backup-receipt.json") evidence/
+          $passed = $true
+          try {
+            ./scripts/restore-verify-synthetic-sandbox.ps1 -BackupDirectory $bundle `
+              -Confirmation "RESTORE TO ISOLATED SYNTHETIC TARGET" -EvidenceDirectory evidence `
+              -RtoTargetSeconds ([int]$env:RTO_TARGET_SECONDS) -RpoTargetSeconds ([int]$env:RPO_TARGET_SECONDS)
+          } catch {
+            Write-Host "::error::$($_.Exception.Message)"
+            $passed = $false
+          }
+          $result = Get-ChildItem evidence -Filter "restore-*.json" | Select-Object -First 1
+          $summary = if ($result) {
+            $r = Get-Content -Raw $result.FullName | ConvertFrom-Json
+            "RTO $($r.objectives.rtoSeconds)s (target $($r.objectives.rtoTargetSeconds)s); " +
+            "RPO $($r.objectives.rpoSeconds)s (target $($r.objectives.rpoTargetSeconds)s); " +
+            "restored data matches backup: $(@($r.results | Where-Object { -not $_.matchesBackup }).Count -eq 0)"
+          } else { "restore did not complete" }
+          "passed=$($passed.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "summary=$summary" >> $env:GITHUB_OUTPUT
+      - name: Package evidence for the BACKUP_RESTORE gate
+        if: always() && steps.drill.outcome != 'skipped'
+        shell: pwsh
+        env:
+          PASSED: ${{ steps.drill.outputs.passed }}
+          SUMMARY: ${{ steps.drill.outputs.summary }}
+        run: >-
+          ./scripts/package-drill-evidence.ps1 -Gate BACKUP_RESTORE -Drill Restore
+          -EvidenceDirectory evidence -OutputDirectory evidence-out
+          -Passed ($env:PASSED -eq 'true') -Summary "$env:SUMMARY"
+      - name: Upload evidence
+        if: always() && steps.drill.outcome != 'skipped'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: evidence-restore-${{ github.run_id }}
+          path: evidence-out
+          retention-days: 90
+      - name: Fail when recovery missed an objective or lost data
+        if: steps.drill.outputs.passed != 'true'
+        run: exit 1
+      - name: Remove the disposable sandbox and its volumes
+        if: always()
+        run: docker compose -f docker-compose.synthetic-sandbox.yml -f docker-compose.synthetic-load.yml down --volumes --remove-orphans
