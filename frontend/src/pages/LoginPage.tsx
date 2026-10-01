@@ -8,6 +8,7 @@ import { Button, ErrorNotice, Input } from "../components/ui";
 import { login } from "../lib/queries";
 import { loginSchema, type LoginValues } from "../lib/schemas";
 import { decodeJwtPayload } from "../lib/session";
+import { endSession } from "../lib/sessionRefresh";
 import { useAuth } from "../state/useAuth";
 
 type Portal = "customer" | "admin";
@@ -60,6 +61,8 @@ export function LoginPage() {
       const roles = decodeJwtPayload(token).roles ?? [];
       if (portal === "admin" && !roles.includes("ROLE_ADMIN")) {
         setPortalError("This account does not have access to the Operations Console.");
+        // The server already opened a session for this login; end it.
+        endSession();
         return;
       }
 

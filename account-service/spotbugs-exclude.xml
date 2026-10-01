@@ -7,7 +7,7 @@
   </Match>
   <!-- Spring keeps injected singleton collaborators by design; these are container-owned dependencies. -->
   <Match>
-    <Class name="~com[.]suhasan[.]finance[.]account_service[.](controller[.](InternalAccountController|SecurityController)|integration[.](InternalNotificationReceiptController|MfaEnrollmentKeyVersionAspect|MfaKeyLifecycleService|NotificationProviderRetryDispatcher)|sandbox[.]SyntheticAccountSeedService|service[.](AccountService|MfaService|SpendingLimitService|StepUpChallengeService))"/>
+    <Class name="~com[.]suhasan[.]finance[.]account_service[.](controller[.](AuthController|InternalAccountController|SecurityController)|integration[.](InternalNotificationReceiptController|MfaEnrollmentKeyVersionAspect|MfaKeyLifecycleService|NotificationProviderRetryDispatcher)|sandbox[.]SyntheticAccountSeedService|service[.](AccountService|MfaService|SpendingLimitService|StepUpChallengeService))"/>
     <Bug pattern="EI_EXPOSE_REP2"/>
   </Match>
   <!-- The embedded JPA identifier has only immutable String/Long fields and must remain bean-compatible. -->

@@ -5,6 +5,8 @@ import com.suhasan.finance.account_service.dto.RegisterRequest;
 import com.suhasan.finance.account_service.exception.TooManyAttemptsException;
 import com.suhasan.finance.account_service.security.ClientIpResolver;
 import com.suhasan.finance.account_service.security.JwtTokenProvider;
+import com.suhasan.finance.account_service.security.RefreshCookies;
+import com.suhasan.finance.account_service.security.RefreshTokenService;
 import com.suhasan.finance.account_service.service.AuthService;
 import com.suhasan.finance.account_service.service.AuthThrottleService;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +16,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UserDetailsService;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -40,7 +43,12 @@ class AuthControllerThrottleTest {
         tokenProvider = mock(JwtTokenProvider.class);
         authService = mock(AuthService.class);
         throttle = mock(AuthThrottleService.class);
-        controller = new AuthController(authManager, tokenProvider, authService, throttle, new ClientIpResolver(""));
+        RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
+        when(refreshTokens.issue(any())).thenReturn(
+                new RefreshTokenService.IssuedToken("refresh", java.time.Instant.now().plusSeconds(1800)));
+        controller = new AuthController(authManager, tokenProvider, authService, throttle, new ClientIpResolver(""),
+                refreshTokens, new RefreshCookies("fc_refresh", "/account-api/api/auth", true),
+                mock(UserDetailsService.class));
         http = new MockHttpServletRequest();
         http.setRemoteAddr("203.0.113.9");
     }

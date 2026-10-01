@@ -2,6 +2,7 @@ import type { Account, AccountStatus, AuditLogEntry, AuditSummary, Beneficiary, 
 import { apiRequest, toQuery } from "./api";
 import type { AccountValues, BeneficiaryValues, DisputeNoteValues, DisputeStatusValues, DisputeValues, LoginValues, MoneyMovementValues, RegisterValues, ReversalValues, ScheduledTransferValues, TransferValues } from "./schemas";
 import { getSession } from "./session";
+import { currentAccessToken } from "./sessionRefresh";
 
 export function login(values: LoginValues) {
   return apiRequest<{ token?: string; accessToken?: string }>("account", "/api/auth/login", { method: "POST", body: values });
@@ -15,7 +16,8 @@ export function listAccounts(params: { ownerId?: string; accountType?: string; s
   return apiRequest<Page<Account>>("account", `/api/accounts${toQuery({ size: 20, ...params })}`);
 }
 
-export function listOwnedAccounts(params: { accountType?: string; status?: AccountStatus | ""; page?: number; size?: number } = {}) {
+export async function listOwnedAccounts(params: { accountType?: string; status?: AccountStatus | ""; page?: number; size?: number } = {}) {
+  await currentAccessToken();
   const session = getSession();
   if (!session) {
     throw new Error("An authenticated customer session is required to list owned accounts");

@@ -68,7 +68,8 @@ export function getSession(): Session | null {
   }
   const payload = decodeJwtPayload(token);
   if (typeof payload.exp === "number" && payload.exp * 1000 <= Date.now()) {
-    clearSession();
+    // Fail closed, but keep the token so the API client can see it expired and
+    // renew it from the refresh cookie.
     return null;
   }
   return {
