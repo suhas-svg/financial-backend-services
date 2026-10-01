@@ -189,7 +189,7 @@ public class ScheduledTransferService {
     private ClaimedScheduledTransfer claimNextDueTransfer(Instant now, int batchSize, Set<String> attemptedScheduleIds) {
         try {
             return transactionTemplate.execute(status -> {
-                List<ScheduledTransfer> dueSchedules = scheduleRepository.findDueActiveForUpdate(now, PageRequest.of(0, batchSize));
+                List<ScheduledTransfer> dueSchedules = scheduleRepository.claimDueActive(now, batchSize);
                 metricsService.recordScheduledTransferDue(dueSchedules.size());
 
                 for (ScheduledTransfer schedule : dueSchedules) {

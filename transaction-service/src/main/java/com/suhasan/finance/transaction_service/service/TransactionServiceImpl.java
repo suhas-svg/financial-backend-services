@@ -62,6 +62,9 @@ import java.util.stream.Collectors;
 @SuppressWarnings("null")
 public class TransactionServiceImpl implements TransactionService {
 
+    /** Stale PROCESSING transactions recovered per scheduled run; a larger backlog drains over several runs. */
+    private static final int STALE_RECOVERY_BATCH_SIZE = 100;
+
     private final TransactionRepository transactionRepository;
     private final ResilientAccountServiceClient accountServiceClient;
     private final AuditService auditService;
@@ -1077,8 +1080,10 @@ public class TransactionServiceImpl implements TransactionService {
             initialDelayString = "${transactions.recovery.initial-delay-ms:60000}")
     public void processPendingTransactions() {
         LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(5);
+        // Rows are claimed with SKIP LOCKED, so several replicas split the stale set instead of
+        // recovering the same transaction twice. A large backlog drains over successive runs.
         List<Transaction> pendingTransactions = transactionRepository
-                .findPendingTransactionsOlderThan(cutoffTime);
+                .claimStaleProcessing(cutoffTime, STALE_RECOVERY_BATCH_SIZE);
 
         for (Transaction transaction : pendingTransactions) {
             Optional<JournalResult> journal = ledgerPostingService
