@@ -24,6 +24,12 @@ RUN ./mvnw package -Dmaven.test.skip=true -Dmaven.compile.skip=true
 # Production stage
 FROM eclipse-temurin:21-jre-alpine-3.23@sha256:3f08b13888f595cc49edabea7250ba69499ba25602b267da591720769400e08c
 
+# Release metadata: the version and the exact commit the image was built from.
+ARG APP_VERSION=0.0.0-local
+ARG BUILD_DATE
+ARG VCS_REF
+LABEL org.opencontainers.image.title="Transaction Service"       org.opencontainers.image.description="Financial Transaction Service Microservice"       org.opencontainers.image.version="${APP_VERSION}"       org.opencontainers.image.created="${BUILD_DATE}"       org.opencontainers.image.revision="${VCS_REF}"       org.opencontainers.image.source="https://github.com/suhas-svg/financial-backend-services"
+
 # Apply published Alpine security fixes while preserving the pinned base image.
 RUN apk upgrade --no-cache
 

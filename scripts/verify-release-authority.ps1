@@ -26,6 +26,8 @@ $requiredContracts = @(
     "backup-restore-drill:",
     "package-drill-evidence.ps1 -Gate LOAD_SOAK",
     "package-drill-evidence.ps1 -Gate BACKUP_RESTORE",
+    "needs.release-authority.result == 'success'",
+    "release-please-config.json",
     "fresh-migrations:",
     "duplicate-concurrency-recovery:",
     "Helm and Terraform Policy",
