@@ -1,778 +1,85 @@
 # Financial Backend Services
 
-Financial Backend Services is a banking-style application made of two Spring Boot backend services and a React frontend console.
+A banking-style product: a customer app and an operations console (React) on top of two
+Spring Boot services that own accounts and money movement. Money is tracked in a double-entry
+ledger, every movement is idempotent, and risky transfers require step-up authentication.
 
-The backend provides account management, authentication, transaction processing, monitoring, and reversal workflows. The frontend in `frontend/` provides the customer banking app first, then the Phase 2 admin and operations dashboard.
+The product runs as a **controlled synthetic beta**: no real money moves. What must be true
+before that changes is written down in the
+[real-money readiness gate](docs/operations/real-money-production-readiness-gate.md).
 
-Controlled-beta financial integrity contracts and operator controls are documented in [Controlled Beta Phase 1](docs/controlled-beta-phase1-integrity.md). Supported deployment boundaries are defined in [Deployment authority](docs/deployment-authority.md).
+## What it does
 
-## Project Layout
+- **Customers**: accounts and balances (ledger, available, pending), deposits, withdrawals,
+  transfers, saved beneficiaries, scheduled and recurring transfers, statements, disputes,
+  notifications, TOTP and recovery codes, and Balance Shield, which finds the smallest change
+  that keeps upcoming payments from failing and can act on it with consent.
+- **Operators**: account freeze/unfreeze, transaction and audit search, risk alerts and cases,
+  dispute queue, investigation timelines with CSV export, ledger reconciliation.
+- **Under the hood**: debit holds before every debit, frozen-account enforcement, risk-based
+  step-up for transfers, database-backed login throttling, short-lived access tokens with
+  rotating refresh sessions, and background jobs that are safe on several replicas.
+
+Details: [docs/features.md](docs/features.md).
+
+## Layout
 
 ```text
-financial-backend-services/
-|-- account-service/          # Spring Boot account/auth service on port 8080
-|-- transaction-service/      # Spring Boot transaction service on port 8081
-|-- frontend/                 # React + Vite + TypeScript financial console
-|-- infrastructure/helm/      # Canonical Kubernetes templates
-|-- docker-compose.synthetic-sandbox.yml # Supported synthetic-beta runtime
-|-- financial-mcp-server/     # Archived, unsupported historical subsystem
-|-- .github/workflows/        # PR validation and CI checks
-`-- README.md
+account-service/       Spring Boot: auth, MFA/step-up, accounts, holds, notifications (:8080)
+transaction-service/   Spring Boot: money movement, ledger, schedules, risk, disputes (:8081)
+frontend/              React + Vite + TypeScript customer app and operations console
+infrastructure/        Helm charts, Terraform, Prometheus SLO rules, sandbox gateway
+docs/                  Product, API, operations and design documentation
+scripts/               Release-authority policy, sandbox drills, evidence tooling
+e2e-tests/             Quarantined legacy E2E harness (kept fail-closed by policy)
+financial-mcp-server/  Archived, unsupported
 ```
 
-## Main Features
+## Quick start
 
-### Customer App
+Requires Java 21+, Node 20+ and Docker.
 
-- Register, login, and logout with JWT-backed sessions.
-- Store the JWT in memory only; a browser reload intentionally requires login.
-- Decode JWT roles client-side for route guards and navigation.
-- View dashboard totals, account cards, recent transactions, limits, and personal stats.
-- Create, edit, close, and filter accounts while preserving financial history.
-- Create `CHECKING`, `SAVINGS`, and `CREDIT` accounts with type-specific validation.
-- See available balance as the primary spendable amount and ledger balance as secondary detail.
-- See frozen accounts with hold warnings and status reasons.
-- Deposit, withdraw, and transfer money.
-- Show explicit processing and confirmed-success states for deposits, withdrawals, and transfers, and reset each form only after the backend confirms completion.
-- Save external recipient accounts with immediate guidance when a customer enters one of their own accounts; own-account movement stays in the standard transfer flow.
-- Enroll a TOTP authenticator, generate single-use recovery codes, and manage MFA from the Security page.
-- Configure per-account daily transfer and withdrawal limits from Security; reductions are immediate and MFA-verified increases cool for 24 hours.
-- Complete risk-based step-up verification before high-risk transfers are posted.
-- Create one-time or recurring scheduled transfers between accounts.
-- Pause, resume, cancel, and inspect scheduled transfer run history.
-- Protect a minimum available balance with the Outcome Protection / Balance Shield reverse-stress lab.
-- Review exact baseline and stressed timelines, minimal failure sets, preview guardrails, and explicitly confirmed consent-driven top-ups.
-- Use available-balance validation for withdrawals and outgoing transfer sources.
-- Keep frozen accounts selectable for credits, while debit-source controls are disabled.
-- Generate an `Idempotency-Key` per money-movement submit.
-- Search and filter transaction history.
-- View transaction details and user transaction stats.
-- Dispute eligible completed transactions from the last 60 days.
-- Review submitted disputes and resolution notes in the customer dispute history.
-- Review in-app notifications, unread counts, and message state for account, transaction, and dispute events.
-
-### Admin/Ops App
-
-- Hide admin navigation for normal users.
-- Guard admin routes using `ROLE_ADMIN` from JWT claims.
-- Search accounts across users with owner and account type filters.
-- Filter accounts by lifecycle status and freeze or unfreeze accounts with required reasons.
-- Review both available and ledger balances in account oversight.
-- Use existing account create/update/delete flows for admin oversight.
-- Monitor account service health, metrics, deployment information, and manual health checks.
-- Monitor transaction service health, transaction/system stats, alert status, and available metrics.
-- Search operational transaction views.
-- Reverse transactions using the backend reversal endpoint.
-- View reversal-related status panels.
-- Review the transaction-service audit log with admin-only summary counters, filters, event search, and selected-event details.
-- Review transaction risk alerts with summary counters, filters, detail inspection, and review/dismiss/escalate actions.
-- Review customer transaction disputes with summary counters, filters, claim/status actions, and internal notes.
-- Reconstruct investigation context across transactions, audit events, risk alerts, risk cases, and case notes.
-- Print investigation reports with current filters, key findings, and a timeline preview.
-- Export investigation timelines as admin-only CSV files using the same investigation filters used by the timeline view.
-- Run daily ledger reconciliation against each projection's persisted opening balance plus complete immutable posting history, including journals later compensated by reversals.
-- Inspect reconciliation run ownership, timestamps, per-check results, run-to-exception links, and expected/actual balance evidence.
-- Treat approved, denied, and closed disputes as terminal in both the API and operations console.
-
-### Backend Services
-
-- Account service:
-  - Authentication and JWT issuance.
-  - User registration.
-  - Account CRUD.
-  - Account lifecycle status with `ACTIVE` and `FROZEN` states.
-  - Admin-only status updates with reason and updated-by metadata.
-  - Ledger balance, available balance, and account debit hold ownership.
-  - Debit hold placement, capture, and release with idempotent hold IDs.
-  - Frozen-account debit rejection while preserving deposits and incoming credits.
-  - Positive balance operations update both ledger and available balances.
-  - Account type validation for checking, savings, and credit accounts.
-  - Health, metrics, and deployment endpoints.
-  - Customer notification APIs for listing, summary counts, marking one read, and marking all read.
-  - Internal/admin notification creation API secured to `ROLE_ADMIN` and `ROLE_INTERNAL_SERVICE`.
-  - Encrypted TOTP enrollment, verification, recovery-code rotation, and MFA disablement.
-  - Short-lived, action-bound step-up challenges and one-time authorization proofs.
-- Transaction service:
-  - Deposit, withdrawal, transfer, and scheduled transfer endpoints.
-  - Scheduled transfer persistence, authenticated APIs, and worker execution for one-time and recurring transfers.
-  - Immutable, versioned Outcome Protection scenarios and deterministic reverse-stress simulation over authoritative ledger balances, active schedules, and explicit assumptions.
-  - Bounded minimal-failure search, causal proof, read-only guardrail compilation, analytics-ready domain events, and divergence monitoring.
-  - Frozen-account debit enforcement before withdrawals and outgoing transfer debits.
-  - Pending debit authorization flow for withdrawals and outgoing transfers.
-  - Debit hold placement and capture before completing debit transactions.
-  - Debit hold release or compensation paths for failed debit orchestration.
-  - Transaction history and search.
-  - Transaction stats and monitoring endpoints.
-  - Idempotency and reversal workflows.
-  - Persistent audit log storage for high-value transaction and security events.
-  - Admin-only audit log search, detail, and summary APIs.
-  - Persistent risk alert review queue for conservative transaction risk rules.
-  - Admin-only risk alert search, detail, summary, and status update APIs.
-  - Customer dispute submission and admin-only dispute queue APIs.
-  - Admin-only investigation timeline, summary, and CSV export APIs.
-  - Account-service integration for balance updates.
-  - Configurable risk-based transfer authorization for high-value, new-beneficiary, rapid-transfer, and recent-unfreeze signals.
-  - Durable pending authorization records that prevent transaction and ledger posting before successful verification.
-  - Best-effort account-service notification emission for completed/failed transfer outcomes, scheduled transfer lifecycle events, and dispute lifecycle updates.
-
-## Notification Center
-
-The v1 notification center is in-app only. It does not send email, SMS, push notifications, replies, or attachments.
-
-Customer API:
-
-- `GET /api/notifications?page=&size=&status=&type=&sourceType=&from=&to=`
-- `GET /api/notifications/summary`
-- `PATCH /api/notifications/{notificationId}/read`
-- `PATCH /api/notifications/read-all`
-
-Internal creation API:
-
-- `POST /api/internal/notifications`
-
-Notification records are customer-owned in `account-service`. Customer endpoints always use the authenticated user, while internal/admin callers may create notifications for any `userId`. The internal endpoint requires `ROLE_ADMIN` or `ROLE_INTERNAL_SERVICE`.
-
-Event sources currently create notifications for account freeze/unfreeze, transfer completion/failure, scheduled transfer creation/pause/resume/cancel/execution/failure, dispute creation, and dispute status changes to `APPROVED`, `DENIED`, or `CLOSED`. Source workflows treat notification delivery as best-effort: failures are logged and do not roll back money movement, scheduled transfer processing, account status changes, or dispute updates. Dedupe keys keep repeated source events from creating duplicate inbox rows.
-
-## Outcome Protection / Balance Shield
-
-The customer route `/outcome-protection` is a deterministic Personal Reverse-Stress Lab. A customer selects owned ledger accounts, a forecast base currency, a protected minimum, a 1-90 day horizon, dated assumptions, and bounded shocks. Outcome Types and Repair Search V2 also lets the customer protect one owned, active, version-bound scheduled obligation inside the horizon, optionally together with a balance floor. Transaction-service snapshots authoritative available balances, ledger projection versions, schedule identity/state/version/ownership/due semantics, and active scheduled transfers, then returns the baseline timeline, causal invariant breaches, smallest bounded failure set, and ranked replay-proven repair alternatives.
-
-Customer API:
-
-- `POST /api/outcome-protection/scenarios` (requires `Idempotency-Key`)
-- `GET /api/outcome-protection/scenarios`
-- `GET /api/outcome-protection/scenarios/{scenarioId}`
-- `POST /api/outcome-protection/scenarios/{scenarioId}/versions` (requires `Idempotency-Key`)
-- `POST /api/outcome-protection/scenarios/{scenarioId}/refresh`
-- `POST /api/outcome-protection/guardrails/{guardrailId}/accept` (records preview acceptance only)
-- `POST /api/outcome-protection/repairs/{guardrailId}/select` (records owner-scoped preview selection only; no mutation or consent)
-- `GET /api/outcome-protection/guardrails/terms`
-- `POST /api/outcome-protection/guardrails/{guardrailId}/consent` (versioned informed consent and `Idempotency-Key`)
-- `POST /api/outcome-protection/guardrails/{guardrailId}/activate` (action-bound MFA; activation moves no money)
-- `POST /api/outcome-protection/guardrails/{guardrailId}/execute` (explicit confirmation and `Idempotency-Key`)
-- `POST /api/outcome-protection/guardrail-executions/{executionId}/authorize` (risk-based MFA when required)
-- `POST /api/outcome-protection/guardrails/{guardrailId}/suspend`, `/resume`, or `/revoke`
-- `POST /api/outcome-protection/warnings/{eventId}/acknowledge`
-
-Scenario inputs, ledger/schedule snapshots, and simulation results are versioned and immutable. USD, EUR, GBP, and INR are supported; INR remains decimal-safe end to end and is rendered with Indian digit grouping in the frontend. Active customer-owned schedules are expanded with status, cadence, effective time zone, currency, and inclusive horizon boundaries in the causal timeline. Search is capped by `OUTCOME_PROTECTION_MAX_COMBINATION_SIZE` (default `3`) and `OUTCOME_PROTECTION_MAX_EVALUATED_COMBINATIONS` (default `5000`); capped results say so explicitly.
-
-Repair Search V2 generates deterministic `RESERVE_BUFFER`, `SHIFT_OPTIONAL_SCHEDULE`, `REDUCE_OPTIONAL_SCHEDULE`, `TEMPORARY_SPENDING_LIMIT`, and `REVIEW_FLEXIBLE_EXPENSES` candidates where eligible. It never targets the protected obligation. Every candidate combination is replayed against the same immutable snapshot and ranked by restored invariants, action count, disruption, modeled money moved/deferred, and stable IDs. Results persist engine/canonical input/source-version/candidate/replay/ranking/rejection evidence plus a SHA-256 certificate. Repair search is separately capped by `OUTCOME_PROTECTION_REPAIR_MAX_COMBINATION_SIZE` (default `3`) and `OUTCOME_PROTECTION_REPAIR_MAX_EVALUATED_COMBINATIONS` (default `500`); the UI explicitly disclaims optimality outside those bounds. Schedule/limit alternatives remain preview-only. Only the pre-existing same-currency reserve-buffer path can proceed through versioned consent, MFA, explicit confirmation, risk, spending-limit, ledger, lifecycle, notification, and global kill-switch controls.
-
-Refresh and the five-minute monitor compare the saved proof with fresh authoritative ledger and scheduled-transfer state. Each comparison persists a `DIVERGENCE_EVALUATED` evidence event. A saved-safe result that is now unsafe transactionally enqueues one deterministic `OUTCOME_PROTECTION_AT_RISK` delivery. Bounded retry/backoff, terminal failure, SLA escalation, and account-service receipt evidence are visible without changing balances or schedules; acknowledgement remains owned, audited, and idempotent.
-
-Reserve-buffer drafts may become bounded same-currency top-up policies only after versioned informed consent and action-bound MFA. Activation never moves money. Every action is initiated and explicitly confirmed by the authenticated customer, passes through the existing authorized transfer flow, and may require risk MFA. Limits, expiry, suspension, revocation, a persisted fail-closed operator kill switch, immutable audit events, idempotency, and notification evidence remain visible. There is no autonomous execution worker. Cross-currency forecasts use read-only decimal quotes with provider/as-of/provenance and fail-closed staleness handling; they never execute FX. See [the MVP design](docs/superpowers/specs/2026-07-15-outcome-protection-money-debugger-design.md), [the production-readiness increment](docs/superpowers/specs/2026-07-16-balance-shield-production-readiness.md), [the executable guardrail specification](docs/superpowers/specs/2026-07-16-balance-shield-consent-guardrails.md), and [the operator runbook](docs/operations/balance-shield-guardrail-runbook.md), and [the Outcome Types and Repair Search V2 design](docs/superpowers/specs/2026-07-17-outcome-types-repair-search-v2.md).
-
-Executable repairs also enforce the versioned [`outcome-source-v2` freshness invariant](docs/superpowers/specs/2026-08-12-outcome-protection-source-freshness.md) at consent, activation, execution submission, and risk-MFA completion. HTTP 409 `SCENARIO_DIVERGED` means an authoritative balance/projection, account state, schedule, or protected obligation changed. The customer must refresh or re-run the scenario, select a newly replay-proven repair, and consent again. The rejection is append-only evidence with `moneyMoved=false`; it cannot create a transfer, hold, journal, schedule mutation, limit mutation, or autonomous action.
-
-## Risk-based Step-up Authorization
-
-Risky immediate transfers are paused until the customer verifies a TOTP authenticator code or a single-use recovery code. A challenged request creates only a pending authorization record: no transaction, balance movement, debit hold, or ledger journal is created before verification succeeds.
-
-The default policy challenges a transfer when any of these signals applies:
-
-- The amount is at least `5000`.
-- An external destination was entered manually instead of selected from saved recipients.
-- The selected recipient was created within the last 24 hours.
-- The request would be the fifth completed transfer within 10 minutes.
-- The source account was unfrozen within the last 24 hours.
-
-Transfers between accounts owned by the same customer are not classified as manual external transfers, although another risk signal can still require verification. After successful verification, the account service issues a short-lived proof bound to the customer, exact transfer fingerprint, and authorization record. The transaction service consumes that proof once and executes the original idempotent transfer.
-
-Customer flow:
-
-1. Open `/security`, confirm the current password, and enroll an authenticator app.
-2. Store the generated recovery codes offline; every recovery code is single-use.
-3. Submit a transfer normally. Low-risk transfers continue immediately.
-4. If challenged, enter an authenticator or recovery code in the verification panel.
-5. The authorized transfer completes and appears in transaction history with its balanced ledger journal.
-
-The policy is disabled by default so migrations can be deployed and customers can enroll before enforcement. See [Risk-based step-up authorization](docs/risk-based-step-up-authorization.md) for operational details, policy tuning, and the live smoke test.
-
-## Technology Stack
-
-### Backend
-
-- Java 21/22 compatible Spring Boot services.
-- Maven wrappers per service.
-- Spring Security with JWT.
-- Spring Data JPA.
-- Flyway migrations.
-- PostgreSQL.
-- Micrometer and Spring Boot Actuator monitoring.
-- JUnit 5, Mockito, and integration tests.
-
-### Frontend
-
-- React 18.
-- Vite.
-- TypeScript.
-- React Router.
-- TanStack Query.
-- React Hook Form.
-- Zod.
-- Tailwind CSS.
-- Lucide icons.
-- Vitest and Testing Library.
-- Playwright E2E tests.
-
-## Local Development
-
-### Prerequisites
-
-- Java 21 or 22.
-- Node.js 20 or newer.
-- Docker Desktop for the compose-based backend path.
-- PostgreSQL if running the services outside Docker.
-
-### Start Backend Services
-
-The frontend expects:
-
-- Account service: `http://127.0.0.1:8080`
-- Transaction service: `http://127.0.0.1:8081`
-
-The verified Docker path uses `docker-compose.codex.yml` for the complete backend stack and `docker-compose.codex.override.yml` to expose both PostgreSQL instances on loopback-only host ports. Set local-only signing secrets before starting the stack; do not reuse these example values outside local development:
-
-```powershell
-$env:JWT_SECRET = "<set-via-secret-manager>"
-$env:INTERNAL_JWT_SECRET = "<set-via-secret-manager>"
-$env:MFA_ENCRYPTION_KEY = "local-development-mfa-encryption-key-change-me-at-least-32-characters"
-$env:STEP_UP_ENABLED = "true"
-# Optional: allow synthetic customer deposits so a fresh local stack can be funded.
-$env:CUSTOMER_DEPOSITS_ENABLED = "true"
-docker compose -f docker-compose.codex.yml -f docker-compose.codex.override.yml up --build -d
-docker compose -f docker-compose.codex.yml -f docker-compose.codex.override.yml ps
+```bash
+docker compose -f docker-compose.dev.yml -f docker-compose.dev.override.yml up --build -d
+cd frontend && npm install && npm run dev
 ```
 
-Wait for `account-service` and `transaction-service` to report healthy. To stop the stack while preserving its database volumes:
-
-```powershell
-docker compose -f docker-compose.codex.yml -f docker-compose.codex.override.yml down
-```
-
-For manual JVM startup instead, provide PostgreSQL, matching JWT secrets, and the service-specific configuration, then run:
-
-```powershell
-cd account-service
-.\mvnw.cmd spring-boot:run
-```
-
-```powershell
-cd transaction-service
-.\mvnw.cmd spring-boot:run
-```
-
-### Start Frontend
-
-```powershell
-cd frontend
-npm install
-npm run dev
-```
-
-Open the Vite URL printed in the terminal, normally `http://127.0.0.1:5173`.
-
-Authenticated customer pages use these routes:
-
-- `/login` - customer sign-in, with an Operations sign-in mode at `/login?portal=admin`
-- `/` - dashboard
-- `/accounts` - customer accounts
-- `/move-money` - deposits, withdrawals, and transfers
-- `/scheduled-transfers` - scheduled and recurring transfers
-- `/outcome-protection` - Balance Shield scenarios, reverse-stress proof, consent/MFA lifecycle, and explicit guardrail actions
-- `/transactions` - transaction history, detail, disputes, and reversals
-- `/disputes` - submitted dispute history
-- `/notifications` - notification inbox
-- `/security` - authenticator enrollment, recovery codes, and MFA management
-
-Admin pages are protected by `ROLE_ADMIN` and live under `/admin`:
-
-- `/admin` - operations overview
-- `/admin/accounts`
-- `/admin/monitoring`
-- `/admin/transactions`
-- `/admin/audit-log`
-- `/admin/risk-alerts`
-- `/admin/risk-cases`
-- `/admin/disputes`
-- `/admin/investigations`
-- `/admin/reconciliation`
-
-The Vite dev server proxies browser requests through:
-
-- `/account-api/*` -> `http://localhost:8080/*`
-- `/transaction-api/*` -> `http://localhost:8081/*`
-
-That means the browser does not call backend ports directly during local development.
-
-## Configuration
-
-Use environment-provided secrets. Do not commit real JWT secrets.
-
-Example backend configuration shape:
-
-```properties
-security.jwt.secret=${JWT_SECRET}
-security.jwt.expiration-in-ms=3600000
-```
-
-For service-to-service calls, keep the same JWT signing configuration across both services.
-
-Risk-based step-up authorization uses these environment variables:
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `MFA_ENCRYPTION_KEY` | empty | Private key material used by account-service to encrypt authenticator secrets at rest. Use at least 32 random characters and plan key rotation carefully. |
-| `STEP_UP_ENABLED` | `false` | Enables transfer policy enforcement. |
-| `CUSTOMER_DEPOSITS_ENABLED` | `false` | Allows controlled synthetic customer deposits in the local Compose stack. Keep `false` until a funding provider is activated. |
-| `STEP_UP_HIGH_VALUE_THRESHOLD` | `5000.00` | Transfer amount that triggers the high-value signal. |
-| `STEP_UP_BENEFICIARY_COOLING_HOURS` | `24` | Age window for newly saved recipients. |
-| `STEP_UP_RAPID_TRANSFER_WINDOW_MINUTES` | `10` | Lookback window for rapid-transfer detection. |
-| `STEP_UP_RAPID_TRANSFER_COUNT` | `5` | Completed-transfer count that triggers verification. |
-| `STEP_UP_RECENT_UNFREEZE_HOURS` | `24` | Risk window after a source account is reactivated. |
-
-Challenges expire after five minutes and authorization proofs after two minutes by default. Account-service also supports `STEP_UP_CHALLENGE_TTL_SECONDS`, `STEP_UP_PROOF_TTL_SECONDS`, and `STEP_UP_MAX_ATTEMPTS`. Never commit the MFA encryption key or other deployment secrets.
-
-Redis is optional for manual local JVM runs of `transaction-service`. The default local configuration disables Redis health so core transaction flows can run with only PostgreSQL and account-service. Compose, E2E, and Helm deployment configs explicitly enable Redis health because those environments provision Redis.
-
-For an externally approved deployment, use one of these frontend patterns:
-
-- Serve the frontend behind a reverse proxy and route `/account-api` and `/transaction-api` to the Spring services.
-- Or configure explicit CORS rules on both Spring services for the deployed frontend origin.
-
-The reverse-proxy option is preferred because it keeps browser-facing URLs consistent with local development.
-
-## API Surface Used By Frontend
-
-### Auth
-
-```http
-POST /api/auth/register
-POST /api/auth/login
-```
-
-### Accounts
-
-```http
-GET    /api/accounts
-POST   /api/accounts
-GET    /api/accounts/{id}
-PUT    /api/accounts/{id}
-PATCH  /api/accounts/{id}/status
-```
-
-Customer hard deletion is not supported. Ledger-authoritative closure preserves
-the account and its financial history:
-
-```http
-POST /api/controlled-beta/accounts/{accountId}/close
-```
-
-Admin account oversight uses:
-
-```http
-GET /api/accounts?ownerId=&accountType=&status=&page=&size=
-```
-
-`PATCH /api/accounts/{id}/status` requires `ROLE_ADMIN` and accepts:
-
-```json
-{
-  "status": "FROZEN | ACTIVE",
-  "reason": "required status reason"
-}
-```
-
-`FROZEN` blocks debits only: withdrawals and outgoing transfer debits are rejected. Deposits and incoming transfer credits remain allowed.
-
-### Internal Account Balance And Holds
-
-`transaction-service` owns the authoritative double-entry ledger. `account-service`
-stores a delivered projection for account views and hold enforcement. Public
-account JSON keeps `balance` as a compatibility alias for `ledgerBalance`, while
-newer clients can read both:
-
-```json
-{
-  "balance": 800.00,
-  "ledgerBalance": 800.00,
-  "availableBalance": 800.00
-}
-```
-
-Debit holds reserve spendable funds before a debit completes:
-
-- `PLACED`: decreases `availableBalance` only.
-- `CAPTURED`: decreases `ledgerBalance`; available stays unchanged because funds were already reserved.
-- `RELEASED`: restores `availableBalance`; ledger stays unchanged.
-
-Internal service-to-service endpoints require `ROLE_INTERNAL_SERVICE` or `ROLE_ADMIN`:
-
-```http
-POST /api/internal/accounts/{id}/holds
-POST /api/internal/accounts/{id}/holds/{holdId}/capture
-POST /api/internal/accounts/{id}/holds/{holdId}/release
-```
-
-Place hold body:
-
-```json
-{
-  "holdId": "transaction-id:hold",
-  "transactionId": "transaction-id",
-  "amount": 200.00,
-  "reason": "WITHDRAWAL_HOLD"
-}
-```
-
-Capture and release body:
-
-```json
-{
-  "transactionId": "transaction-id",
-  "reason": "WITHDRAWAL_CAPTURE"
-}
-```
-
-Hold placement is rejected when the account is `FROZEN` or `availableBalance` is too low. Duplicate place/capture/release requests are idempotent when they match the original hold data.
-
-### Transactions
-
-```http
-GET  /api/transactions
-GET  /api/transactions/search
-GET  /api/transactions/{transactionId}
-GET  /api/transactions/user/stats
-POST /api/transactions/deposit
-POST /api/transactions/withdraw
-POST /api/transactions/transfer
-POST /api/transactions/{transactionId}/reverse
-```
-
-Risk-based transfer authorization extends the transfer response with authorization state. A challenged transfer returns a pending authorization instead of a completed transaction; submit its code to the authorization endpoint to continue the original request:
-
-```http
-POST /api/transactions/transfer
-POST /api/transactions/{authorizationId}/authorize
-DELETE /api/transactions/{authorizationId}/authorization
-```
-
-MFA lifecycle endpoints are owned by account-service and always act on the authenticated customer:
-
-```http
-GET  /api/security/mfa
-POST /api/security/mfa/totp/enroll
-POST /api/security/mfa/totp/confirm
-POST /api/security/mfa/recovery-codes/regenerate
-DELETE /api/security/mfa/totp
-```
-
-Enrollment and destructive MFA changes require the current password. Verification accepts an authenticator code or unused recovery code; recovery codes are stored as hashes and returned only when generated.
-
-Scheduled transfer customer routes use the authenticated user and are exposed through the frontend transaction proxy:
-
-```http
-POST   /api/scheduled-transfers
-GET    /api/scheduled-transfers?page=&size=&status=
-GET    /api/scheduled-transfers/{scheduleId}
-PATCH  /api/scheduled-transfers/{scheduleId}/pause
-PATCH  /api/scheduled-transfers/{scheduleId}/resume
-DELETE /api/scheduled-transfers/{scheduleId}
-GET    /api/scheduled-transfers/{scheduleId}/runs?page=&size=
-```
-
-Debit transaction behavior:
-
-- Deposits use no hold and increase both ledger and available balances.
-- Withdrawals use `place hold -> capture hold -> complete transaction`.
-- Outgoing transfers use holds on the source account, then credit the destination account.
-- Incoming transfer credits may target a frozen account because credits are allowed.
-- If hold placement or capture fails, the transaction is marked `FAILED` and the failure is audited.
-- If destination credit fails after source capture, transaction-service uses the existing compensation path to credit the source account back.
-
-Processing states include `HOLD_PLACED`, `HOLD_CAPTURED`, and `HOLD_RELEASED`. Audit events include `DEBIT_HOLD_PLACED`, `DEBIT_HOLD_CAPTURED`, `DEBIT_HOLD_RELEASED`, and `DEBIT_HOLD_REJECTED`.
-
-### Monitoring
-
-Account service:
-
-```http
-GET  /api/health/status
-GET  /api/health/metrics
-GET  /api/health/deployment
-POST /api/health/check
-```
-
-Transaction service:
-
-```http
-GET /api/monitoring/health/detailed
-GET /api/monitoring/stats/transactions
-GET /api/monitoring/stats/system
-GET /api/monitoring/alerts/status
-GET /api/monitoring/metrics/available
-```
-
-### Audit Log
-
-The admin Audit Log page calls the transaction-service audit APIs through the frontend proxy at `/transaction-api/api/audit/*`.
-
-Audit APIs require `ROLE_ADMIN` or `ROLE_INTERNAL_SERVICE`.
-
-```http
-GET /api/audit/events?page=&size=&eventType=&action=&outcome=&userId=&transactionId=&from=&to=
-GET /api/audit/events/{eventId}
-GET /api/audit/summary?from=&to=
-```
-
-Version 1 stores transaction initiated, completed, failed, reversed, and security events in `transaction-service`. Audit rows are retained for 90 days and intentionally exclude stack traces, JWTs, passwords, authorization headers, and raw token values.
-
-Financial transaction and security audit events are persisted synchronously with their owning workflow. Generic `API_ACCESS` evidence is dispatched to a bounded audit executor so routine dashboard polling does not extend customer response latency. The executor drains for up to 30 seconds during graceful shutdown and uses caller-runs backpressure when saturated or rejected, preserving evidence rather than silently dropping it.
-
-Scheduled-transfer lifecycle notifications are submitted to a bounded executor only after the authoritative schedule transaction commits. Notification-provider latency or failure cannot roll back schedule state; executor saturation applies backpressure, and delivery failures are logged without exposing customer data.
-
-### Risk Alerts
-
-The admin Risk Alerts page calls the transaction-service risk APIs through the frontend proxy at `/transaction-api/api/risk/*`.
-
-Risk APIs require `ROLE_ADMIN` or `ROLE_INTERNAL_SERVICE`.
-
-```http
-GET   /api/risk/alerts?page=&size=&status=&severity=&alertType=&userId=&transactionId=&from=&to=
-GET   /api/risk/alerts/{alertId}
-GET   /api/risk/summary?from=&to=
-PATCH /api/risk/alerts/{alertId}/status
-```
-
-`PATCH /api/risk/alerts/{alertId}/status` accepts:
-
-```json
-{
-  "status": "REVIEWED | DISMISSED | ESCALATED",
-  "resolutionNote": "short admin note"
-}
-```
-
-Version 1 creates operational review records only; it does not block transactions, reverse transactions, or lock accounts automatically.
-
-Default built-in rules:
-
-- `HIGH_VALUE_TRANSFER`: completed transfer amount greater than or equal to `5000`, severity `HIGH`.
-- `REPEATED_FAILURES`: at least `3` failed transactions by the same user in `15` minutes, severity `MEDIUM`.
-- `RAPID_TRANSFERS`: at least `5` completed transfers by the same user in `10` minutes, severity `MEDIUM`.
-- `REVERSAL_HEAVY_ACTIVITY`: at least `2` reversals by the same user in `24` hours, severity `HIGH`.
-
-Open alerts use a `dedupeKey` so repeated evaluations do not create duplicate open alerts for the same rule/user/transaction/window.
-
-### Risk Case Management
-
-The admin Risk Cases page builds an internal case workflow on top of Risk Alerts. Cases are created manually from a selected alert, start unassigned, and can be claimed by an admin for review. Version 1 keeps cases operational only: it does not message customers, lock accounts, reverse transactions, or make automated fraud decisions.
-
-Case APIs use the same `/transaction-api/api/risk/*` frontend proxy and require `ROLE_ADMIN` or `ROLE_INTERNAL_SERVICE`.
-
-```http
-GET   /api/risk/cases?page=&size=&status=&priority=&assignedTo=&userId=&transactionId=&alertId=&from=&to=
-GET   /api/risk/cases/{caseId}
-GET   /api/risk/cases/summary?from=&to=
-POST  /api/risk/cases/from-alert/{alertId}
-PATCH /api/risk/cases/{caseId}/claim
-PATCH /api/risk/cases/{caseId}/status
-POST  /api/risk/cases/{caseId}/notes
-```
-
-Case statuses are `OPEN`, `IN_REVIEW`, `RESOLVED`, and `CLOSED`. Priorities are `LOW`, `MEDIUM`, `HIGH`, and `CRITICAL`; when omitted at creation time, alert severity maps to case priority (`HIGH` -> `HIGH`, `MEDIUM` -> `MEDIUM`, fallback `LOW`). Notes are internal, append-only admin notes.
-
-Example create/status/note bodies:
-
-```json
-{
-  "title": "Review high-value transfer",
-  "priority": "HIGH",
-  "reason": "Manual review requested by admin"
-}
-```
-
-```json
-{
-  "status": "RESOLVED",
-  "resolutionNote": "Reviewed transaction history and no further action required."
-}
-```
-
-```json
-{
-  "note": "Customer transaction pattern looks unusual compared with prior activity."
-}
-```
-
-### Transaction Disputes
-
-Customers can dispute their own `COMPLETED` transactions from the last 60 days. Version 1 creates operational dispute records only: approving a dispute does not automatically reverse, refund, lock, or move money.
-
-Customer dispute APIs use the `/transaction-api/api/disputes/*` frontend proxy and require an authenticated user:
-
-```http
-POST /api/disputes
-GET  /api/disputes?page=&size=
-GET  /api/disputes/{disputeId}
-```
-
-`POST /api/disputes` accepts:
-
-```json
-{
-  "transactionId": "transaction-id",
-  "reasonCode": "UNAUTHORIZED",
-  "description": "Customer explanation with enough detail for review."
-}
-```
-
-Supported reason codes are `UNAUTHORIZED`, `DUPLICATE`, `INCORRECT_AMOUNT`, `SERVICE_NOT_RECEIVED`, and `OTHER`. The backend rejects disputes for non-owned transactions, non-`COMPLETED` transactions, transactions older than 60 days, and transactions that already have an active dispute.
-
-Admin dispute APIs require `ROLE_ADMIN` or `ROLE_INTERNAL_SERVICE`:
-
-```http
-GET   /api/disputes/admin?page=&size=&status=&userId=&transactionId=&reasonCode=&assignedTo=&from=&to=
-GET   /api/disputes/admin/summary?from=&to=
-PATCH /api/disputes/admin/{disputeId}/claim
-PATCH /api/disputes/admin/{disputeId}/status
-POST  /api/disputes/admin/{disputeId}/notes
-```
-
-Dispute statuses are `OPEN`, `IN_REVIEW`, `APPROVED`, `DENIED`, and `CLOSED`. Claiming a dispute assigns it to the current admin and moves `OPEN` disputes to `IN_REVIEW`. `APPROVED`, `DENIED`, and `CLOSED` set `closedAt`. Notes are internal, append-only admin notes.
-
-Example status and note bodies:
-
-```json
-{
-  "status": "APPROVED",
-  "resolutionNote": "Customer claim accepted after review."
-}
-```
-
-```json
-{
-  "note": "Reviewed transaction logs and customer account history."
-}
-```
-
-### Investigation Timeline
-
-The admin Investigations page is a read-only workspace for reconstructing what happened across transaction, audit, risk alert, risk case, and dispute records. Admins can search by user, transaction, account, alert, or case identifiers and review a single chronological timeline with linked metadata.
-
-Investigation APIs use the `/transaction-api/api/investigations/*` frontend proxy and require `ROLE_ADMIN` or `ROLE_INTERNAL_SERVICE`.
-
-```http
-GET /api/investigations/timeline?userId=&transactionId=&accountId=&alertId=&caseId=&from=&to=&page=&size=
-GET /api/investigations/summary?userId=&transactionId=&accountId=&alertId=&caseId=&from=&to=
-GET /api/investigations/export?userId=&transactionId=&accountId=&alertId=&caseId=&from=&to=
-```
-
-Timeline items include `TRANSACTION`, `AUDIT_EVENT`, `RISK_ALERT`, `RISK_CASE`, `CASE_NOTE`, `DISPUTE`, and `DISPUTE_NOTE` records. Searches by `caseId` expand to the case user, transaction, and linked alert context; searches by `alertId` expand to the alert user and transaction context. Searches by `userId` or `transactionId` include matching disputes and dispute notes.
-
-The page also builds a report panel from the current filters. It summarizes the report scope, flags high-severity investigation activity, previews the first timeline items, and supports browser printing through the `Print report` action. `GET /api/investigations/export` returns a `text/csv` attachment named `investigation-export.csv` with the same filtered timeline data and escaped metadata JSON for offline review.
-
-Version 1 is read-only and does not update alerts, cases, accounts, or transactions.
-
-## Testing
-
-### Frontend
-
-```powershell
-cd frontend
-npm test
-npm run build
-npm run e2e
-```
-
-The frontend test suite covers:
-
-- API proxy/client behavior.
-- In-memory JWT handling and role extraction.
-- Form schemas for auth, accounts, money movement, and reversals.
-- Login/register success and failure states.
-- Account type-specific fields.
-- Account status badges, frozen warnings, admin status filters, and freeze/unfreeze reason validation.
-- Available balance as the primary dashboard/account-card balance.
-- Ledger and available balance display in customer and admin account views.
-- Move Money debit-source disabling based on frozen status and insufficient available balance.
-- Deposit and incoming-credit destination behavior remaining selectable for frozen or held accounts.
-- Transaction table filters.
-- Customer scheduled transfer route, account-backed create form, recurrence validation, proxy mapping, pause/resume/cancel actions, and run-history display.
-- Customer dispute submission, validation, history, and resolution note display.
-- Admin navigation visibility.
-- Admin audit log summary, filters, event table, detail panel, and API proxy mapping.
-- Admin risk alert summary, filters, queue table, detail panel, status actions, and API proxy mapping.
-- Admin risk case summary, filters, queue table, detail panel, claim/status/note actions, create-from-alert action, and API proxy mapping.
-- Admin dispute summary, filters, queue table, detail panel, claim/status/note actions, and API proxy mapping.
-- Admin investigation summary, search controls, report preview, print action, CSV export flow, mixed-source timeline, detail panel, and API proxy mapping.
-- Customer and admin Playwright flows.
-
-### Backend
-
-```powershell
-cd account-service
-.\mvnw.cmd -q test
-```
-
-```powershell
-cd transaction-service
-.\mvnw.cmd -q test
-```
-
-The transaction-service test suite also covers scheduled transfer persistence constraints, authenticated scheduled transfer APIs, scheduler claim/finalize behavior, execution recovery, notification emission, the admin audit controller, audit persistence rules, audit filtering, summary counts, and 90-day cleanup. Risk alert tests cover admin-only access, filters, summary counts, status updates with reviewer metadata, rule generation, dedupe behavior, and non-risky transaction handling. Risk case tests cover admin-only access, filters, summary counts, create-from-alert, duplicate open-case handling, claim, status updates, linked alert details, and append-only notes. Dispute tests cover customer ownership checks, completed/60-day eligibility, duplicate active-dispute rejection, admin listing, claim, status updates, internal notes, and investigation timeline/summary integration. Investigation tests cover admin-only access, search context expansion, mixed-source timeline sorting, summary counts, CSV export headers/content escaping, and empty search results.
-
-Account hold/freeze tests cover default `ACTIVE` accounts, admin-only freeze/unfreeze with required reasons, frozen debit rejection, credit allowance, transaction-service prechecks, backend rejection messages, frontend status rendering, and move-money debit-source disabling.
-
-Pending debit authorization tests cover account ledger/available initialization, migration backfill, hold placement/capture/release balance effects, idempotent hold transitions, frozen and insufficient-available hold rejection, deposit balance updates, withdrawal and transfer hold orchestration, failed hold audit behavior, compensation after destination credit failure, backward-compatible account DTO handling, and frontend available-balance rendering and validation.
-
-Step-up authorization tests cover TOTP verification, encrypted secret storage, one-time recovery codes, challenge expiry and attempt limits, transfer fingerprint binding, risk-policy signals, pending authorization persistence, retry idempotency, controller behavior, customer Security UI, challenged-transfer verification, and ledger amount rendering for own-account transfers.
-
-For a disposable live Docker smoke test with step-up enabled:
-
-```powershell
-.\scripts\test-step-up-authorization.ps1
-```
-
-The script confirms that funds and journals remain unchanged before authorization, then completes a high-value transfer and verifies balances, transaction state, and ledger postings.
-
-## Release validation
-
-`main` is protected by the strict `Required Acceptance` check. The controlled-beta
-workflow validates both Java services on Java 21 and 22, fresh PostgreSQL
-migrations, replay/concurrency/recovery regressions, frontend tests/lint/build/
-accessibility, the synthetic API/browser contract, Helm/Terraform policy,
-dependency and container scans, SBOM generation, and full-history secret
-scanning. A dated local test count is not release authority; use the current
-protected PR result.
-## Admin Testing Note
-
-The public registration flow creates normal `ROLE_USER` accounts. To test admin screens against the real backend, seed or promote a user with `ROLE_ADMIN` in the account-service database before logging in.
-
-Playwright reads the admin login from `E2E_ADMIN_USERNAME` and `E2E_ADMIN_PASSWORD`. Set both variables to match the seeded local admin account before running `npm run e2e`. Persisted Docker volumes may contain an older password, so a username existing in the database does not guarantee that the E2E default password still matches. Do not commit a real admin password.
-
-## CI Notes
-
-The PR validates:
-
-- Account service tests on Java 21 and Java 22.
-- Transaction service hardening tests on Java 21 and Java 22.
-- Production config policy checks.
-- Secret scanning.
-- PR compile checks.
-
-Maven wrapper scripts must keep executable permissions for Ubuntu CI:
-
-```text
-account-service/mvnw
-transaction-service/mvnw
-```
-
-## Additional Documentation
-
-- Frontend-specific setup: `frontend/README.md`
-- Transaction history API notes: `transaction-service/TRANSACTION-HISTORY-API.md`
-- Monitoring and observability notes: `transaction-service/MONITORING-OBSERVABILITY-GUIDE.md`
-- Risk-based MFA and transfer authorization: `docs/risk-based-step-up-authorization.md`
-- Customer spending controls and transfer limits: `docs/customer-spending-controls.md`
+Set the signing secrets first and open <http://127.0.0.1:5173>. The full walkthrough,
+including running the services outside Docker and every configuration variable, is in
+[docs/getting-started.md](docs/getting-started.md).
+
+The **synthetic sandbox** (`docker-compose.synthetic-sandbox.yml`) is the supported,
+production-shaped way to run everything behind a TLS gateway:
+[docs/operations/controlled-beta-phase2-sandbox.md](docs/operations/controlled-beta-phase2-sandbox.md).
+
+## Stack
+
+Java 21 · Spring Boot 3.5 · Spring Security (JWT) · JPA + Flyway · PostgreSQL · Redis ·
+Micrometer + OpenTelemetry · React 18 · TanStack Query · React Hook Form + Zod · Tailwind ·
+Vitest · Playwright · Helm · Terraform.
+
+## Quality gates
+
+`main` accepts changes only through one required check, **Required Acceptance**: both services
+on Java 21 and 22, fresh-database migrations, concurrency and recovery regressions, frontend
+tests and WCAG accessibility, the full sandbox API/browser contract, Helm/Terraform policy,
+container and dependency scans, SBOMs and a full-history secret scan.
+See [docs/testing.md](docs/testing.md).
+
+## Documentation
+
+| Topic | Where |
+| --- | --- |
+| Features in depth | [docs/features.md](docs/features.md) |
+| Local development and configuration | [docs/getting-started.md](docs/getting-started.md) |
+| API reference | [docs/api/](docs/api/) |
+| Testing and CI | [docs/testing.md](docs/testing.md) |
+| Deployment boundaries | [docs/deployment-authority.md](docs/deployment-authority.md) |
+| Observability, tracing and SLOs | [docs/operations/observability.md](docs/operations/observability.md) |
+| Operations runbooks | [docs/operations/](docs/operations/) |
+| Financial integrity contracts | [docs/controlled-beta-phase1-integrity.md](docs/controlled-beta-phase1-integrity.md) |
+| Step-up authorization | [docs/risk-based-step-up-authorization.md](docs/risk-based-step-up-authorization.md) |
+| Spending controls | [docs/customer-spending-controls.md](docs/customer-spending-controls.md) |
+| Design records | [docs/design/](docs/design/) |
+| Developer tooling (pre-commit, quality tools) | [DEVELOPMENT.md](DEVELOPMENT.md) |
+| Frontend specifics | [frontend/README.md](frontend/README.md) |

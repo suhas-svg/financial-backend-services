@@ -9,7 +9,7 @@ Set a strong, private encryption key and enable the policy before starting the s
 ```powershell
 $env:MFA_ENCRYPTION_KEY = "replace-with-a-random-secret-of-at-least-32-characters"
 $env:STEP_UP_ENABLED = "true"
-docker compose -f docker-compose.codex.yml -f docker-compose.codex.override.yml up --build -d
+docker compose -f docker-compose.dev.yml -f docker-compose.dev.override.yml up --build -d
 ```
 
 `MFA_ENCRYPTION_KEY` encrypts authenticator secrets at rest. Rotating it requires a planned re-enrollment or key migration. Never commit its value. The policy defaults to disabled so a deployment can apply migrations and enroll users before enforcement is activated.
