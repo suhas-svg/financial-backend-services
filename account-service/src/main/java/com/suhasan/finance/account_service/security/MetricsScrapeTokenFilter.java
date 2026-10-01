@@ -41,12 +41,13 @@ public class MetricsScrapeTokenFilter extends OncePerRequestFilter {
         if (!trimmed.isEmpty() && trimmed.length() < MIN_TOKEN_LENGTH) {
             LOG.warn("Ignoring METRICS_SCRAPE_TOKEN shorter than {} characters", MIN_TOKEN_LENGTH);
         }
-        this.expected = trimmed.length() >= MIN_TOKEN_LENGTH ? trimmed.getBytes(StandardCharsets.UTF_8) : null;
+        // Empty means "no token configured": the filter then stays out of the way.
+        this.expected = trimmed.length() >= MIN_TOKEN_LENGTH ? trimmed.getBytes(StandardCharsets.UTF_8) : new byte[0];
     }
 
     @Override
     protected boolean shouldNotFilter(@NonNull final HttpServletRequest request) {
-        return expected == null || !METRICS_PATH.equals(request.getRequestURI());
+        return expected.length == 0 || !METRICS_PATH.equals(request.getRequestURI());
     }
 
     @Override
