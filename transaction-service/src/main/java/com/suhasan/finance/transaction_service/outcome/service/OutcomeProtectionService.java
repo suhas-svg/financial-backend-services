@@ -46,6 +46,7 @@ public class OutcomeProtectionService {
     private final OutcomeNotificationDeliveryService notificationDeliveryService;
     private final OutcomeGuardrailService guardrailService;
     private final ObjectMapper objectMapper;
+    private final OutcomeMonitorHealth monitorHealth;
 
     @Transactional
     public ScenarioResponse create(ScenarioRequest request, String userId, String idempotencyKey) {
@@ -96,6 +97,7 @@ public class OutcomeProtectionService {
         scenario.setLastSourceFingerprint(snapshot.sourceFingerprint());
         scenario.setLastProtectionState(simulation.baseline().safe() ? "SAFE" : "AT_RISK");
         scenario.setLastCheckedAt(Instant.now());
+        monitorHealth.recordSuccess(scenario);
         scenarioRepository.save(scenario);
         return persistVersionAndResult(scenario, nextVersion, request, snapshot, simulation, key, requestFingerprint);
     }
@@ -267,6 +269,7 @@ public class OutcomeProtectionService {
         scenario.setLastSourceFingerprint(fresh.sourceFingerprint());
         scenario.setLastProtectionState(atRisk ? "AT_RISK" : "SAFE");
         scenario.setLastCheckedAt(Instant.now());
+        monitorHealth.recordSuccess(scenario);
         scenarioRepository.save(scenario);
         List<FxRateQuote> freshFxQuotes = new ArrayList<>();
         fresh.ledgerAccounts().stream().map(LedgerAccountSnapshot::fxQuote)
@@ -433,7 +436,10 @@ public class OutcomeProtectionService {
                 read(version.getShocksJson(), SHOCK_LIST), source, read(result.getProofJson(), SimulationProof.class),
                 guardrails, version.getCreatedAt(), version.getOutcomeType() == null ? OutcomeType.BALANCE_FLOOR : OutcomeType.valueOf(version.getOutcomeType()),
                 obligation == null ? null : obligation.scheduleId(),
-                obligation == null ? null : obligation.scheduleVersion());
+                obligation == null ? null : obligation.scheduleVersion(),
+                new MonitoringHealth(scenario.getLastCheckedAt(), scenario.getMonitorFailureCount(),
+                        scenario.getMonitorNextAttemptAt(), scenario.getMonitorLastError(),
+                        scenario.getMonitorDegradedAt()));
     }
 
     private GuardrailResponse guardrailResponse(OutcomeGuardrailDraft draft) {

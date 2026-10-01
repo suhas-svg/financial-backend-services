@@ -532,6 +532,15 @@ export type OutcomeScenario = OutcomeScenarioSummary & {
   outcomeType: "BALANCE_FLOOR" | "SCHEDULED_OBLIGATION";
   protectedScheduleId?: string;
   protectedScheduleVersion?: number;
+  monitoring?: OutcomeMonitoringHealth;
+};
+
+export type OutcomeMonitoringHealth = {
+  lastCheckedAt?: string;
+  consecutiveFailures: number;
+  nextAttemptAt?: string;
+  lastError?: string;
+  degradedAt?: string;
 };
 
 export type OutcomeDivergence = {

@@ -7,6 +7,7 @@ import com.suhasan.finance.transaction_service.entity.TransactionStatus;
 import com.suhasan.finance.transaction_service.entity.TransactionType;
 import com.suhasan.finance.transaction_service.outcome.domain.OutcomeScenario;
 import com.suhasan.finance.transaction_service.outcome.repository.OutcomeScenarioRepository;
+import com.suhasan.finance.transaction_service.outcome.service.OutcomeMonitorHealth;
 import com.suhasan.finance.transaction_service.outcome.service.OutcomeProtectionService;
 import com.suhasan.finance.transaction_service.outcome.service.OutcomeScenarioMonitor;
 import com.suhasan.finance.transaction_service.repository.ScheduledTransferRepository;
@@ -100,6 +101,7 @@ class BackgroundJobClaimIntegrationTest {
     @Autowired private TransactionService transactionService;
     @Autowired private TransactionTemplate transactionTemplate;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private OutcomeMonitorHealth monitorHealth;
 
     private ExecutorService pool;
 
@@ -288,8 +290,8 @@ class BackgroundJobClaimIntegrationTest {
             claimed.setLastCheckedAt(Instant.now());   // what the real refresh records
             return null;
         });
-        OutcomeScenarioMonitor replicaA = new OutcomeScenarioMonitor(scenarioRepository, protection, transactionTemplate);
-        OutcomeScenarioMonitor replicaB = new OutcomeScenarioMonitor(scenarioRepository, protection, transactionTemplate);
+        OutcomeScenarioMonitor replicaA = new OutcomeScenarioMonitor(scenarioRepository, protection, transactionTemplate, monitorHealth);
+        OutcomeScenarioMonitor replicaB = new OutcomeScenarioMonitor(scenarioRepository, protection, transactionTemplate, monitorHealth);
         CountDownLatch start = new CountDownLatch(1);
 
         Future<?> runA = pool.submit(() -> { awaitQuietly(start); replicaA.monitorActiveScenarios(); });
@@ -301,6 +303,46 @@ class BackgroundJobClaimIntegrationTest {
         assertThat(evaluations).hasSize(scenarios);
         assertThat(evaluations.values()).allSatisfy(count -> assertThat(count.get())
                 .as("a scenario evaluated by both replicas would collide on its @Version").isEqualTo(1));
+    }
+
+    @Test
+    void scenariosThatKeepFailingBackOffSoAHealthyOneIsStillReached() {
+        // One more broken scenario than a monitor run handles (100), all checked longer ago than the healthy one,
+        // so without backoff they would fill every run and the healthy scenario would never be checked.
+        int brokenCount = 101;
+        for (int i = 0; i < brokenCount; i++) {
+            scenarioRepository.saveAndFlush(scenario("broken-%03d".formatted(i), "ACTIVE", 120));
+        }
+        scenarioRepository.saveAndFlush(scenario("healthy", "ACTIVE", 60));
+        AtomicInteger healthyChecks = new AtomicInteger();
+        OutcomeProtectionService protection = Mockito.mock(OutcomeProtectionService.class);
+        Mockito.when(protection.refreshClaimed(Mockito.any())).thenAnswer(invocation -> {
+            OutcomeScenario claimed = invocation.getArgument(0);
+            if (claimed.getScenarioId().startsWith("broken")) {
+                throw new IllegalStateException("Account service unavailable for internal account lookup");
+            }
+            healthyChecks.incrementAndGet();
+            claimed.setLastCheckedAt(Instant.now());
+            return null;
+        });
+        OutcomeScenarioMonitor monitor = new OutcomeScenarioMonitor(
+                scenarioRepository, protection, transactionTemplate, monitorHealth);
+
+        monitor.monitorActiveScenarios();
+        assertThat(healthyChecks.get()).as("the first run is filled by the 100 oldest, broken, scenarios").isZero();
+
+        monitor.monitorActiveScenarios();
+        assertThat(healthyChecks.get()).as("backed-off scenarios no longer crowd out the healthy one").isEqualTo(1);
+
+        Integer backedOff = jdbc.queryForObject("""
+                select count(*) from outcome_scenarios
+                where scenario_id like 'broken-%'
+                  and monitor_failure_count = 1
+                  and monitor_next_attempt_at > now() at time zone 'utc'
+                  and monitor_last_error like 'Account service unavailable%'
+                """, Integer.class);
+        assertThat(backedOff).as("every broken scenario was tried once and is waiting out its backoff")
+                .isEqualTo(brokenCount);
     }
 
     // ---------------------------------------------------------------- helpers

@@ -74,7 +74,8 @@ class OutcomeProtectionDivergenceTest {
                 new OutcomeScheduledTransferForecaster(), fxConverter, accountServiceClient, objectMapper);
         service = new OutcomeProtectionService(scenarioRepository, versionRepository, resultRepository,
                 guardrailRepository, eventRepository, new OutcomeSimulationEngine(3, 100), sourceService,
-                notificationDeliveryService, outcomeGuardrailService, objectMapper);
+                notificationDeliveryService, outcomeGuardrailService, objectMapper,
+                new OutcomeMonitorHealth(scenarioRepository, eventRepository, objectMapper));
 
         OutcomeScenario scenario = OutcomeScenario.builder()
                 .scenarioId("scenario-1").userId("customer-1").name("INR shield").status("ACTIVE")

@@ -6,6 +6,7 @@ import { acceptOutcomeGuardrail, acknowledgeOutcomeWarning, createOutcomeScenari
 import { createIdempotencyKey } from "../lib/idempotency";
 import { invalidateInBackground } from "../lib/queryInvalidation";
 import { compactDate, dateTime, money } from "../lib/format";
+import { monitoringNotice } from "../lib/outcomeMonitoring";
 import { Badge, Button, EmptyState, ErrorNotice, Field, Input, PageHeader, Panel, Select, StatusNotice } from "../components/ui";
 import { OutcomeGuardrailCard } from "../components/OutcomeGuardrailCard";
 import { ConsentGovernanceReadinessPanel } from "../components/ConsentGovernanceReadinessPanel";
@@ -308,9 +309,11 @@ function ScenarioProof({ scenario, accounts, onChanged, onRefresh, refreshing, c
   const alternatives = scenario.simulation.repair.alternatives ?? [];
   const rejectedCandidates = scenario.simulation.repair.rejectedCandidates ?? [];
   const visibleDays = proofTimeline.filter((day) => day.events.length || day.date === failure.failureDate || day.closingBalance === (failure.lowestBalance ?? scenario.simulation.baseline.lowestBalance));
+  const monitoring = monitoringNotice(scenario.monitoring);
   return <>
     <Panel title="Protection proof" action={<Button variant="secondary" onClick={onRefresh} disabled={refreshing}><RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Check current state</Button>}>
       <div className="grid gap-5">
+        {monitoring ? <p role="status" className={`rounded-xl border p-3 text-sm ${monitoring.tone === "bad" ? "border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200" : monitoring.tone === "warn" ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200" : "border-line text-muted dark:border-slate-700"}`}>{monitoring.text}</p> : null}
         <div className={`rounded-2xl border p-5 ${scenario.simulation.baseline.safe ? "border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950" : "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950"}`}>
           <div className="flex items-start gap-3">{scenario.simulation.baseline.safe ? <CheckCircle2 className="mt-0.5 h-6 w-6 text-emerald-700" /> : <AlertTriangle className="mt-0.5 h-6 w-6 text-red-700" />}<div><p className="font-bold">{scenario.simulation.baseline.safe ? "Baseline outcome protected" : "Baseline outcome already at risk"}</p><p className="mt-1 text-sm">Starts at {money(scenario.sourceSnapshot.startingAvailableBalance, scenario.currency)}; lowest baseline balance is {money(scenario.simulation.baseline.lowestBalance, scenario.currency)} against a {money(scenario.protectedMinimum, scenario.currency)} floor.</p></div></div>
         </div>
