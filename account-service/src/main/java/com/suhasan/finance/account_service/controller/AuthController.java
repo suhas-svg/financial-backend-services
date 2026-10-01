@@ -3,21 +3,29 @@ package com.suhasan.finance.account_service.controller;
 import com.suhasan.finance.account_service.dto.AuthRequest;
 import com.suhasan.finance.account_service.dto.AuthResponse;
 import com.suhasan.finance.account_service.dto.RegisterRequest;
+import com.suhasan.finance.account_service.dto.ErrorResponse;
 import com.suhasan.finance.account_service.dto.RegisterResponse;
 import com.suhasan.finance.account_service.security.ClientIpResolver;
 import com.suhasan.finance.account_service.security.JwtTokenProvider;
+import com.suhasan.finance.account_service.security.RefreshCookies;
+import com.suhasan.finance.account_service.security.RefreshTokenService;
 import com.suhasan.finance.account_service.service.AuthService;
 import com.suhasan.finance.account_service.service.AuthThrottleService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,6 +40,9 @@ public class AuthController {
     private final AuthService authService;
     private final AuthThrottleService authThrottle;
     private final ClientIpResolver clientIpResolver;
+    private final RefreshTokenService refreshTokens;
+    private final RefreshCookies refreshCookies;
+    private final UserDetailsService userDetailsService;
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody final AuthRequest req,
@@ -49,7 +60,52 @@ public class AuthController {
         }
         authThrottle.recordLoginSuccess(req.getUsername());
         final String token = tokenProvider.generateToken(auth);
-        return ResponseEntity.ok(new AuthResponse(token));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, refreshCookies.issue(refreshTokens.issue(auth.getName())))
+                .body(new AuthResponse(token));
+    }
+
+    /**
+     * Exchanges the refresh cookie for a new access token, rotating the cookie.
+     * The X-Requested-With header cannot be sent cross-site without a CORS
+     * preflight, which this service never grants, adding to SameSite=Strict.
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refresh(
+            @RequestHeader(name = "X-Requested-With", required = false) final String requestedWith,
+            final HttpServletRequest request) {
+        if (requestedWith == null || requestedWith.isBlank()) {
+            return error(HttpStatus.FORBIDDEN, "Forbidden", "Missing X-Requested-With header", request);
+        }
+        final var refreshed = refreshCookies.read(request).flatMap(refreshTokens::refresh);
+        if (refreshed.isEmpty()) {
+            return sessionExpired(request);
+        }
+        final UserDetails user;
+        try {
+            user = userDetailsService.loadUserByUsername(refreshed.get().username());
+        } catch (UsernameNotFoundException e) {
+            return sessionExpired(request);
+        }
+        if (!user.isEnabled() || !user.isAccountNonLocked()) {
+            return sessionExpired(request);
+        }
+        final String token = tokenProvider.generateToken(
+                UsernamePasswordAuthenticationToken.authenticated(user, null, user.getAuthorities()));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, refreshCookies.issue(refreshed.get().next()))
+                .body(new AuthResponse(token));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(
+            @RequestHeader(name = "X-Requested-With", required = false) final String requestedWith,
+            final HttpServletRequest request) {
+        if (requestedWith == null || requestedWith.isBlank()) {
+            return error(HttpStatus.FORBIDDEN, "Forbidden", "Missing X-Requested-With header", request);
+        }
+        refreshCookies.read(request).ifPresent(refreshTokens::revoke);
+        return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, refreshCookies.clear()).build();
     }
 
     @PostMapping("/register")
@@ -58,5 +114,18 @@ public class AuthController {
         authThrottle.checkAndRecordRegistration(clientIpResolver.resolve(request));
         final RegisterResponse response = authService.register(req);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    private ResponseEntity<ErrorResponse> sessionExpired(final HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .header(HttpHeaders.SET_COOKIE, refreshCookies.clear())
+                .body(new ErrorResponse("Unauthorized", "Session expired", request.getRequestURI(),
+                        HttpStatus.UNAUTHORIZED.value()));
+    }
+
+    private static ResponseEntity<ErrorResponse> error(final HttpStatus status, final String error,
+                                                       final String message, final HttpServletRequest request) {
+        return ResponseEntity.status(status)
+                .body(new ErrorResponse(error, message, request.getRequestURI(), status.value()));
     }
 }

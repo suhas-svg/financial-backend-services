@@ -1,4 +1,5 @@
-import { getRawToken, notifySessionExpired } from "./session";
+import { notifySessionExpired } from "./session";
+import { currentAccessToken, refreshSession } from "./sessionRefresh";
 
 export type ServiceName = "account" | "transaction";
 
@@ -37,7 +38,35 @@ async function readResponse(response: Response) {
 }
 
 export async function apiRequest<T>(service: ServiceName, path: string, options: ApiOptions = {}): Promise<T> {
-  const token = getRawToken();
+  const token = await currentAccessToken();
+  let response = await send(service, path, options, token);
+
+  // The access token may have expired or been revoked mid-flight. Renew once from
+  // the refresh cookie and retry; a 401 means the request was not processed, and
+  // money movements carry idempotency keys regardless.
+  if (response.status === 401 && token) {
+    const renewed = await refreshSession();
+    if (renewed) {
+      response = await send(service, path, options, renewed);
+    }
+  }
+  const payload = await readResponse(response);
+
+  if (!response.ok) {
+    if (response.status === 401 && token) {
+      notifySessionExpired();
+    }
+    const message =
+      typeof payload === "object" && payload && "message" in payload
+        ? String((payload as { message: unknown }).message)
+        : `Request failed with status ${response.status}`;
+    throw new ApiError(response.status, message, payload);
+  }
+
+  return payload as T;
+}
+
+function send(service: ServiceName, path: string, options: ApiOptions, token: string | null) {
   const { body, idempotencyKey, ...requestOptions } = options;
   const headers: Record<string, string> = {};
   new Headers(options.headers).forEach((value, key) => {
@@ -54,25 +83,11 @@ export async function apiRequest<T>(service: ServiceName, path: string, options:
     headers["Idempotency-Key"] = idempotencyKey;
   }
 
-  const response = await fetch(`${serviceBase[service]}${path}`, {
+  return fetch(`${serviceBase[service]}${path}`, {
     ...requestOptions,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body)
   });
-  const payload = await readResponse(response);
-
-  if (!response.ok) {
-    if (response.status === 401 && token) {
-      notifySessionExpired();
-    }
-    const message =
-      typeof payload === "object" && payload && "message" in payload
-        ? String((payload as { message: unknown }).message)
-        : `Request failed with status ${response.status}`;
-    throw new ApiError(response.status, message, payload);
-  }
-
-  return payload as T;
 }
 
 export function toQuery(params: Record<string, string | number | undefined | null>) {
