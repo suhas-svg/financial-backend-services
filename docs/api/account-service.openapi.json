@@ -785,6 +785,40 @@
         },
         "type" : "object"
       },
+      "NotificationSummaryResponse" : {
+        "properties" : {
+          "bySeverity" : {
+            "additionalProperties" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "type" : "object"
+          },
+          "bySourceType" : {
+            "additionalProperties" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "type" : "object"
+          },
+          "byType" : {
+            "additionalProperties" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "type" : "object"
+          },
+          "total" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "unread" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "PageResponseAccountResponse" : {
         "properties" : {
           "content" : {
@@ -3186,8 +3220,7 @@
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "additionalProperties" : { },
-                  "type" : "object"
+                  "$ref" : "#/components/schemas/NotificationSummaryResponse"
                 }
               }
             },

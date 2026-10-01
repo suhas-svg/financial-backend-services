@@ -1170,6 +1170,21 @@ export interface components {
             type?: "TRANSACTION_COMPLETED" | "TRANSACTION_FAILED" | "ACCOUNT_FROZEN" | "ACCOUNT_UNFROZEN" | "DISPUTE_CREATED" | "DISPUTE_STATUS_UPDATED" | "SCHEDULED_TRANSFER_CREATED" | "SCHEDULED_TRANSFER_EXECUTED" | "SCHEDULED_TRANSFER_FAILED" | "SCHEDULED_TRANSFER_PAUSED" | "SCHEDULED_TRANSFER_RESUMED" | "SCHEDULED_TRANSFER_CANCELED" | "OUTCOME_PROTECTION_AT_RISK" | "BALANCE_SHIELD_CONSENT_PENDING" | "BALANCE_SHIELD_ACTIVATED" | "BALANCE_SHIELD_SUSPENDED" | "BALANCE_SHIELD_RESUMED" | "BALANCE_SHIELD_REVOKED" | "BALANCE_SHIELD_ACTION_REQUIRES_MFA" | "BALANCE_SHIELD_ACTION_COMPLETED" | "BALANCE_SHIELD_ACTION_FAILED" | "SECURITY_ACTION_REQUIRED" | "SECURITY_ALERT" | "TRANSFER_AUTHORIZED";
             userId?: string;
         };
+        NotificationSummaryResponse: {
+            bySeverity?: {
+                [key: string]: number;
+            };
+            bySourceType?: {
+                [key: string]: number;
+            };
+            byType?: {
+                [key: string]: number;
+            };
+            /** Format: int64 */
+            total?: number;
+            /** Format: int64 */
+            unread?: number;
+        };
         PageResponseAccountResponse: {
             content?: components["schemas"]["AccountResponse"][];
             empty?: boolean;
@@ -2912,9 +2927,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["NotificationSummaryResponse"];
                 };
             };
             /** @description Error, as RFC 9457 Problem Details */

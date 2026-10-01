@@ -238,7 +238,7 @@ function ExceptionDetail({
     ["Exception ID", exception.exceptionId],
     ["Run ID", exception.runId],
     ["Fingerprint", exception.fingerprint],
-    ["Description", exception.description],
+    ["Check", exception.checkCode],
     ["Journal", exception.journalId],
     ["Ledger account", exception.ledgerAccountId],
     ["External account", exception.externalAccountId],
@@ -385,5 +385,5 @@ function errorMessage(error: unknown) {
 }
 
 function titleFor(exception: ReconciliationException) {
-  return exception.title || exception.summary || exception.checkCode;
+  return exception.summary || exception.checkCode;
 }
