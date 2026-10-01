@@ -22,7 +22,10 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return undefined;
-          if (id.includes("recharts") || id.includes("d3-")) return "vendor-charts";
+          // clsx is shared by the app and recharts; left unassigned it would be pulled into
+          // vendor-charts and make every page preload the charts library.
+          if (id.includes("/node_modules/clsx/")) return "vendor-utils";
+          if (id.includes("recharts") || id.includes("d3-") || id.includes("victory-vendor")) return "vendor-charts";
           if (id.includes("@tanstack")) return "vendor-query";
           if (id.includes("react-hook-form") || id.includes("zod")) return "vendor-forms";
           if (id.includes("react")) return "vendor-react";

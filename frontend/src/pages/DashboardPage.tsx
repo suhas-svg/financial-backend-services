@@ -1,13 +1,15 @@
+import { lazy, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, CreditCard, PlusCircle, ShieldCheck, Sparkles, WalletCards } from "lucide-react";
 import { Link } from "../routing";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { getNotificationSummary, getTransactions, getUserStats, listLedgerAccounts, listOwnedAccounts } from "../lib/queries";
 import { compactDate, money, percent } from "../lib/format";
 import { availableBalance, ledgerBalance, pendingBalance, projectionFor, projectionMap } from "../lib/accountBalances";
 import { EmptyState, ErrorNotice, Panel, Skeleton } from "../components/ui";
 import { StatusBadge } from "../components/StatusBadge";
 import { MONEY_STATE_REFRESH_INTERVAL_MS } from "../lib/queryInvalidation";
+
+const ActivityMixChart = lazy(() => import("../components/ActivityMixChart"));
 
 export function DashboardPage() {
   const accounts = useQuery({ queryKey: ["accounts", "owned"], queryFn: () => listOwnedAccounts(), refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
@@ -73,7 +75,7 @@ export function DashboardPage() {
         {transactions.data?.content.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr><th>Transaction</th><th>Type</th><th>Status</th><th className="text-right">Amount</th><th className="text-right">Date</th></tr></thead><tbody>{transactions.data.content.slice(0, 6).map((item) => <tr key={item.transactionId}><td className="font-mono text-xs">{item.transactionId}</td><td>{item.type}</td><td><StatusBadge value={item.status} /></td><td className="text-right font-semibold tabular-nums">{money(item.amount, item.currency)}</td><td className="text-right text-muted">{compactDate(item.createdAt)}</td></tr>)}</tbody></table></div> : !transactions.isLoading ? <EmptyState title="No recent activity" detail="Your completed and pending transactions will appear here." /> : null}
       </Panel>
       <Panel title="Activity mix">
-        {chartData.length ? <div className="h-64"><ResponsiveContainer><BarChart data={chartData} margin={{ left: -24, right: 8 }}><CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#d8dee8" /><XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} /><Tooltip cursor={{ fill: "rgba(16,185,129,.08)" }} /><Bar dataKey="value" fill="#10b981" radius={[8, 8, 2, 2]} /></BarChart></ResponsiveContainer></div> : <EmptyState title="No stats available" detail="Transaction summaries appear after activity is recorded." />}
+        {chartData.length ? <div className="h-64"><Suspense fallback={<Skeleton className="h-64" />}><ActivityMixChart data={chartData} /></Suspense></div> : <EmptyState title="No stats available" detail="Transaction summaries appear after activity is recorded." />}
       </Panel>
     </div>
   </div>;

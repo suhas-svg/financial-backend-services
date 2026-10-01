@@ -34,7 +34,7 @@ jobs:
         run: ./scripts/test-production-readiness-evidence.ps1
 
   frontend:
-    name: Frontend Lint, Tests, Build, Accessibility
+    name: Frontend Lint, Tests, Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -51,12 +51,38 @@ jobs:
         run: npm test
       - working-directory: frontend
         run: npm run build -- --config vite.sandbox.config.ts
+      - name: Keep page-specific chunks (charts) out of the initial page load
+        working-directory: frontend
+        run: npm run check:bundle
+
+  # Release blocker: Required Acceptance fails if any WCAG 2.1 AA violation is found.
+  accessibility:
+    name: Accessibility (WCAG 2.1 AA) Release Blocker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci --ignore-scripts
+      - working-directory: frontend
+        run: npm run build -- --config vite.sandbox.config.ts
       - name: Install the accessibility browser
         working-directory: frontend
         run: npx playwright install --with-deps chromium
-      - name: Run WCAG accessibility checks against the production build
+      - name: Run axe WCAG checks on public and signed-in pages of the production build
         working-directory: frontend
         run: npm run test:a11y
+      - name: Upload accessibility traces
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: accessibility-traces
+          path: frontend/test-results
+          retention-days: 14
 
   service-verification:
     name: ${{ matrix.service }} Verify (Java ${{ matrix.java }})
@@ -344,6 +370,7 @@ jobs:
     needs:
       - authority-policy
       - frontend
+      - accessibility
       - service-verification
       - fresh-migrations
       - duplicate-concurrency-recovery

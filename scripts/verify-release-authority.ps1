@@ -16,7 +16,11 @@ if ($active.Count -ne 1 -or $active[0].Name -ne "release-authority.yml") {
 
 $workflow = Get-Content -LiteralPath $active[0].FullName -Raw
 $requiredContracts = @(
-    "Frontend Lint, Tests, Build, Accessibility",
+    "Frontend Lint, Tests, Build",
+    "npm run check:bundle",
+    "Accessibility (WCAG 2.1 AA) Release Blocker",
+    "npm run test:a11y",
+    "      - accessibility",
     "service-verification:",
     "fresh-migrations:",
     "duplicate-concurrency-recovery:",

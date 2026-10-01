@@ -33,7 +33,14 @@ test("gateway exposes only a hardened, unmistakably synthetic entry point", asyn
   expect(response?.headers()["x-content-type-options"]).toBe("nosniff");
   expect(response?.headers()["referrer-policy"]).toBe("no-referrer");
   expect(response?.headers()["permissions-policy"]).toContain("payment=()");
-  expect(response?.headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
+  const csp = response?.headers()["content-security-policy"] ?? "";
+  expect(csp).toContain("frame-ancestors 'none'");
+  // Only same-origin scripts may run: no inline script, no eval, no third-party hosts.
+  expect(csp).toContain("script-src 'self';");
+  expect(csp).not.toMatch(/unsafe-eval|script-src[^;]*unsafe-inline/);
+  expect(csp).toContain("connect-src 'self'");
+  expect(response?.headers()["cross-origin-opener-policy"]).toBe("same-origin");
+  expect(response?.headers()["cross-origin-resource-policy"]).toBe("same-origin");
   expect(response?.headers()["x-environment-classification"]).toBe("SYNTHETIC_SANDBOX");
 
   for (const service of ["account-api", "transaction-api"]) {
