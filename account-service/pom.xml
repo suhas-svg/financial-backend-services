@@ -25,7 +25,7 @@
          release and is past the 10.1.58 fix line for CVE-2026-68525. -->
     <tomcat.version>10.1.60</tomcat.version>
     <bouncycastle.version>1.85</bouncycastle.version>
-    <jackson-bom.version>2.21.6</jackson-bom.version>
+    <jackson-bom.version>2.21.7</jackson-bom.version>
     <postgresql.version>42.7.12</postgresql.version>
     <maven.compiler.source>21</maven.compiler.source>
     <maven.compiler.target>21</maven.compiler.target>
