@@ -3,7 +3,7 @@ package com.suhasan.finance.account_service.controller;
 import com.suhasan.finance.account_service.dto.AuthRequest;
 import com.suhasan.finance.account_service.dto.AuthResponse;
 import com.suhasan.finance.account_service.dto.RegisterRequest;
-import com.suhasan.finance.account_service.dto.ErrorResponse;
+import com.suhasan.finance.account_service.exception.ApiProblems;
 import com.suhasan.finance.account_service.dto.RegisterResponse;
 import com.suhasan.finance.account_service.security.ClientIpResolver;
 import com.suhasan.finance.account_service.security.JwtTokenProvider;
@@ -16,6 +16,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -116,16 +118,16 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    private ResponseEntity<ErrorResponse> sessionExpired(final HttpServletRequest request) {
+    private ResponseEntity<ProblemDetail> sessionExpired(final HttpServletRequest request) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .header(HttpHeaders.SET_COOKIE, refreshCookies.clear())
-                .body(new ErrorResponse("Unauthorized", "Session expired", request.getRequestURI(),
-                        HttpStatus.UNAUTHORIZED.value()));
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(ApiProblems.problem(HttpStatus.UNAUTHORIZED, "session-expired", "Unauthorized",
+                        "Session expired", request));
     }
 
-    private static ResponseEntity<ErrorResponse> error(final HttpStatus status, final String error,
+    private static ResponseEntity<ProblemDetail> error(final HttpStatus status, final String error,
                                                        final String message, final HttpServletRequest request) {
-        return ResponseEntity.status(status)
-                .body(new ErrorResponse(error, message, request.getRequestURI(), status.value()));
+        return ApiProblems.response(status, "forbidden", error, message, request);
     }
 }

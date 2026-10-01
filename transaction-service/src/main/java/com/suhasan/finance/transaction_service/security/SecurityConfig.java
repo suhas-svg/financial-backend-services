@@ -1,7 +1,8 @@
 package com.suhasan.finance.transaction_service.security;
 
 import lombok.RequiredArgsConstructor;
-import jakarta.servlet.http.HttpServletResponse;
+import com.suhasan.finance.transaction_service.exception.ApiProblems;
+import org.springframework.http.HttpStatus;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -24,15 +25,18 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(ex -> ex
-                        .authenticationEntryPoint((request, response, authException) -> response
-                                .sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized"))
-                        .accessDeniedHandler((request, response, accessDeniedException) -> response
-                                .sendError(HttpServletResponse.SC_FORBIDDEN, "Forbidden")))
+                        .authenticationEntryPoint((request, response, authException) ->
+                                ApiProblems.write(response, HttpStatus.UNAUTHORIZED, "unauthorized", "Unauthorized",
+                                        "Authentication is required to access this resource", request))
+                        .accessDeniedHandler((request, response, accessDeniedException) ->
+                                ApiProblems.write(response, HttpStatus.FORBIDDEN, "forbidden", "Forbidden",
+                                        "You do not have permission to access this resource", request)))
                 .authorizeHttpRequests(authz -> authz
                         // â”€â”€ Public read-only health probes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         .requestMatchers("/api/transactions/health").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").hasAnyRole("ADMIN", "INTERNAL_SERVICE")
+                        // API docs exist only when API_DOCS_ENABLED=true (never by default).
+                        .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**").permitAll()
 
                         // â”€â”€ Privileged actuator endpoints (Prometheus scrape, metrics) â”€â”€â”€â”€â”€â”€â”€
                         // Prometheus may also use the dedicated scrape token (MetricsScrapeTokenFilter).

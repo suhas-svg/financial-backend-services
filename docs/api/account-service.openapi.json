@@ -1,0 +1,3608 @@
+{
+  "components" : {
+    "schemas" : {
+      "AccountCreateRequest" : {
+        "properties" : {
+          "accountType" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "creditLimit" : {
+            "type" : "number"
+          },
+          "currency" : {
+            "pattern" : "[A-Z]{3}",
+            "type" : "string"
+          },
+          "dueDate" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "interestRate" : {
+            "format" : "double",
+            "type" : "number"
+          },
+          "ownerId" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "accountType" ],
+        "type" : "object"
+      },
+      "AccountMetadataUpdateRequest" : {
+        "properties" : {
+          "creditLimit" : {
+            "type" : "number"
+          },
+          "dueDate" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "interestRate" : {
+            "format" : "double",
+            "type" : "number"
+          }
+        },
+        "type" : "object"
+      },
+      "AccountResponse" : {
+        "properties" : {
+          "accountType" : {
+            "type" : "string"
+          },
+          "availableBalance" : {
+            "type" : "number"
+          },
+          "balance" : {
+            "type" : "number"
+          },
+          "createdAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "creditLimit" : {
+            "type" : "number"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "dueDate" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "interestRate" : {
+            "format" : "double",
+            "type" : "number"
+          },
+          "ledgerBalance" : {
+            "type" : "number"
+          },
+          "ledgerProjectionSourceEventId" : {
+            "type" : "string"
+          },
+          "ledgerProjectionSyncedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "ledgerProjectionVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "ownerId" : {
+            "type" : "string"
+          },
+          "pendingBalance" : {
+            "type" : "number"
+          },
+          "status" : {
+            "enum" : [ "ACTIVE", "FROZEN", "CLOSED" ],
+            "type" : "string"
+          },
+          "statusReason" : {
+            "type" : "string"
+          },
+          "statusUpdatedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "statusUpdatedBy" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "AccountStatusUpdateRequest" : {
+        "properties" : {
+          "reason" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "ACTIVE", "FROZEN", "CLOSED" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "reason", "status" ],
+        "type" : "object"
+      },
+      "AuditResponse" : {
+        "properties" : {
+          "accountId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "amount" : {
+            "type" : "number"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "dailyLimit" : {
+            "type" : "number"
+          },
+          "dailyUsed" : {
+            "type" : "number"
+          },
+          "details" : {
+            "type" : "string"
+          },
+          "eventId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "eventType" : {
+            "type" : "string"
+          },
+          "operationType" : {
+            "type" : "string"
+          },
+          "userId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "AuthRequest" : {
+        "properties" : {
+          "password" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "username" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "password", "username" ],
+        "type" : "object"
+      },
+      "AuthResponse" : {
+        "properties" : {
+          "accessToken" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "BalanceOperationRequest" : {
+        "properties" : {
+          "allowNegative" : {
+            "type" : "boolean"
+          },
+          "delta" : {
+            "type" : "number"
+          },
+          "operationId" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "reason" : {
+            "maxLength" : 255,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "transactionId" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "delta", "operationId", "transactionId" ],
+        "type" : "object"
+      },
+      "BalanceOperationResponse" : {
+        "properties" : {
+          "accountId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "applied" : {
+            "type" : "boolean"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "newBalance" : {
+            "type" : "number"
+          },
+          "operationId" : {
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "APPLIED", "REJECTED", "REPLAYED" ],
+            "type" : "string"
+          },
+          "version" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "BeneficiaryCreateRequest" : {
+        "properties" : {
+          "currency" : {
+            "minLength" : 1,
+            "pattern" : "USD|EUR|GBP|INR",
+            "type" : "string"
+          },
+          "destinationAccountId" : {
+            "maxLength" : 64,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "displayName" : {
+            "maxLength" : 120,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "nickname" : {
+            "maxLength" : 120,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "notes" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "currency", "destinationAccountId", "displayName" ],
+        "type" : "object"
+      },
+      "BeneficiaryResponse" : {
+        "properties" : {
+          "beneficiaryId" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "destinationAccountId" : {
+            "type" : "string"
+          },
+          "disabledAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "displayName" : {
+            "type" : "string"
+          },
+          "nickname" : {
+            "type" : "string"
+          },
+          "notes" : {
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "ACTIVE", "DISABLED" ],
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "userId" : {
+            "type" : "string"
+          },
+          "version" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "BeneficiaryUpdateRequest" : {
+        "properties" : {
+          "displayName" : {
+            "maxLength" : 120,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "nickname" : {
+            "maxLength" : 120,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "notes" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "displayName" ],
+        "type" : "object"
+      },
+      "BootstrapRequest" : {
+        "properties" : {
+          "password" : {
+            "maxLength" : 200,
+            "minLength" : 14,
+            "type" : "string"
+          },
+          "username" : {
+            "maxLength" : 64,
+            "minLength" : 5,
+            "type" : "string"
+          }
+        },
+        "required" : [ "password", "username" ],
+        "type" : "object"
+      },
+      "BootstrapStatus" : {
+        "properties" : {
+          "completed" : {
+            "type" : "boolean"
+          },
+          "operatorUsername" : {
+            "type" : "string"
+          },
+          "setupRequired" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ChallengeVerificationResponse" : {
+        "properties" : {
+          "challengeId" : {
+            "type" : "string"
+          },
+          "proof" : {
+            "type" : "string"
+          },
+          "proofExpiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ConfirmTotpRequest" : {
+        "properties" : {
+          "code" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "code" ],
+        "type" : "object"
+      },
+      "ConfirmationResponse" : {
+        "properties" : {
+          "active" : {
+            "type" : "boolean"
+          },
+          "recoveryCodes" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
+      "ConsumeChallengeRequest" : {
+        "properties" : {
+          "actionFingerprint" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "consumerKey" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "proof" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "userId" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "actionFingerprint", "consumerKey", "proof", "userId" ],
+        "type" : "object"
+      },
+      "ConsumeChallengeResponse" : {
+        "properties" : {
+          "consumed" : {
+            "type" : "boolean"
+          },
+          "consumedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "CreateChallengeRequest" : {
+        "properties" : {
+          "actionFingerprint" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "actionType" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "userId" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "actionFingerprint", "actionType", "userId" ],
+        "type" : "object"
+      },
+      "CreateChallengeResponse" : {
+        "properties" : {
+          "challengeId" : {
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DebitHoldRequest" : {
+        "properties" : {
+          "amount" : {
+            "minimum" : 0.01,
+            "type" : "number"
+          },
+          "holdId" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "reason" : {
+            "maxLength" : 255,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "transactionId" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "amount", "holdId", "transactionId" ],
+        "type" : "object"
+      },
+      "DebitHoldResponse" : {
+        "properties" : {
+          "accountId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "applied" : {
+            "type" : "boolean"
+          },
+          "availableBalance" : {
+            "type" : "number"
+          },
+          "holdId" : {
+            "type" : "string"
+          },
+          "ledgerBalance" : {
+            "type" : "number"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "PLACED", "CAPTURED", "RELEASED" ],
+            "type" : "string"
+          },
+          "version" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "DeploymentInfo" : {
+        "properties" : {
+          "buildTime" : {
+            "type" : "string"
+          },
+          "environment" : {
+            "type" : "string"
+          },
+          "gitCommit" : {
+            "type" : "string"
+          },
+          "healthScore" : {
+            "format" : "double",
+            "type" : "number"
+          },
+          "lastDeploymentTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "startTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "uptimeSeconds" : {
+            "format" : "double",
+            "type" : "number"
+          },
+          "version" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "DisableTotpRequest" : {
+        "properties" : {
+          "code" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "currentPassword" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "code", "currentPassword" ],
+        "type" : "object"
+      },
+      "EnrollmentResponse" : {
+        "properties" : {
+          "otpauthUri" : {
+            "type" : "string"
+          },
+          "secret" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "HoldTransitionRequest" : {
+        "properties" : {
+          "reason" : {
+            "type" : "string"
+          },
+          "transactionId" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "transactionId" ],
+        "type" : "object"
+      },
+      "LedgerProjectionUpdateRequest" : {
+        "properties" : {
+          "availableBalance" : {
+            "type" : "number"
+          },
+          "currency" : {
+            "minLength" : 1,
+            "pattern" : "[A-Z]{3}",
+            "type" : "string"
+          },
+          "pendingBalance" : {
+            "type" : "number"
+          },
+          "postedBalance" : {
+            "type" : "number"
+          },
+          "sourceEventId" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "version" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "availableBalance", "currency", "pendingBalance", "postedBalance", "sourceEventId", "updatedAt" ],
+        "type" : "object"
+      },
+      "LimitResponse" : {
+        "properties" : {
+          "accountId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "pendingEffectiveAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "pendingTransferDailyLimit" : {
+            "type" : "number"
+          },
+          "pendingWithdrawalDailyLimit" : {
+            "type" : "number"
+          },
+          "transferDailyLimit" : {
+            "type" : "number"
+          },
+          "transferUsedToday" : {
+            "type" : "number"
+          },
+          "withdrawalDailyLimit" : {
+            "type" : "number"
+          },
+          "withdrawalUsedToday" : {
+            "type" : "number"
+          }
+        },
+        "type" : "object"
+      },
+      "Notification" : {
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "dedupeKey" : {
+            "type" : "string"
+          },
+          "deliveryCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "deliveryId" : {
+            "type" : "string"
+          },
+          "firstReceivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "lastReceivedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "notificationId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "readAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "severity" : {
+            "enum" : [ "INFO", "SUCCESS", "WARNING", "CRITICAL" ],
+            "type" : "string"
+          },
+          "sourceId" : {
+            "type" : "string"
+          },
+          "sourceType" : {
+            "enum" : [ "ACCOUNT", "TRANSACTION", "DISPUTE", "SCHEDULED_TRANSFER", "OUTCOME_PROTECTION" ],
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "UNREAD", "READ" ],
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "type" : {
+            "enum" : [ "TRANSACTION_COMPLETED", "TRANSACTION_FAILED", "ACCOUNT_FROZEN", "ACCOUNT_UNFROZEN", "DISPUTE_CREATED", "DISPUTE_STATUS_UPDATED", "SCHEDULED_TRANSFER_CREATED", "SCHEDULED_TRANSFER_EXECUTED", "SCHEDULED_TRANSFER_FAILED", "SCHEDULED_TRANSFER_PAUSED", "SCHEDULED_TRANSFER_RESUMED", "SCHEDULED_TRANSFER_CANCELED", "OUTCOME_PROTECTION_AT_RISK", "BALANCE_SHIELD_CONSENT_PENDING", "BALANCE_SHIELD_ACTIVATED", "BALANCE_SHIELD_SUSPENDED", "BALANCE_SHIELD_RESUMED", "BALANCE_SHIELD_REVOKED", "BALANCE_SHIELD_ACTION_REQUIRES_MFA", "BALANCE_SHIELD_ACTION_COMPLETED", "BALANCE_SHIELD_ACTION_FAILED", "SECURITY_ACTION_REQUIRED", "SECURITY_ALERT", "TRANSFER_AUTHORIZED" ],
+            "type" : "string"
+          },
+          "userId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "NotificationCreateRequest" : {
+        "properties" : {
+          "dedupeKey" : {
+            "type" : "string"
+          },
+          "deliveryId" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "severity" : {
+            "enum" : [ "INFO", "SUCCESS", "WARNING", "CRITICAL" ],
+            "type" : "string"
+          },
+          "sourceId" : {
+            "type" : "string"
+          },
+          "sourceType" : {
+            "enum" : [ "ACCOUNT", "TRANSACTION", "DISPUTE", "SCHEDULED_TRANSFER", "OUTCOME_PROTECTION" ],
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "type" : {
+            "enum" : [ "TRANSACTION_COMPLETED", "TRANSACTION_FAILED", "ACCOUNT_FROZEN", "ACCOUNT_UNFROZEN", "DISPUTE_CREATED", "DISPUTE_STATUS_UPDATED", "SCHEDULED_TRANSFER_CREATED", "SCHEDULED_TRANSFER_EXECUTED", "SCHEDULED_TRANSFER_FAILED", "SCHEDULED_TRANSFER_PAUSED", "SCHEDULED_TRANSFER_RESUMED", "SCHEDULED_TRANSFER_CANCELED", "OUTCOME_PROTECTION_AT_RISK", "BALANCE_SHIELD_CONSENT_PENDING", "BALANCE_SHIELD_ACTIVATED", "BALANCE_SHIELD_SUSPENDED", "BALANCE_SHIELD_RESUMED", "BALANCE_SHIELD_REVOKED", "BALANCE_SHIELD_ACTION_REQUIRES_MFA", "BALANCE_SHIELD_ACTION_COMPLETED", "BALANCE_SHIELD_ACTION_FAILED", "SECURITY_ACTION_REQUIRED", "SECURITY_ALERT", "TRANSFER_AUTHORIZED" ],
+            "type" : "string"
+          },
+          "userId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PageResponseAccountResponse" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/AccountResponse"
+            },
+            "type" : "array"
+          },
+          "empty" : {
+            "type" : "boolean"
+          },
+          "first" : {
+            "type" : "boolean"
+          },
+          "last" : {
+            "type" : "boolean"
+          },
+          "number" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PageResponseBeneficiaryResponse" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/BeneficiaryResponse"
+            },
+            "type" : "array"
+          },
+          "empty" : {
+            "type" : "boolean"
+          },
+          "first" : {
+            "type" : "boolean"
+          },
+          "last" : {
+            "type" : "boolean"
+          },
+          "number" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PageResponseNotification" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Notification"
+            },
+            "type" : "array"
+          },
+          "empty" : {
+            "type" : "boolean"
+          },
+          "first" : {
+            "type" : "boolean"
+          },
+          "last" : {
+            "type" : "boolean"
+          },
+          "number" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "Pageable" : {
+        "properties" : {
+          "page" : {
+            "format" : "int32",
+            "minimum" : 0,
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "minimum" : 1,
+            "type" : "integer"
+          },
+          "sort" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
+      "PasswordRequest" : {
+        "properties" : {
+          "currentPassword" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "currentPassword" ],
+        "type" : "object"
+      },
+      "Problem" : {
+        "description" : "RFC 9457 Problem Details. error, message, path and timestamp repeat title, detail and instance for clients written before the RFC format.",
+        "properties" : {
+          "detail" : {
+            "type" : "string"
+          },
+          "error" : {
+            "type" : "string"
+          },
+          "instance" : {
+            "format" : "uri",
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "status" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "timestamp" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "transactionId" : {
+            "type" : "string"
+          },
+          "type" : {
+            "example" : "urn:financial:problem:insufficient-funds",
+            "format" : "uri",
+            "type" : "string"
+          },
+          "validationErrors" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "description" : "Field name to message, for validation failures",
+            "type" : "object"
+          }
+        },
+        "required" : [ "type", "title", "status" ],
+        "type" : "object"
+      },
+      "RecoveryCodesResponse" : {
+        "properties" : {
+          "recoveryCodes" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
+      "RegisterRequest" : {
+        "properties" : {
+          "password" : {
+            "maxLength" : 2147483647,
+            "minLength" : 12,
+            "type" : "string"
+          },
+          "username" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "password", "username" ],
+        "type" : "object"
+      },
+      "RegisterResponse" : {
+        "properties" : {
+          "roles" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array",
+            "uniqueItems" : true
+          },
+          "username" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ReservationTransitionRequest" : {
+        "properties" : {
+          "outcome" : {
+            "maxLength" : 1000,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "transactionCorrelation" : {
+            "maxLength" : 160,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "userId" : {
+            "maxLength" : 255,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "userId" ],
+        "type" : "object"
+      },
+      "ReserveRequest" : {
+        "properties" : {
+          "amount" : {
+            "type" : "number"
+          },
+          "currency" : {
+            "pattern" : "[A-Za-z]{3}",
+            "type" : "string"
+          },
+          "idempotencyKey" : {
+            "maxLength" : 160,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "operationType" : {
+            "maxLength" : 20,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "transactionCorrelation" : {
+            "maxLength" : 160,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "userId" : {
+            "maxLength" : 255,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "amount", "idempotencyKey", "operationType", "userId" ],
+        "type" : "object"
+      },
+      "ReserveResponse" : {
+        "properties" : {
+          "allowed" : {
+            "type" : "boolean"
+          },
+          "amount" : {
+            "type" : "number"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "dailyLimit" : {
+            "type" : "number"
+          },
+          "dailyUsed" : {
+            "type" : "number"
+          },
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "fingerprint" : {
+            "type" : "string"
+          },
+          "outcome" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "remaining" : {
+            "type" : "number"
+          },
+          "replay" : {
+            "type" : "boolean"
+          },
+          "reservationId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "state" : {
+            "type" : "string"
+          },
+          "transactionCorrelation" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "SeededAccounts" : {
+        "properties" : {
+          "accountIds" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "fundedAccountId" : {
+            "type" : "string"
+          },
+          "seedVersion" : {
+            "type" : "string"
+          },
+          "zeroAccountId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "StatusResponse" : {
+        "properties" : {
+          "enrolled" : {
+            "type" : "boolean"
+          },
+          "recoveryCodesRemaining" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "status" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "UpdateRequest" : {
+        "properties" : {
+          "credential" : {
+            "type" : "string"
+          },
+          "transferDailyLimit" : {
+            "type" : "number"
+          },
+          "withdrawalDailyLimit" : {
+            "type" : "number"
+          }
+        },
+        "required" : [ "transferDailyLimit", "withdrawalDailyLimit" ],
+        "type" : "object"
+      },
+      "VerifyChallengeRequest" : {
+        "properties" : {
+          "credential" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "credential" ],
+        "type" : "object"
+      }
+    },
+    "securitySchemes" : {
+      "bearerAuth" : {
+        "bearerFormat" : "JWT",
+        "scheme" : "bearer",
+        "type" : "http"
+      }
+    }
+  },
+  "info" : {
+    "description" : "Authentication, accounts, MFA/step-up, notifications and spending limits. Errors use RFC 9457 Problem Details.",
+    "title" : "Account Service API",
+    "version" : "v1"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/accounts" : {
+      "get" : {
+        "operationId" : "listAccounts",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "ownerId",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "accountType",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "status",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "ACTIVE", "FROZEN", "CLOSED" ],
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "pageable",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/Pageable"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageResponseAccountResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "account-controller" ]
+      },
+      "post" : {
+        "operationId" : "create_2",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AccountCreateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccountResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "account-controller" ]
+      }
+    },
+    "/api/accounts/{id}" : {
+      "get" : {
+        "operationId" : "get_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccountResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "account-controller" ]
+      },
+      "put" : {
+        "operationId" : "update_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AccountMetadataUpdateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccountResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "account-controller" ]
+      }
+    },
+    "/api/accounts/{id}/status" : {
+      "patch" : {
+        "operationId" : "updateStatus",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AccountStatusUpdateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccountResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "account-controller" ]
+      }
+    },
+    "/api/admin/notification-provider/receipts/{receiptId}/replay" : {
+      "post" : {
+        "operationId" : "replay",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "receiptId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "notification-provider-operations-controller" ]
+      }
+    },
+    "/api/auth/login" : {
+      "post" : {
+        "operationId" : "login",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AuthRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AuthResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/auth/logout" : {
+      "post" : {
+        "operationId" : "logout",
+        "parameters" : [ {
+          "in" : "header",
+          "name" : "X-Requested-With",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/auth/refresh" : {
+      "post" : {
+        "operationId" : "refresh",
+        "parameters" : [ {
+          "in" : "header",
+          "name" : "X-Requested-With",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/auth/register" : {
+      "post" : {
+        "operationId" : "register",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RegisterResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/beneficiaries" : {
+      "get" : {
+        "operationId" : "list",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "status",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "ACTIVE", "DISABLED" ],
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "pageable",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/Pageable"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageResponseBeneficiaryResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "beneficiary-controller" ]
+      },
+      "post" : {
+        "operationId" : "create_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/BeneficiaryCreateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BeneficiaryResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "beneficiary-controller" ]
+      }
+    },
+    "/api/beneficiaries/{beneficiaryId}" : {
+      "delete" : {
+        "operationId" : "disable",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "beneficiaryId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BeneficiaryResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "beneficiary-controller" ]
+      },
+      "get" : {
+        "operationId" : "get",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "beneficiaryId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BeneficiaryResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "beneficiary-controller" ]
+      },
+      "put" : {
+        "operationId" : "update",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "beneficiaryId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/BeneficiaryUpdateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BeneficiaryResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "beneficiary-controller" ]
+      }
+    },
+    "/api/beneficiaries/{beneficiaryId}/disable" : {
+      "patch" : {
+        "operationId" : "disablePatch",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "beneficiaryId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BeneficiaryResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "beneficiary-controller" ]
+      }
+    },
+    "/api/health/check" : {
+      "post" : {
+        "operationId" : "triggerHealthCheck",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "additionalProperties" : { },
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "health-controller" ]
+      }
+    },
+    "/api/health/deployment" : {
+      "get" : {
+        "operationId" : "getDeploymentInfo",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DeploymentInfo"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "health-controller" ]
+      },
+      "post" : {
+        "operationId" : "recordDeployment",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "status",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "duration",
+          "required" : false,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "additionalProperties" : {
+                    "type" : "string"
+                  },
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "health-controller" ]
+      }
+    },
+    "/api/health/metrics" : {
+      "get" : {
+        "operationId" : "getMetricsSummary",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "additionalProperties" : { },
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "health-controller" ]
+      }
+    },
+    "/api/health/ping" : {
+      "get" : {
+        "operationId" : "ping",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "health-controller" ]
+      }
+    },
+    "/api/health/status" : {
+      "get" : {
+        "operationId" : "getHealthStatus",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "additionalProperties" : { },
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "health-controller" ]
+      }
+    },
+    "/api/integration-readiness" : {
+      "get" : {
+        "operationId" : "readiness",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "additionalProperties" : { },
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "account-integration-readiness-controller" ]
+      }
+    },
+    "/api/integration-readiness/mfa-keys" : {
+      "get" : {
+        "operationId" : "health",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "additionalProperties" : { },
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "mfa-key-lifecycle-controller" ]
+      }
+    },
+    "/api/integration-readiness/mfa-keys/rotate" : {
+      "post" : {
+        "operationId" : "rotate",
+        "parameters" : [ {
+          "in" : "header",
+          "name" : "X-Operator-Request-Id",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "additionalProperties" : { },
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "mfa-key-lifecycle-controller" ]
+      }
+    },
+    "/api/internal/accounts/spending-limit-audit" : {
+      "get" : {
+        "operationId" : "spendingLimitAudit",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/AuditResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-account-controller" ]
+      }
+    },
+    "/api/internal/accounts/{id}" : {
+      "get" : {
+        "operationId" : "get_3",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccountResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-account-controller" ]
+      }
+    },
+    "/api/internal/accounts/{id}/balance-ops" : {
+      "post" : {
+        "operationId" : "applyBalanceOperation",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/BalanceOperationRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BalanceOperationResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-account-controller" ]
+      }
+    },
+    "/api/internal/accounts/{id}/close" : {
+      "post" : {
+        "operationId" : "close",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "reason",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccountResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-account-controller" ]
+      }
+    },
+    "/api/internal/accounts/{id}/holds" : {
+      "post" : {
+        "operationId" : "placeDebitHold",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DebitHoldRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DebitHoldResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-account-controller" ]
+      }
+    },
+    "/api/internal/accounts/{id}/holds/{holdId}/capture" : {
+      "post" : {
+        "operationId" : "captureDebitHold",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "holdId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/HoldTransitionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DebitHoldResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-account-controller" ]
+      }
+    },
+    "/api/internal/accounts/{id}/holds/{holdId}/release" : {
+      "post" : {
+        "operationId" : "releaseDebitHold",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "holdId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/HoldTransitionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DebitHoldResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-account-controller" ]
+      }
+    },
+    "/api/internal/accounts/{id}/ledger-projection" : {
+      "put" : {
+        "operationId" : "updateLedgerProjection",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LedgerProjectionUpdateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccountResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-account-controller" ]
+      }
+    },
+    "/api/internal/accounts/{id}/spending-limit-reservations" : {
+      "post" : {
+        "operationId" : "reserveLimit",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReserveRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReserveResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-account-controller" ]
+      }
+    },
+    "/api/internal/accounts/{id}/spending-limit-reservations/{operationType}/{idempotencyKey}" : {
+      "delete" : {
+        "operationId" : "releaseLimit",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "operationType",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "path",
+          "name" : "idempotencyKey",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "userId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-account-controller" ]
+      },
+      "get" : {
+        "operationId" : "lookupLimitReservation",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "operationType",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "path",
+          "name" : "idempotencyKey",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "userId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReserveResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-account-controller" ]
+      }
+    },
+    "/api/internal/accounts/{id}/spending-limit-reservations/{reservationId}/consume" : {
+      "post" : {
+        "operationId" : "consumeLimitReservation",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "reservationId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReservationTransitionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReserveResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-account-controller" ]
+      }
+    },
+    "/api/internal/accounts/{id}/spending-limit-reservations/{reservationId}/reconciliation-required" : {
+      "post" : {
+        "operationId" : "requireLimitReservationReconciliation",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "reservationId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReservationTransitionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReserveResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-account-controller" ]
+      }
+    },
+    "/api/internal/accounts/{id}/spending-limit-reservations/{reservationId}/release" : {
+      "post" : {
+        "operationId" : "releaseLimitReservation",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "reservationId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReservationTransitionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReserveResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-account-controller" ]
+      }
+    },
+    "/api/internal/beneficiaries/{beneficiaryId}" : {
+      "get" : {
+        "operationId" : "get_2",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "beneficiaryId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "userId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BeneficiaryResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-beneficiary-controller" ]
+      }
+    },
+    "/api/internal/integration-readiness/notification-receipts/{deliveryId}" : {
+      "get" : {
+        "operationId" : "receipt",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "deliveryId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "additionalProperties" : { },
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-notification-receipt-controller" ]
+      }
+    },
+    "/api/internal/notifications" : {
+      "post" : {
+        "operationId" : "createInternal",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NotificationCreateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Notification"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "notification-controller" ]
+      }
+    },
+    "/api/internal/sandbox/seed-accounts" : {
+      "post" : {
+        "operationId" : "seedAccounts",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "owner",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SeededAccounts"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-synthetic-sandbox-controller" ]
+      }
+    },
+    "/api/internal/security/challenges" : {
+      "post" : {
+        "operationId" : "create",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateChallengeRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CreateChallengeResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-security-controller" ]
+      }
+    },
+    "/api/internal/security/challenges/{challengeId}/consume" : {
+      "post" : {
+        "operationId" : "consume",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "challengeId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ConsumeChallengeRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ConsumeChallengeResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "internal-security-controller" ]
+      }
+    },
+    "/api/notifications" : {
+      "get" : {
+        "operationId" : "list_1",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "status",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "UNREAD", "READ" ],
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "type",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "TRANSACTION_COMPLETED", "TRANSACTION_FAILED", "ACCOUNT_FROZEN", "ACCOUNT_UNFROZEN", "DISPUTE_CREATED", "DISPUTE_STATUS_UPDATED", "SCHEDULED_TRANSFER_CREATED", "SCHEDULED_TRANSFER_EXECUTED", "SCHEDULED_TRANSFER_FAILED", "SCHEDULED_TRANSFER_PAUSED", "SCHEDULED_TRANSFER_RESUMED", "SCHEDULED_TRANSFER_CANCELED", "OUTCOME_PROTECTION_AT_RISK", "BALANCE_SHIELD_CONSENT_PENDING", "BALANCE_SHIELD_ACTIVATED", "BALANCE_SHIELD_SUSPENDED", "BALANCE_SHIELD_RESUMED", "BALANCE_SHIELD_REVOKED", "BALANCE_SHIELD_ACTION_REQUIRES_MFA", "BALANCE_SHIELD_ACTION_COMPLETED", "BALANCE_SHIELD_ACTION_FAILED", "SECURITY_ACTION_REQUIRED", "SECURITY_ALERT", "TRANSFER_AUTHORIZED" ],
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "severity",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "INFO", "SUCCESS", "WARNING", "CRITICAL" ],
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sourceType",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "ACCOUNT", "TRANSACTION", "DISPUTE", "SCHEDULED_TRANSFER", "OUTCOME_PROTECTION" ],
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "from",
+          "required" : false,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "to",
+          "required" : false,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "pageable",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/Pageable"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageResponseNotification"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "notification-controller" ]
+      }
+    },
+    "/api/notifications/read-all" : {
+      "patch" : {
+        "operationId" : "markAllRead",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "additionalProperties" : {
+                    "format" : "int32",
+                    "type" : "integer"
+                  },
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "notification-controller" ]
+      }
+    },
+    "/api/notifications/summary" : {
+      "get" : {
+        "operationId" : "summary",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "additionalProperties" : { },
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "notification-controller" ]
+      }
+    },
+    "/api/notifications/{notificationId}/read" : {
+      "patch" : {
+        "operationId" : "markRead",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "notificationId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Notification"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "notification-controller" ]
+      }
+    },
+    "/api/sandbox/bootstrap" : {
+      "post" : {
+        "operationId" : "bootstrap",
+        "parameters" : [ {
+          "in" : "header",
+          "name" : "X-Sandbox-Bootstrap-Token",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/BootstrapRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BootstrapStatus"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "synthetic-sandbox-controller" ]
+      }
+    },
+    "/api/sandbox/bootstrap/status" : {
+      "get" : {
+        "operationId" : "status_1",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BootstrapStatus"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "synthetic-sandbox-controller" ]
+      }
+    },
+    "/api/sandbox/metadata" : {
+      "get" : {
+        "operationId" : "metadata",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "additionalProperties" : { },
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "synthetic-sandbox-controller" ]
+      }
+    },
+    "/api/security/challenges/{challengeId}/verify" : {
+      "post" : {
+        "operationId" : "verify",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "challengeId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/VerifyChallengeRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ChallengeVerificationResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "security-controller" ]
+      }
+    },
+    "/api/security/mfa" : {
+      "get" : {
+        "operationId" : "status",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "security-controller" ]
+      }
+    },
+    "/api/security/mfa/recovery-codes/regenerate" : {
+      "post" : {
+        "operationId" : "regenerate",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PasswordRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RecoveryCodesResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "security-controller" ]
+      }
+    },
+    "/api/security/mfa/totp" : {
+      "delete" : {
+        "operationId" : "disable_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DisableTotpRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "security-controller" ]
+      }
+    },
+    "/api/security/mfa/totp/confirm" : {
+      "post" : {
+        "operationId" : "confirm",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ConfirmTotpRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ConfirmationResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "security-controller" ]
+      }
+    },
+    "/api/security/mfa/totp/enroll" : {
+      "post" : {
+        "operationId" : "enroll",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PasswordRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/EnrollmentResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "security-controller" ]
+      }
+    },
+    "/api/security/spending-limits" : {
+      "get" : {
+        "operationId" : "limits",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/LimitResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "security-controller" ]
+      }
+    },
+    "/api/security/spending-limits/{accountId}" : {
+      "put" : {
+        "operationId" : "updateLimits",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "accountId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/LimitResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "default" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description" : "Error, as RFC 9457 Problem Details"
+          }
+        },
+        "tags" : [ "security-controller" ]
+      }
+    }
+  },
+  "security" : [ {
+    "bearerAuth" : [ ]
+  } ],
+  "servers" : [ {
+    "description" : "Through the gateway",
+    "url" : "/account-api"
+  } ]
+}

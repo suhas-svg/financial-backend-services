@@ -92,18 +92,20 @@ class SecurityConfigTest {
                             result.getResponse().getStatus()));
         }
 
+        // API docs are switched off unless API_DOCS_ENABLED=true, so by default they do not
+        // exist at all; security lets the request through and nothing answers it.
         @Test
-        @DisplayName("GET /swagger-ui/index.html — accessible unauthenticated")
-        void swaggerUi_IsPublic() throws Exception {
+        @DisplayName("GET /swagger-ui/index.html — not served unless API docs are enabled")
+        void swaggerUi_NotServedByDefault() throws Exception {
             mockMvc.perform(get("/swagger-ui/index.html"))
-                    .andExpect(status().isUnauthorized());
+                    .andExpect(status().isNotFound());
         }
 
         @Test
-        @DisplayName("GET /v3/api-docs — accessible unauthenticated")
-        void openApiDocs_IsPublic() throws Exception {
+        @DisplayName("GET /v3/api-docs — not served unless API docs are enabled")
+        void openApiDocs_NotServedByDefault() throws Exception {
             mockMvc.perform(get("/v3/api-docs"))
-                    .andExpect(status().isUnauthorized());
+                    .andExpect(status().isNotFound());
         }
     }
 
