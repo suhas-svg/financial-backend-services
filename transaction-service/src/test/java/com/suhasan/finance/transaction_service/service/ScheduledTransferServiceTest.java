@@ -38,6 +38,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -144,7 +145,7 @@ class ScheduledTransferServiceTest {
     void executeDueScheduleCreatesTransferRunAndLinksTransaction() {
         ScheduledTransfer schedule = activeSchedule("schedule-1", "customer");
         schedule.setNextRunAt(Instant.parse("2026-07-01T09:00:00Z"));
-        when(scheduleRepository.findDueActiveForUpdate(eq(Instant.parse("2026-07-01T09:01:00Z")), any()))
+        when(scheduleRepository.claimDueActive(eq(Instant.parse("2026-07-01T09:01:00Z")), anyInt()))
                 .thenReturn(List.of(schedule));
         when(runRepository.existsByScheduleScheduleIdAndScheduledFor("schedule-1", schedule.getNextRunAt()))
                 .thenReturn(false);
@@ -178,7 +179,7 @@ class ScheduledTransferServiceTest {
         first.setNextRunAt(Instant.parse("2026-07-01T09:00:00Z"));
         ScheduledTransfer second = activeSchedule("schedule-2", "customer");
         second.setNextRunAt(Instant.parse("2026-07-01T09:05:00Z"));
-        when(scheduleRepository.findDueActiveForUpdate(any(), any())).thenReturn(List.of(first, second));
+        when(scheduleRepository.claimDueActive(any(), anyInt())).thenReturn(List.of(first, second));
         when(runRepository.existsByScheduleScheduleIdAndScheduledFor("schedule-1", first.getNextRunAt()))
                 .thenReturn(false);
         when(runRepository.existsByScheduleScheduleIdAndScheduledFor("schedule-2", second.getNextRunAt()))
@@ -201,7 +202,7 @@ class ScheduledTransferServiceTest {
     void successFinalizationFailureDoesNotMarkTransferFailedAfterProcessTransferSucceeds() {
         ScheduledTransfer schedule = activeSchedule("schedule-1", "customer");
         schedule.setNextRunAt(Instant.parse("2026-07-01T09:00:00Z"));
-        when(scheduleRepository.findDueActiveForUpdate(any(), any())).thenReturn(List.of(schedule));
+        when(scheduleRepository.claimDueActive(any(), anyInt())).thenReturn(List.of(schedule));
         when(runRepository.existsByScheduleScheduleIdAndScheduledFor("schedule-1", schedule.getNextRunAt()))
                 .thenReturn(false);
         when(runRepository.save(any(ScheduledTransferRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -226,7 +227,7 @@ class ScheduledTransferServiceTest {
         schedule.setScheduleType(ScheduledTransferType.ONE_TIME);
         schedule.setFrequency(null);
         schedule.setNextRunAt(Instant.parse("2026-07-01T09:00:00Z"));
-        when(scheduleRepository.findDueActiveForUpdate(any(), any())).thenReturn(List.of(schedule));
+        when(scheduleRepository.claimDueActive(any(), anyInt())).thenReturn(List.of(schedule));
         when(runRepository.existsByScheduleScheduleIdAndScheduledFor("schedule-1", schedule.getNextRunAt()))
                 .thenReturn(false);
         when(runRepository.save(any(ScheduledTransferRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -246,7 +247,7 @@ class ScheduledTransferServiceTest {
     void duplicateRunIsSkippedWhenRunAlreadyExists() {
         ScheduledTransfer schedule = activeSchedule("schedule-1", "customer");
         schedule.setNextRunAt(Instant.parse("2026-07-01T09:00:00Z"));
-        when(scheduleRepository.findDueActiveForUpdate(any(), any())).thenReturn(List.of(schedule));
+        when(scheduleRepository.claimDueActive(any(), anyInt())).thenReturn(List.of(schedule));
         when(runRepository.existsByScheduleScheduleIdAndScheduledFor("schedule-1", schedule.getNextRunAt()))
                 .thenReturn(true);
 
@@ -278,7 +279,7 @@ class ScheduledTransferServiceTest {
                 .status(TransactionStatus.COMPLETED)
                 .idempotencyKey(idempotencyKey)
                 .build();
-        when(scheduleRepository.findDueActiveForUpdate(any(), any())).thenReturn(List.of(schedule));
+        when(scheduleRepository.claimDueActive(any(), anyInt())).thenReturn(List.of(schedule));
         when(runRepository.existsByScheduleScheduleIdAndScheduledFor("schedule-1", scheduledFor))
                 .thenReturn(true);
         when(runRepository.findByScheduleScheduleIdAndScheduledFor("schedule-1", scheduledFor))
@@ -311,7 +312,7 @@ class ScheduledTransferServiceTest {
                 .status(ScheduledTransferRunStatus.PROCESSING)
                 .idempotencyKey(idempotencyKey)
                 .build();
-        when(scheduleRepository.findDueActiveForUpdate(any(), any())).thenReturn(List.of(schedule));
+        when(scheduleRepository.claimDueActive(any(), anyInt())).thenReturn(List.of(schedule));
         when(runRepository.existsByScheduleScheduleIdAndScheduledFor("schedule-1", scheduledFor))
                 .thenReturn(true);
         when(runRepository.findByScheduleScheduleIdAndScheduledFor("schedule-1", scheduledFor))
@@ -347,7 +348,7 @@ class ScheduledTransferServiceTest {
                 .status(ScheduledTransferRunStatus.PROCESSING)
                 .idempotencyKey(idempotencyKey)
                 .build();
-        when(scheduleRepository.findDueActiveForUpdate(any(), any())).thenReturn(List.of(schedule));
+        when(scheduleRepository.claimDueActive(any(), anyInt())).thenReturn(List.of(schedule));
         when(runRepository.existsByScheduleScheduleIdAndScheduledFor("schedule-1", scheduledFor)).thenReturn(true);
         when(runRepository.findByScheduleScheduleIdAndScheduledFor("schedule-1", scheduledFor))
                 .thenReturn(Optional.of(strandedRun));

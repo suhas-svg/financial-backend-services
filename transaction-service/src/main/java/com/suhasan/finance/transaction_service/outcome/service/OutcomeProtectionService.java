@@ -14,8 +14,6 @@ import com.suhasan.finance.transaction_service.outcome.service.OutcomeAuthoritat
 import com.suhasan.finance.transaction_service.outcome.web.OutcomeProtectionDtos.*;
 import com.suhasan.finance.transaction_service.repository.ScheduledTransferRepository;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,7 +28,6 @@ import java.util.*;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class OutcomeProtectionService {
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {};
     private static final TypeReference<List<AssumptionInput>> ASSUMPTION_LIST = new TypeReference<>() {};
@@ -217,17 +214,12 @@ public class OutcomeProtectionService {
         return refreshScenario(ownedScenario(scenarioId, userId));
     }
 
-    @Scheduled(fixedDelayString = "${outcome-protection.monitor.fixed-delay-ms:300000}",
-            initialDelayString = "${outcome-protection.monitor.initial-delay-ms:60000}")
-    @Transactional
-    public void monitorActiveScenarios() {
-        for (OutcomeScenario scenario : scenarioRepository.findTop100ByStatusOrderByLastCheckedAtAsc("ACTIVE")) {
-            try {
-                refreshScenario(scenario);
-            } catch (RuntimeException ex) {
-                log.warn("Outcome Protection monitor failed for scenario {}: {}", scenario.getScenarioId(), ex.getMessage());
-            }
-        }
+    /**
+     * Re-evaluates one scenario for {@link OutcomeScenarioMonitor}. The monitor has already claimed the
+     * row and supplies the transaction, so this must run inside it.
+     */
+    public DivergenceResponse refreshClaimed(OutcomeScenario scenario) {
+        return refreshScenario(scenario);
     }
 
     private DivergenceResponse refreshScenario(OutcomeScenario scenario) {

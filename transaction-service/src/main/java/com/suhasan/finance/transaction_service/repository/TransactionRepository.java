@@ -103,9 +103,19 @@ public interface TransactionRepository extends JpaRepository<Transaction, String
        Long getMonthlyTransactionCount(@Param("accountId") String accountId,
                      @Param("type") TransactionType type);
 
-       // Find pending transactions older than specified time
-       @Query("SELECT t FROM Transaction t WHERE t.status = 'PROCESSING' AND t.createdAt < :cutoffTime")
-       List<Transaction> findPendingTransactionsOlderThan(@Param("cutoffTime") LocalDateTime cutoffTime);
+       // Locks up to `limit` stale PROCESSING transactions for the caller's transaction. Rows another
+       // replica (or a request that is completing the transaction) holds are skipped, and the status
+       // filter is re-checked after a lock wait, so recovery never overwrites a fresher outcome.
+       @Query(value = """
+                     select * from transactions
+                     where status = 'PROCESSING'
+                       and created_at < :cutoffTime
+                     order by created_at
+                     limit :limit
+                     for update skip locked
+                     """, nativeQuery = true)
+       List<Transaction> claimStaleProcessing(@Param("cutoffTime") LocalDateTime cutoffTime,
+                     @Param("limit") int limit);
 
        // Find reversal transaction by original transaction ID
        @Query("SELECT t FROM Transaction t WHERE t.originalTransactionId = :originalTransactionId AND t.type = 'REVERSAL'")

@@ -941,14 +941,14 @@ class TransactionServiceImplTest {
                                 .build();
 
                 List<Transaction> pendingTransactions = Arrays.asList(pendingTransaction);
-                when(transactionRepository.findPendingTransactionsOlderThan(any(LocalDateTime.class)))
+                when(transactionRepository.claimStaleProcessing(any(LocalDateTime.class), anyInt()))
                                 .thenReturn(pendingTransactions);
 
                 // Act
                 transactionService.processPendingTransactions();
 
                 // Assert
-                verify(transactionRepository).findPendingTransactionsOlderThan(any(LocalDateTime.class));
+                verify(transactionRepository).claimStaleProcessing(any(LocalDateTime.class), anyInt());
                 verify(transactionRepository).save(pendingTransaction);
                 assertEquals(TransactionStatus.FAILED, pendingTransaction.getStatus());
         }
