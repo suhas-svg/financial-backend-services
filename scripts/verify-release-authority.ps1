@@ -22,6 +22,8 @@ $requiredContracts = @(
     "npm run test:a11y",
     "      - accessibility",
     "service-verification:",
+    "needs.release-authority.result == 'success'",
+    "release-please-config.json",
     "fresh-migrations:",
     "duplicate-concurrency-recovery:",
     "Helm and Terraform Policy",

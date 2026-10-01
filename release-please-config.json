@@ -1,0 +1,85 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "c4892095a32918d6d537322f32935c22da90f546",
+  "release-type": "simple",
+  "include-component-in-tag": false,
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": false,
+  "pull-request-title-pattern": "chore: release ${version}",
+  "changelog-sections": [
+    {
+      "type": "feat",
+      "section": "Features"
+    },
+    {
+      "type": "fix",
+      "section": "Bug Fixes"
+    },
+    {
+      "type": "security",
+      "section": "Security"
+    },
+    {
+      "type": "perf",
+      "section": "Performance"
+    },
+    {
+      "type": "revert",
+      "section": "Reverts"
+    },
+    {
+      "type": "docs",
+      "section": "Documentation",
+      "hidden": true
+    },
+    {
+      "type": "chore",
+      "section": "Miscellaneous",
+      "hidden": true
+    },
+    {
+      "type": "ci",
+      "section": "CI",
+      "hidden": true
+    },
+    {
+      "type": "test",
+      "section": "Tests",
+      "hidden": true
+    }
+  ],
+  "packages": {
+    ".": {
+      "package-name": "financial-backend-services",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        "pom.xml",
+        "account-service/pom.xml",
+        "transaction-service/pom.xml",
+        "infrastructure/helm/account-service/Chart.yaml",
+        "infrastructure/helm/account-service/values.yaml",
+        "infrastructure/helm/account-service/values-dev.yaml",
+        "infrastructure/helm/account-service/values-staging.yaml",
+        "infrastructure/helm/account-service/values-prod.yaml",
+        "infrastructure/helm/transaction-service/Chart.yaml",
+        "infrastructure/helm/transaction-service/values.yaml",
+        "infrastructure/helm/transaction-service/values-prod.yaml",
+        {
+          "type": "json",
+          "path": "frontend/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "frontend/package-lock.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "frontend/package-lock.json",
+          "jsonpath": "$.packages[''].version"
+        }
+      ]
+    }
+  }
+}
