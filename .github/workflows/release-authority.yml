@@ -347,6 +347,9 @@ jobs:
         run: >-
           docker build
           --file "${{ matrix.dockerfile }}"
+          --build-arg "APP_VERSION=sha-${{ github.sha }}"
+          --build-arg "VCS_REF=${{ github.sha }}"
+          --label "org.opencontainers.image.revision=${{ github.sha }}"
           --tag "financial-${{ matrix.image }}:${{ github.sha }}"
           "${{ matrix.context }}"
       - name: Fail on high or critical container vulnerabilities
@@ -441,3 +444,66 @@ jobs:
           failed = {name: result for name, result in results.items() if result != "success"}
           print(json.dumps(results, indent=2, sort_keys=True))
           sys.exit(1 if failed else 0)
+
+  # ── Releases (main only, and only after every acceptance gate passed) ─────────────
+  # release-please keeps a release PR open with the next version and CHANGELOG entry,
+  # computed from Conventional Commits. Merging that PR tags vX.Y.Z and publishes images.
+  # Set the RELEASE_PLEASE_TOKEN secret (fine-grained PAT or GitHub App token with
+  # contents + pull-requests write) so CI runs on the release PR; PRs opened with the
+  # default GITHUB_TOKEN do not trigger workflows and could not pass Required Acceptance.
+  release-please:
+    name: Release PR and Tag
+    needs: release-authority
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.release-authority.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      version: ${{ steps.release.outputs.version }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish-images:
+    name: Publish Release Image (${{ matrix.image }})
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [account-service, transaction-service]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - name: Build and push the release image, tagged by version and by commit
+        shell: bash
+        env:
+          VERSION: ${{ needs.release-please.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          revision="$(git rev-parse HEAD)"
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/financial-${{ matrix.image }}"
+          echo "${GH_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          docker build             --file "${{ matrix.image }}/Dockerfile"             --build-arg "APP_VERSION=${VERSION}"             --build-arg "VCS_REF=${revision}"             --build-arg "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)"             --label "org.opencontainers.image.version=${VERSION}"             --label "org.opencontainers.image.revision=${revision}"             --tag "${image}:${VERSION}"             --tag "${image}:sha-${revision}"             "${{ matrix.image }}"
+          docker push "${image}:${VERSION}"
+          docker push "${image}:sha-${revision}"
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "${image}:${VERSION}")"
+          {
+            echo "### ${{ matrix.image }} ${VERSION}"
+            echo "- \`${image}:${VERSION}\`"
+            echo "- \`${image}:sha-${revision}\`"
+            echo "- Deploy by digest: \`${digest}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

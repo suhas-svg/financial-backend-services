@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.suhasan.finance</groupId>
 	<artifactId>transaction-service</artifactId>
-	<version>1.0.0</version>
+	<version>0.1.0</version> <!-- x-release-please-version -->
 	<name>transaction-service</name>
 	<description>Financial Transaction Service Microservice</description>
 	<url/>
@@ -276,6 +276,14 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<executions>
+					<!-- META-INF/build-info.properties: /actuator/info reports the release version. -->
+					<execution>
+						<goals>
+							<goal>build-info</goal>
+						</goals>
+					</execution>
+				</executions>
 				<configuration>
 					<excludes>
 						<exclude>

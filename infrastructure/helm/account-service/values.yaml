@@ -16,7 +16,7 @@ app:
 image:
   registry: ghcr.io
   repository: "" # Required: set to the immutable image repository built by CI
-  tag: "1.0.0"
+  tag: "0.1.0" # x-release-please-version (release image; deploy by digest where possible)
   pullPolicy: IfNotPresent
   pullSecrets: []
 

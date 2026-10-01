@@ -26,6 +26,8 @@ $requiredContracts = @(
     "npm run api:types:check",
     "--fail-on ERR",
     "      - api-contract",
+    "needs.release-authority.result == 'success'",
+    "release-please-config.json",
     "fresh-migrations:",
     "duplicate-concurrency-recovery:",
     "Helm and Terraform Policy",
