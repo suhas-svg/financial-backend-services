@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, ErrorNotice, Field, Input, Panel } from "../components/ui";
-import { confirmMfa, disableMfa, enrollMfa, getMfaStatus, regenerateRecoveryCodes, getSpendingLimits, updateSpendingLimits } from "../lib/queries";
+import { changePassword, confirmMfa, disableMfa, enrollMfa, getMfaStatus, regenerateRecoveryCodes, getSpendingLimits, updateSpendingLimits } from "../lib/queries";
+import { useNavigate } from "../routing";
+import { useAuth } from "../state/useAuth";
 import type { MfaEnrollment } from "../types";
 import { dateTime } from "../lib/format";
 
@@ -24,6 +26,15 @@ export function SecurityPage() {
   const [limitDrafts, setLimitDrafts] = useState<Record<number, { transfer: string; withdrawal: string; credential: string }>>({});
   const updateLimit = useMutation({ mutationFn: ({ accountId, transfer, withdrawal, credential }: { accountId: number; transfer: string; withdrawal: string; credential: string }) => updateSpendingLimits(accountId, { transferDailyLimit: Number(transfer), withdrawalDailyLimit: Number(withdrawal), credential: credential || undefined }), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["spending-limits"] }); setLimitDrafts({}); } });
   const error = [enroll.error, confirm.error, regenerate.error, disable.error, updateLimit.error].find((value) => value instanceof Error);
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+  const [passwordDraft, setPasswordDraft] = useState({ current: "", next: "", confirm: "", code: "" });
+  const passwordsMatch = passwordDraft.next === passwordDraft.confirm;
+  const passwordChange = useMutation({
+    mutationFn: () => changePassword(passwordDraft.current, passwordDraft.next, passwordDraft.code || undefined),
+    // Every session was ended server-side, this one included: sign in again with the new password.
+    onSuccess: () => { logout(); navigate("/login?reason=password-changed", { replace: true }); }
+  });
 
   return (
     <div className="grid max-w-3xl gap-6">
@@ -66,6 +77,23 @@ export function SecurityPage() {
             </div>
           ) : null}
         </div>
+      </Panel>
+      <Panel title="Password">
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => { event.preventDefault(); if (passwordsMatch) passwordChange.mutate(); }}
+        >
+          <p className="text-sm text-muted">Changing your password signs you out on every device.</p>
+          <ErrorNotice message={passwordChange.error instanceof Error ? passwordChange.error.message : undefined} />
+          <Field label="Current account password"><Input name="current-password" autoComplete="current-password" type="password" required value={passwordDraft.current} onChange={(event) => setPasswordDraft({ ...passwordDraft, current: event.target.value })} /></Field>
+          <Field label="New password (at least 12 characters)"><Input name="new-password" autoComplete="new-password" type="password" required minLength={12} maxLength={128} value={passwordDraft.next} onChange={(event) => setPasswordDraft({ ...passwordDraft, next: event.target.value })} /></Field>
+          <Field label="Confirm new password"><Input name="confirm-password" autoComplete="new-password" type="password" required value={passwordDraft.confirm} onChange={(event) => setPasswordDraft({ ...passwordDraft, confirm: event.target.value })} aria-invalid={!passwordsMatch} /></Field>
+          {!passwordsMatch ? <p role="alert" className="text-sm text-danger">The new passwords do not match.</p> : null}
+          {status.data?.enrolled ? (
+            <Field label="Authenticator code"><Input name="password-change-code" inputMode="numeric" autoComplete="one-time-code" required value={passwordDraft.code} onChange={(event) => setPasswordDraft({ ...passwordDraft, code: event.target.value })} /></Field>
+          ) : null}
+          <div><Button type="submit" disabled={passwordChange.isPending || !passwordsMatch}>Change password</Button></div>
+        </form>
       </Panel>
       <Panel title="Transfer and withdrawal limits">
         <div className="grid gap-4">

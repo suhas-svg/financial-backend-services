@@ -38,6 +38,7 @@ export function LoginPage() {
   const [portalError, setPortalError] = useState<string>();
   const portal: Portal = searchParams.get("portal") === "admin" ? "admin" : "customer";
   const sessionExpired = searchParams.get("reason") === "expired";
+  const passwordChanged = searchParams.get("reason") === "password-changed";
   const content = portalContent[portal];
   const form = useForm<LoginValues>({ resolver: zodResolver(loginSchema), defaultValues: { username: "", password: "" } });
   const { reset } = form;
@@ -158,6 +159,7 @@ export function LoginPage() {
 
             <form key={portal} autoComplete="off" className="grid gap-5" onSubmit={form.handleSubmit((values) => { setPortalError(undefined); mutation.mutate(values); })}>
               {sessionExpired ? <div role="status" aria-live="polite" className="rounded-xl border border-amber-400/30 bg-amber-950/30 p-3 text-sm text-amber-100">Your session expired. Sign in again to continue.</div> : null}
+              {passwordChanged ? <div role="status" aria-live="polite" className="rounded-xl border border-emerald-400/30 bg-emerald-950/30 p-3 text-sm text-emerald-100">Password changed. You were signed out on every device; sign in with your new password.</div> : null}
               <ErrorNotice message={portalError ?? (mutation.error instanceof Error ? mutation.error.message : undefined)} />
 
               <div className="grid gap-2 text-sm">

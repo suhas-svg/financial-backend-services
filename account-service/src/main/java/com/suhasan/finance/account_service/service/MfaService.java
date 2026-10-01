@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -105,6 +106,23 @@ public class MfaService {
         method.setStatus(MfaMethodStatus.DISABLED);
         methodRepository.save(method);
         recoveryCodeRepository.deleteByMfaMethodId(method.getId());
+    }
+
+    /**
+     * For sensitive account changes: when the user has an authenticator enrolled, a valid code
+     * is required (same lockout as every other TOTP check). Users without MFA pass through.
+     */
+    @Transactional(noRollbackFor = MfaVerificationException.class)
+    public void requireCodeIfEnrolled(final String username, final String code) {
+        final Optional<MfaMethod> method =
+                methodRepository.findByUserIdAndMethodTypeAndStatus(username, METHOD, MfaMethodStatus.ACTIVE);
+        if (method.isEmpty()) {
+            return;
+        }
+        if (code == null || code.isBlank()) {
+            throw new MfaVerificationException("An authenticator code is required");
+        }
+        verifyTotpOrThrow(method.get(), code);
     }
 
     /**

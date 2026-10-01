@@ -176,6 +176,14 @@ export function regenerateRecoveryCodes(currentPassword: string) {
   return apiRequest<{ recoveryCodes: string[] }>("account", "/api/security/mfa/recovery-codes/regenerate", { method: "POST", body: { currentPassword } });
 }
 
+/** Changes the password and ends every session; the caller must sign in again. */
+export function changePassword(currentPassword: string, newPassword: string, mfaCode?: string) {
+  return apiRequest<void>("account", "/api/security/password", {
+    method: "POST",
+    body: { currentPassword, newPassword, ...(mfaCode ? { mfaCode } : {}) }
+  });
+}
+
 export function disableMfa(currentPassword: string, code: string) {
   return apiRequest<void>("account", "/api/security/mfa/totp", { method: "DELETE", body: { currentPassword, code } });
 }

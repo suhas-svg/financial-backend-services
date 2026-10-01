@@ -2,10 +2,15 @@ package com.suhasan.finance.account_service.controller;
 
 import com.suhasan.finance.account_service.dto.MfaRequests;
 import com.suhasan.finance.account_service.dto.MfaResponses;
+import com.suhasan.finance.account_service.security.ClientIpResolver;
+import com.suhasan.finance.account_service.security.RefreshCookies;
 import com.suhasan.finance.account_service.service.MfaService;
+import com.suhasan.finance.account_service.service.PasswordChangeService;
 import com.suhasan.finance.account_service.service.StepUpChallengeService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -16,8 +21,24 @@ import org.springframework.web.bind.annotation.*;
 public class SecurityController {
     private final MfaService mfaService;
     private final StepUpChallengeService challengeService;
+    private final PasswordChangeService passwordChangeService;
+    private final ClientIpResolver clientIpResolver;
+    private final RefreshCookies refreshCookies;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.suhasan.finance.account_service.service.SpendingLimitService spendingLimitService;
+
+    /**
+     * Changes the password and signs the user out everywhere: every refresh session is revoked
+     * and this browser's refresh cookie is cleared, so the next request signs in again.
+     */
+    @PostMapping("/password")
+    public ResponseEntity<Void> changePassword(@Valid @RequestBody final MfaRequests.ChangePasswordRequest request,
+                                               final Authentication authentication,
+                                               final HttpServletRequest httpRequest) {
+        passwordChangeService.changePassword(authentication.getName(), request.currentPassword(),
+                request.newPassword(), request.mfaCode(), clientIpResolver.resolve(httpRequest));
+        return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, refreshCookies.clear()).build();
+    }
 
     @GetMapping("/spending-limits")
     public java.util.List<com.suhasan.finance.account_service.dto.SpendingLimitDtos.LimitResponse> limits(final Authentication authentication) { return spendingLimitService.list(authentication.getName()); }
