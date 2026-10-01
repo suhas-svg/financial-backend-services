@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "e2e": "playwright test --config playwright.sandbox.config.ts",
     "lint": "eslint .",
-    "test:a11y": "playwright test --config playwright.accessibility.config.ts"
+    "test:a11y": "playwright test --config playwright.accessibility.config.ts",
+    "check:bundle": "node scripts/check-initial-bundle.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

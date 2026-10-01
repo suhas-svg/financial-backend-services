@@ -4,6 +4,7 @@ import { Navigate } from "./routing";
 import { AdminLayout } from "./components/AdminLayout";
 import { CustomerLayout } from "./components/CustomerLayout";
 import { RequireAuth } from "./components/RequireAuth";
+import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
 import { RouteAccessibility } from "./components/RouteAccessibility";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -33,18 +34,18 @@ import {
 
 export function App() {
   const customerRoute = (page: React.ReactNode) => (
-    <RequireAuth><CustomerLayout><Suspense fallback={<RouteLoading />}>{page}</Suspense></CustomerLayout></RequireAuth>
+    <RequireAuth><CustomerLayout><RouteErrorBoundary><Suspense fallback={<RouteLoading />}>{page}</Suspense></RouteErrorBoundary></CustomerLayout></RequireAuth>
   );
   const adminRoute = (page: React.ReactNode) => (
-    <RequireAuth admin><AdminLayout><Suspense fallback={<RouteLoading />}>{page}</Suspense></AdminLayout></RequireAuth>
+    <RequireAuth admin><AdminLayout><RouteErrorBoundary><Suspense fallback={<RouteLoading />}>{page}</Suspense></RouteErrorBoundary></AdminLayout></RequireAuth>
   );
 
   return (
     <>
     <RouteAccessibility />
       <Switch>
-        <Route path="/login"><LoginPage /></Route>
-        <Route path="/register"><RegisterPage /></Route>
+        <Route path="/login"><RouteErrorBoundary><LoginPage /></RouteErrorBoundary></Route>
+        <Route path="/register"><RouteErrorBoundary><RegisterPage /></RouteErrorBoundary></Route>
         <Route path="/admin/accounts">{adminRoute(<AdminAccountsPage />)}</Route>
         <Route path="/admin/monitoring">{adminRoute(<AdminMonitoringPage />)}</Route>
         <Route path="/admin/transactions">{adminRoute(<AdminTransactionsPage />)}</Route>
