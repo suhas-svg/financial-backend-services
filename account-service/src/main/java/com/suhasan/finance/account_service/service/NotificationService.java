@@ -8,6 +8,7 @@ import com.suhasan.finance.account_service.entity.NotificationSourceType;
 import com.suhasan.finance.account_service.entity.NotificationStatus;
 import com.suhasan.finance.account_service.entity.NotificationType;
 import com.suhasan.finance.account_service.repository.NotificationRepository;
+import com.suhasan.finance.account_service.repository.NotificationRepository.NotificationCountRow;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -90,26 +91,28 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> summaryForUser(final String userId) {
+        final Map<NotificationSeverity, Long> bySeverity = zeroCounts(NotificationSeverity.class);
+        final Map<NotificationType, Long> byType = zeroCounts(NotificationType.class);
+        final Map<NotificationSourceType, Long> bySourceType = zeroCounts(NotificationSourceType.class);
+        long total = 0;
+        long unread = 0;
+        // A single grouped query replaces one COUNT per enum value (35 round trips).
+        for (final NotificationCountRow row : notificationRepository.countByUserGrouped(userId)) {
+            final long count = row.getTotal();
+            total += count;
+            if (row.getStatus() == NotificationStatus.UNREAD) {
+                unread += count;
+            }
+            bySeverity.merge(row.getSeverity(), count, Long::sum);
+            byType.merge(row.getType(), count, Long::sum);
+            bySourceType.merge(row.getSourceType(), count, Long::sum);
+        }
+
         final Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("total", notificationRepository.countByUserId(userId));
-        summary.put("unread", notificationRepository.countByUserIdAndStatus(userId, NotificationStatus.UNREAD));
-
-        final Map<NotificationSeverity, Long> bySeverity = new EnumMap<>(NotificationSeverity.class);
-        for (final NotificationSeverity severity : NotificationSeverity.values()) {
-            bySeverity.put(severity, notificationRepository.countByUserIdAndSeverity(userId, severity));
-        }
+        summary.put("total", total);
+        summary.put("unread", unread);
         summary.put("bySeverity", bySeverity);
-
-        final Map<NotificationType, Long> byType = new EnumMap<>(NotificationType.class);
-        for (final NotificationType type : NotificationType.values()) {
-            byType.put(type, notificationRepository.countByUserIdAndType(userId, type));
-        }
         summary.put("byType", byType);
-
-        final Map<NotificationSourceType, Long> bySourceType = new EnumMap<>(NotificationSourceType.class);
-        for (final NotificationSourceType sourceType : NotificationSourceType.values()) {
-            bySourceType.put(sourceType, notificationRepository.countByUserIdAndSourceType(userId, sourceType));
-        }
         summary.put("bySourceType", bySourceType);
         return summary;
     }
@@ -128,14 +131,15 @@ public class NotificationService {
 
     @Transactional
     public int markAllRead(final String userId) {
-        final List<Notification> unread = notificationRepository.findByUserIdAndStatus(userId, NotificationStatus.UNREAD);
-        final LocalDateTime readAt = LocalDateTime.now();
-        unread.forEach(notification -> {
-            notification.setStatus(NotificationStatus.READ);
-            notification.setReadAt(readAt);
-        });
-        notificationRepository.saveAll(unread);
-        return unread.size();
+        return notificationRepository.markAllUnreadAsRead(userId, LocalDateTime.now());
+    }
+
+    private static <E extends Enum<E>> Map<E, Long> zeroCounts(final Class<E> type) {
+        final Map<E, Long> counts = new EnumMap<>(type);
+        for (final E value : type.getEnumConstants()) {
+            counts.put(value, 0L);
+        }
+        return counts;
     }
 
     private Specification<Notification> forUser(final String userId, final NotificationFilter filter) {

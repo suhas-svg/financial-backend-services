@@ -10,7 +10,11 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      refetchOnWindowFocus: false
+      refetchOnWindowFocus: false,
+      // Reuse fresh data when moving between pages instead of refetching every
+      // query on mount. Mutations invalidate the queries they affect, and
+      // money-state views keep their own refetchInterval.
+      staleTime: 10_000
     }
   }
 });
