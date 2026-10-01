@@ -154,7 +154,9 @@ public class GlobalExceptionHandler {
             }
         }
         // Never echo internal exception text to the caller; it is in the log.
-        LOG.error("Unhandled exception on {}", req.getRequestURI(), ex);
+        if (LOG.isErrorEnabled()) {
+            LOG.error("Unhandled exception on {}", req.getRequestURI(), ex);
+        }
         return response(HttpStatus.INTERNAL_SERVER_ERROR, "internal-error", "Internal Server Error",
                 "An unexpected error occurred", req);
     }
