@@ -820,6 +820,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/security/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["changePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/security/spending-limits": {
         parameters: {
             query?: never;
@@ -993,6 +1009,11 @@ export interface components {
             proof?: string;
             /** Format: date-time */
             proofExpiresAt?: string;
+        };
+        ChangePasswordRequest: {
+            currentPassword: string;
+            mfaCode?: string;
+            newPassword: string;
         };
         ConfirmTotpRequest: {
             code: string;
@@ -3168,6 +3189,37 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["EnrollmentResponse"];
                 };
+            };
+            /** @description Error, as RFC 9457 Problem Details */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error, as RFC 9457 Problem Details */
             default: {
