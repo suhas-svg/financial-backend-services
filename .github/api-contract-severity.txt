@@ -1,0 +1,3 @@
+request-property-became-required WARN
+request-property-min-length-set WARN
+request-property-pattern-added WARN
