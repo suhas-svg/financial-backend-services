@@ -115,8 +115,48 @@ class CustomerStatementControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "customer-1", roles = "USER")
-    void statementDetailRejectsCrossCustomerAccess() throws Exception {
+        @WithMockUser(username = "customer-1", roles = "USER")
+        void generateRejectsMissingYearMonthAsBadRequest() throws Exception {
+            mockMvc.perform(post("/api/ledger/statements")
+                            .contentType("application/json")
+                            .content("""
+                                    {
+                                      "externalAccountId": "1001"
+                                    }
+                                    """))
+                    .andExpect(status().isBadRequest());
+
+            mockMvc.perform(post("/api/ledger/statements")
+                            .contentType("application/json")
+                            .content("""
+                                    {
+                                      "externalAccountId": "1001",
+                                      "yearMonth": "not-a-month"
+                                    }
+                                    """))
+                    .andExpect(status().isBadRequest());
+
+            verifyNoInteractions(statementService);
+        }
+
+        @Test
+        @WithMockUser(username = "customer-1", roles = "USER")
+        void generateRejectsMissingAccountAsBadRequest() throws Exception {
+            mockMvc.perform(post("/api/ledger/statements")
+                            .contentType("application/json")
+                            .content("""
+                                    {
+                                      "yearMonth": "2026-05"
+                                    }
+                                    """))
+                    .andExpect(status().isBadRequest());
+
+            verifyNoInteractions(statementService);
+        }
+
+        @Test
+        @WithMockUser(username = "customer-1", roles = "USER")
+        void statementDetailRejectsCrossCustomerAccess() throws Exception {
         UUID statementId = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
         when(statementService.getForOwner("customer-1", statementId))
                 .thenThrow(new AccessDeniedException("Statement belongs to another customer"));

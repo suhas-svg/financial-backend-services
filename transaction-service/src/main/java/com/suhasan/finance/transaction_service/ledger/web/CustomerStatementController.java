@@ -3,6 +3,7 @@ package com.suhasan.finance.transaction_service.ledger.web;
 import com.suhasan.finance.transaction_service.ledger.service.CustomerMonthlyStatementLineResult;
 import com.suhasan.finance.transaction_service.ledger.service.CustomerMonthlyStatementResult;
 import com.suhasan.finance.transaction_service.ledger.service.MonthlyStatementService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -33,14 +34,14 @@ public class CustomerStatementController {
     }
 
     @PostMapping
-    public CustomerStatementResponse generate(
-            @RequestBody CustomerStatementGenerateRequest request,
-            Authentication authentication) {
-        return toResponse(statementService.generate(
-                authentication.getName(),
-                request.externalAccountId(),
-                YearMonth.parse(request.yearMonth())));
-    }
+        public CustomerStatementResponse generate(
+                @Valid @RequestBody CustomerStatementGenerateRequest request,
+                Authentication authentication) {
+            return toResponse(statementService.generate(
+                    authentication.getName(),
+                    request.externalAccountId(),
+                    YearMonth.parse(request.yearMonth())));
+        }
 
     @GetMapping("/{statementId}")
     public CustomerStatementResponse get(

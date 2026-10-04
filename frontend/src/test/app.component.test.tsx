@@ -1378,6 +1378,87 @@ describe("admin audit log", () => {
 });
 
 describe("admin account status controls", () => {
+  it("pages through accounts beyond the first 20", async () => {
+    const user = userEvent.setup();
+    const page0 = Array.from({ length: 20 }, (_, i) => ({
+      ...sampleAccount,
+      id: String(i + 1),
+      ownerId: `owner-${i + 1}`,
+    }));
+    const { calls } = mockFetch((url) => {
+      if (url.includes("/api/ledger/accounts")) return jsonResponse([]);
+      if (url.includes("/api/accounts")) {
+        const isPage1 = url.includes("page=1");
+        return jsonResponse({
+          content: isPage1
+            ? [{ ...sampleAccount, id: "21", ownerId: "owner-21" }]
+            : page0,
+          totalElements: 21,
+          totalPages: 2,
+          number: isPage1 ? 1 : 0,
+          size: 20,
+        });
+      }
+      return undefined;
+    });
+
+    renderApp("/admin/accounts", tokenFor({ sub: "admin", roles: ["ROLE_ADMIN"] }));
+
+    // 21 accounts exist, so the table must admit there is a second page.
+    expect(await screen.findByText(/Showing 1-20 of 21 accounts/i)).toBeInTheDocument();
+    expect(screen.getByText(/page 1 of 2/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Previous page of accounts" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Next page of accounts" }));
+
+    await waitFor(() => {
+      expect(calls.some(({ url }) => url.includes("page=1"))).toBe(true);
+    });
+    expect(await screen.findByText(/Showing 21-21 of 21 account/i)).toBeInTheDocument();
+    expect(screen.getByText("owner-21")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next page of accounts" })).toBeDisabled();
+  });
+
+  it("returns to the first page when a filter changes", async () => {
+    const user = userEvent.setup();
+    const { calls } = mockFetch((url) => {
+      if (url.includes("/api/ledger/accounts")) return jsonResponse([]);
+      if (url.includes("/api/accounts")) {
+        const isPage1 = url.includes("page=1");
+        return jsonResponse({
+          content: isPage1
+            ? [{ ...sampleAccount, id: "21", ownerId: "owner-21" }]
+            : Array.from({ length: 20 }, (_, i) => ({
+                ...sampleAccount,
+                id: String(i + 1),
+                ownerId: `owner-${i + 1}`,
+              })),
+          totalElements: 21,
+          totalPages: 2,
+          number: isPage1 ? 1 : 0,
+          size: 20,
+        });
+      }
+      return undefined;
+    });
+
+    renderApp("/admin/accounts", tokenFor({ sub: "admin", roles: ["ROLE_ADMIN"] }));
+
+    expect(await screen.findByText(/Showing 1-20 of 21 accounts/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next page of accounts" }));
+    await waitFor(() => expect(calls.some(({ url }) => url.includes("page=1"))).toBe(true));
+
+    // Changing a filter while on page 2 would otherwise strand the operator on an empty page.
+    await user.selectOptions(screen.getByDisplayValue("All status"), "FROZEN");
+
+    await waitFor(() => {
+      expect(
+        calls.some(({ url }) => url.includes("status=FROZEN") && !url.includes("page=1"))
+      ).toBe(true);
+    });
+    expect(await screen.findByText(/Showing 1-20 of 21 accounts/i)).toBeInTheDocument();
+  });
+
   it("shows authoritative ledger projections instead of stale account snapshots", async () => {
     const { calls } = mockFetch((url) => {
       if (url.includes("/api/ledger/accounts")) return jsonResponse([sampleLedgerAccount]);
@@ -2017,15 +2098,21 @@ describe("admin investigations", () => {
     renderApp("/admin/investigations", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
 
     expect(await screen.findByRole("heading", { name: "Investigations" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getAllByText("2").length).toBeGreaterThan(0));
-    expect(screen.getByText("HIGH_VALUE_TRANSFER")).toBeInTheDocument();
-    expect(screen.getByText("RC-20260510-0001")).toBeInTheDocument();
+    // With no filter criterion set the page prompts for one instead of rendering a wall of
+    // zero tiles that reads like a broken page. The timeline appears once a filter is set.
+    expect(
+      screen.getByText(/enter a user, transaction, account, alert or case id to search/i)
+    ).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText("User ID"), "customer");
     await user.type(screen.getByPlaceholderText("Transaction ID"), "txn-1");
     await user.type(screen.getByPlaceholderText("Account ID"), "101");
     await user.type(screen.getByPlaceholderText("Alert ID"), "alert-1");
     await user.type(screen.getByPlaceholderText("Case ID"), "case-1");
+
+    await waitFor(() => expect(screen.getAllByText("2").length).toBeGreaterThan(0));
+    expect(screen.getByText("HIGH_VALUE_TRANSFER")).toBeInTheDocument();
+    expect(screen.getByText("RC-20260510-0001")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(calls.some(({ url }) =>
@@ -2125,6 +2212,8 @@ describe("admin investigations", () => {
 
     renderApp("/admin/investigations", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
 
+    // The report panel is only meaningful once a filter narrows the scope, so set one first.
+    await user.type(await screen.findByPlaceholderText("User ID"), "customer");
     expect(await screen.findByRole("heading", { name: "Investigation report" })).toBeInTheDocument();
     expect(screen.getByText("Report scope")).toBeInTheDocument();
     expect(await screen.findByText("High-risk items require review")).toBeInTheDocument();

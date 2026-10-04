@@ -1,6 +1,6 @@
 package com.suhasan.finance.transaction_service.ledger.web;
 
-import org.springframework.http.HttpStatus;
+import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,9 +24,9 @@ public class AdminReconciliationController {
     }
 
     @PostMapping("/runs")
-    public ReconciliationRunResponse run(
-            @RequestBody ReconciliationRunRequest request,
-            Authentication authentication) {
+        public ReconciliationRunResponse run(
+                @Valid @RequestBody ReconciliationRunRequest request,
+                Authentication authentication) {
         return reconciliationQueryService.runDaily(request.businessDate(), authentication.getName());
     }
 
@@ -76,10 +76,5 @@ public class AdminReconciliationController {
                 exceptionId,
                 request.note(),
                 authentication.getName());
-    }
-
-    @ExceptionHandler(IllegalArgumentException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    void badRequest() {
     }
 }

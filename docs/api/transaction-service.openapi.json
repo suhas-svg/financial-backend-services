@@ -392,12 +392,16 @@
       "CustomerStatementGenerateRequest" : {
         "properties" : {
           "externalAccountId" : {
+            "minLength" : 1,
             "type" : "string"
           },
           "yearMonth" : {
+            "minLength" : 1,
+            "pattern" : "\\d{4}-(0[1-9]|1[0-2])",
             "type" : "string"
           }
         },
+        "required" : [ "externalAccountId", "yearMonth" ],
         "type" : "object"
       },
       "CustomerStatementLineResponse" : {
@@ -2177,6 +2181,7 @@
             "type" : "string"
           }
         },
+        "required" : [ "businessDate" ],
         "type" : "object"
       },
       "ReconciliationRunResponse" : {
@@ -4538,9 +4543,6 @@
             },
             "description" : "OK"
           },
-          "400" : {
-            "description" : "Bad Request"
-          },
           "default" : {
             "content" : {
               "application/problem+json" : {
@@ -4577,9 +4579,6 @@
               }
             },
             "description" : "OK"
-          },
-          "400" : {
-            "description" : "Bad Request"
           },
           "default" : {
             "content" : {
@@ -4628,9 +4627,6 @@
             },
             "description" : "OK"
           },
-          "400" : {
-            "description" : "Bad Request"
-          },
           "default" : {
             "content" : {
               "application/problem+json" : {
@@ -4677,9 +4673,6 @@
               }
             },
             "description" : "OK"
-          },
-          "400" : {
-            "description" : "Bad Request"
           },
           "default" : {
             "content" : {
@@ -4728,9 +4721,6 @@
             },
             "description" : "OK"
           },
-          "400" : {
-            "description" : "Bad Request"
-          },
           "default" : {
             "content" : {
               "application/problem+json" : {
@@ -4761,9 +4751,6 @@
               }
             },
             "description" : "OK"
-          },
-          "400" : {
-            "description" : "Bad Request"
           },
           "default" : {
             "content" : {
@@ -4800,9 +4787,6 @@
               }
             },
             "description" : "OK"
-          },
-          "400" : {
-            "description" : "Bad Request"
           },
           "default" : {
             "content" : {

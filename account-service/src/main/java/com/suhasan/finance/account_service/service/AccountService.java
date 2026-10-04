@@ -14,6 +14,7 @@ import com.suhasan.finance.account_service.entity.AccountBalanceOperation;
 import com.suhasan.finance.account_service.entity.AccountBalanceOperationId;
 import com.suhasan.finance.account_service.entity.AccountDebitHold;
 import com.suhasan.finance.account_service.entity.AccountStatus;
+import com.suhasan.finance.account_service.entity.AccountStatusAuditEvent;
 import com.suhasan.finance.account_service.entity.CheckingAccount;
 import com.suhasan.finance.account_service.entity.CreditCardAccount;
 import com.suhasan.finance.account_service.entity.SavingsAccount;
@@ -26,6 +27,7 @@ import com.suhasan.finance.account_service.mapper.AccountMapper;
 import com.suhasan.finance.account_service.repository.AccountBalanceOperationRepository;
 import com.suhasan.finance.account_service.repository.AccountDebitHoldRepository;
 import com.suhasan.finance.account_service.repository.AccountRepository;
+import com.suhasan.finance.account_service.repository.AccountStatusAuditEventRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -54,6 +56,7 @@ public class AccountService {
     private final AccountMapper accountMapper;
     private final MeterRegistry meterRegistry;
     private NotificationService notificationService;
+    private AccountStatusAuditEventRepository statusAuditRepository;
 
     private Counter createdCounter;
     private Timer creationTimer;
@@ -74,6 +77,15 @@ public class AccountService {
     @Autowired
     void setNotificationService(final NotificationService notificationService) {
         this.notificationService = notificationService;
+    }
+
+    /**
+     * Optional so existing wiring and tests that build this service by hand keep working;
+     * without it a status change would simply go unaudited rather than fail the operation.
+     */
+    @Autowired(required = false)
+    void setStatusAuditRepository(final AccountStatusAuditEventRepository statusAuditRepository) {
+        this.statusAuditRepository = statusAuditRepository;
     }
 
     private void initMetrics() {
@@ -167,13 +179,37 @@ public class AccountService {
         if (status == AccountStatus.CLOSED || existing.getStatus() == AccountStatus.CLOSED) {
             throw new IllegalStateException("Closed lifecycle transitions require the closure coordinator");
         }
+        final AccountStatus previousStatus = existing.getStatus();
         existing.setStatus(status);
         existing.setStatusReason(reason.trim());
         existing.setStatusUpdatedAt(LocalDateTime.now());
         existing.setStatusUpdatedBy(actor);
         final Account saved = accountRepository.save(existing);
+        recordStatusChange(id, previousStatus, status, reason.trim(), actor);
         emitAccountStatusNotification(saved);
         return saved;
+    }
+
+    /**
+     * Records the transition as its own immutable row. The accounts table only ever holds the
+     * CURRENT status, so without this an operator freeze leaves no trace once it is lifted.
+     */
+    private void recordStatusChange(final Long accountId, final AccountStatus previousStatus,
+                                    final AccountStatus newStatus, final String reason, final String actor) {
+        if (statusAuditRepository == null) {
+            log.warn("Account status audit unavailable; status change for account {} not recorded", accountId);
+            return;
+        }
+        statusAuditRepository.save(AccountStatusAuditEvent.builder()
+                .accountId(accountId)
+                // An account is normalised to ACTIVE on creation, so a null here would mean the
+                // row predates that; "UNKNOWN" keeps the NOT NULL contract honest.
+                .previousStatus(previousStatus == null ? "UNKNOWN" : previousStatus.name())
+                .newStatus(newStatus.name())
+                .reason(reason)
+                .actor(actor)
+                .createdAt(LocalDateTime.now())
+                .build());
     }
 
     public Account close(final Long id, final String reason, final String actor) {
@@ -191,11 +227,14 @@ public class AccountService {
         if (debitHoldRepository.existsByAccountIdAndStatus(id, DebitHoldStatus.PLACED)) {
             throw new IllegalStateException("Account closure requires no active debit holds");
         }
+        final AccountStatus previousStatus = account.getStatus();
         account.setStatus(AccountStatus.CLOSED);
         account.setStatusReason(reason.trim());
         account.setStatusUpdatedAt(LocalDateTime.now());
         account.setStatusUpdatedBy(actor);
-        return accountRepository.save(account);
+        final Account saved = accountRepository.save(account);
+        recordStatusChange(id, previousStatus, AccountStatus.CLOSED, reason.trim(), actor);
+        return saved;
     }
     @Transactional(readOnly = true)
     public Page<AccountResponse> listAccounts(final String ownerId, final String accountType, final AccountStatus status, final Pageable pageable) {

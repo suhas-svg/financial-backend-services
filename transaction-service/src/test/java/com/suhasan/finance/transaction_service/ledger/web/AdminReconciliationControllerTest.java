@@ -51,8 +51,19 @@ class AdminReconciliationControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "customer", roles = "USER")
-    void reconciliationApisRejectCustomerUsers() throws Exception {
+        @WithMockUser(username = "ops", roles = "ADMIN")
+        void manualRunRejectsMissingBusinessDateAsBadRequest() throws Exception {
+            mockMvc.perform(post("/api/admin/reconciliation/runs")
+                            .contentType("application/json")
+                            .content("{}"))
+                    .andExpect(status().isBadRequest());
+
+            verifyNoInteractions(reconciliationQueryService);
+        }
+
+        @Test
+        @WithMockUser(username = "customer", roles = "USER")
+        void reconciliationApisRejectCustomerUsers() throws Exception {
         mockMvc.perform(get("/api/admin/reconciliation/runs"))
                 .andExpect(status().isForbidden());
     }

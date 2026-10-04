@@ -17,6 +17,11 @@ const defaultFilters = {
   to: ""
 };
 
+// The investigations API deliberately returns an empty summary and timeline when no
+// identifier is supplied, so rendering it would show a page full of zeros that reads as
+// a broken console. These are the same five criteria the backend treats as a search scope.
+const scopeFilterKeys: Array<keyof typeof defaultFilters> = ["userId", "transactionId", "accountId", "alertId", "caseId"];
+
 export function AdminInvestigationsPage() {
   const [filters, setFilters] = useState(defaultFilters);
   const [selected, setSelected] = useState<InvestigationTimelineItem | null>(null);
@@ -27,6 +32,7 @@ export function AdminInvestigationsPage() {
   const timelineItems = timeline.data?.content || [];
   const groupedItems = groupTimeline(timeline.data?.content || []);
   const activeFilters = activeFilterEntries(filters);
+  const hasSearchScope = scopeFilterKeys.some((key) => filters[key].trim());
   const exportCsv = async () => {
     setExportState("loading");
     try {
@@ -63,64 +69,74 @@ export function AdminInvestigationsPage() {
         {exportState === "error" ? <p className="mt-3 text-sm text-danger">Could not export investigation CSV.</p> : null}
       </Panel>
 
-      <div className="admin-metric-grid grid gap-3 md:grid-cols-4 xl:grid-cols-7">
-        <Stat label="Transactions" value={formatNumber(summary.data?.transactions)} />
-        <Stat label="Audit events" value={formatNumber(summary.data?.auditEvents)} />
-        <Stat label="Risk alerts" value={formatNumber(summary.data?.riskAlerts)} />
-        <Stat label="Risk cases" value={formatNumber(summary.data?.riskCases)} />
-        <Stat label="Failures" value={<Badge tone={summary.data?.failures ? "bad" : "good"}>{formatNumber(summary.data?.failures)}</Badge>} />
-        <Stat label="Reversals" value={formatNumber(summary.data?.reversals)} />
-        <Stat label="High severity" value={<Badge tone={summary.data?.highSeverityItems ? "bad" : "neutral"}>{formatNumber(summary.data?.highSeverityItems)}</Badge>} />
-      </div>
+      {!hasSearchScope ? (
+        <Panel title="Investigation report">
+          <EmptyState title="Enter a user, transaction, account, alert or case ID to search" detail="The investigations API only returns evidence for a specific subject. Enter at least one identifier above to load summary metrics and a timeline." />
+        </Panel>
+      ) : null}
 
-      <Panel title="Investigation report" className="investigation-report">
-        <div className="grid gap-5">
-          <div className="admin-metric-grid grid gap-3 md:grid-cols-3">
-            <ReportBlock title="Report scope" value={activeFilters.length ? activeFilters.map((entry) => `${entry.label}: ${entry.value}`).join(" | ") : "All investigation records"} />
-            <ReportBlock title="Key finding" value={summary.data?.highSeverityItems ? "High-risk items require review" : "No high-risk items in scope"} tone={summary.data?.highSeverityItems ? "bad" : "good"} />
-            <ReportBlock title="Included timeline items" value={`${timelineItems.length} item${timelineItems.length === 1 ? "" : "s"}`} />
-          </div>
-          <div className="grid gap-2">
-            <p className="text-xs font-semibold uppercase text-muted">Report timeline preview</p>
-            {timelineItems.length ? timelineItems.slice(0, 6).map((item) => (
-              <div key={`report-${item.itemType}-${item.itemId}`} className="grid gap-1 rounded-md border border-line bg-white p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone={toneForType(item.itemType)}>{item.itemType}</Badge>
-                  {item.severity ? <Badge tone={toneForSeverity(item.severity)}>{item.severity}</Badge> : null}
-                  {item.status ? <Badge tone="neutral">{item.status}</Badge> : null}
-                </div>
-                <p className="text-sm font-medium text-ink">Report item: {item.title}</p>
-                <p className="font-mono text-xs font-semibold text-ink">{item.itemId}</p>
-                <p className="font-mono text-xs text-muted">{[item.itemId, item.userId, item.transactionId, item.accountId, item.alertId, item.caseId].filter(Boolean).join(" / ")}</p>
-              </div>
-            )) : <EmptyState title="No report items" detail="Use filters with matching investigation activity to populate the report preview." />}
-          </div>
+      {hasSearchScope ? (
+        <>
+        <div className="admin-metric-grid grid gap-3 md:grid-cols-4 xl:grid-cols-7">
+          <Stat label="Transactions" value={formatNumber(summary.data?.transactions)} />
+          <Stat label="Audit events" value={formatNumber(summary.data?.auditEvents)} />
+          <Stat label="Risk alerts" value={formatNumber(summary.data?.riskAlerts)} />
+          <Stat label="Risk cases" value={formatNumber(summary.data?.riskCases)} />
+          <Stat label="Failures" value={<Badge tone={summary.data?.failures ? "bad" : "good"}>{formatNumber(summary.data?.failures)}</Badge>} />
+          <Stat label="Reversals" value={formatNumber(summary.data?.reversals)} />
+          <Stat label="High severity" value={<Badge tone={summary.data?.highSeverityItems ? "bad" : "neutral"}>{formatNumber(summary.data?.highSeverityItems)}</Badge>} />
         </div>
-      </Panel>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_430px]">
-        <Panel title="Timeline">
-          {timeline.error instanceof Error ? <p className="text-sm text-danger">{timeline.error.message}</p> : null}
-          {timeline.isLoading ? <p className="text-sm text-muted">Loading investigation timeline...</p> : null}
-          {!timeline.isLoading && !timeline.data?.content.length ? (
-            <EmptyState title="No timeline items found" detail="Search by user, transaction, account, alert, or case identifiers." />
-          ) : null}
+        <Panel title="Investigation report" className="investigation-report">
           <div className="grid gap-5">
-            {groupedItems.map((group) => (
-              <div key={group.label} className="grid gap-2">
-                <p className="text-xs font-semibold uppercase text-muted">{group.label}</p>
-                {group.items.map((item) => (
-                  <TimelineRow key={`${item.itemType}-${item.itemId}`} item={item} onSelect={() => setSelected(item)} />
-                ))}
-              </div>
-            ))}
+            <div className="admin-metric-grid grid gap-3 md:grid-cols-3">
+              <ReportBlock title="Report scope" value={activeFilters.length ? activeFilters.map((entry) => `${entry.label}: ${entry.value}`).join(" | ") : "All investigation records"} />
+              <ReportBlock title="Key finding" value={summary.data?.highSeverityItems ? "High-risk items require review" : "No high-risk items in scope"} tone={summary.data?.highSeverityItems ? "bad" : "good"} />
+              <ReportBlock title="Included timeline items" value={`${timelineItems.length} item${timelineItems.length === 1 ? "" : "s"}`} />
+            </div>
+            <div className="grid gap-2">
+              <p className="text-xs font-semibold uppercase text-muted">Report timeline preview</p>
+              {timelineItems.length ? timelineItems.slice(0, 6).map((item) => (
+                <div key={`report-${item.itemType}-${item.itemId}`} className="grid gap-1 rounded-md border border-line bg-white p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone={toneForType(item.itemType)}>{item.itemType}</Badge>
+                    {item.severity ? <Badge tone={toneForSeverity(item.severity)}>{item.severity}</Badge> : null}
+                    {item.status ? <Badge tone="neutral">{item.status}</Badge> : null}
+                  </div>
+                  <p className="text-sm font-medium text-ink">Report item: {item.title}</p>
+                  <p className="font-mono text-xs font-semibold text-ink">{item.itemId}</p>
+                  <p className="font-mono text-xs text-muted">{[item.itemId, item.userId, item.transactionId, item.accountId, item.alertId, item.caseId].filter(Boolean).join(" / ")}</p>
+                </div>
+              )) : <EmptyState title="No report items" detail="Use filters with matching investigation activity to populate the report preview." />}
+            </div>
           </div>
         </Panel>
 
-        <Panel title="Item detail" action={selected ? <Button variant="secondary" onClick={() => setSelected(null)}>Clear</Button> : null}>
-          {selected ? <TimelineDetail item={selected} /> : <EmptyState title="No item selected" detail="Select a timeline item to inspect linked identifiers and metadata." />}
-        </Panel>
-      </div>
+        <div className="grid gap-6 xl:grid-cols-[1fr_430px]">
+          <Panel title="Timeline">
+            {timeline.error instanceof Error ? <p className="text-sm text-danger">{timeline.error.message}</p> : null}
+            {timeline.isLoading ? <p className="text-sm text-muted">Loading investigation timeline...</p> : null}
+            {!timeline.isLoading && !timeline.data?.content.length ? (
+              <EmptyState title="No timeline items found" detail="Search by user, transaction, account, alert, or case identifiers." />
+            ) : null}
+            <div className="grid gap-5">
+              {groupedItems.map((group) => (
+                <div key={group.label} className="grid gap-2">
+                  <p className="text-xs font-semibold uppercase text-muted">{group.label}</p>
+                  {group.items.map((item) => (
+                    <TimelineRow key={`${item.itemType}-${item.itemId}`} item={item} onSelect={() => setSelected(item)} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel title="Item detail" action={selected ? <Button variant="secondary" onClick={() => setSelected(null)}>Clear</Button> : null}>
+            {selected ? <TimelineDetail item={selected} /> : <EmptyState title="No item selected" detail="Select a timeline item to inspect linked identifiers and metadata." />}
+          </Panel>
+        </div>
+        </>
+      ) : null}
     </div>
   );
 }
