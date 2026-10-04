@@ -409,5 +409,52 @@ class ScheduledTransferServiceTest {
                 .active(true)
                 .build();
         org.mockito.Mockito.lenient().when(accountServiceClient.getAccount("101")).thenReturn(source);
+        // Destination 102 exists by default so the common path reaches persistence; tests that
+        // care about a missing destination override this with null.
+        AccountDto destination = AccountDto.builder()
+                .id(102L)
+                .ownerId("someone-else")
+                .accountType("CHECKING")
+                .active(true)
+                .build();
+        org.mockito.Mockito.lenient().when(accountServiceClient.getAccountInternal("102")).thenReturn(destination);
+    }
+
+    @Test
+    void createScheduleRejectsUnknownDestinationAccount() {
+        when(accountServiceClient.getAccountInternal("102")).thenReturn(null);
+        ScheduledTransferCreateRequest request = baseCreateRequest();
+
+        assertThatThrownBy(() -> service.create(request, "customer"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Destination account not found");
+    }
+
+    @Test
+    void createScheduleAllowsDestinationOwnedByAnotherCustomer() {
+        // Ownership of the destination is NOT required; only that it exists.
+        when(accountServiceClient.getAccountInternal("102")).thenReturn(AccountDto.builder()
+                .id(102L)
+                .ownerId("another-customer")
+                .accountType("CHECKING")
+                .active(true)
+                .build());
+        when(scheduleRepository.save(any(ScheduledTransfer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ScheduledTransferResponse response = service.create(baseCreateRequest(), "customer");
+
+        assertThat(response).isNotNull();
+        assertThat(response.getToAccountId()).isEqualTo("102");
+    }
+
+    @Test
+    void createScheduleDoesNotPersistWhenDestinationIsUnknown() {
+        when(accountServiceClient.getAccountInternal("102")).thenReturn(null);
+
+        assertThatThrownBy(() -> service.create(baseCreateRequest(), "customer"))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        // Nothing may be written, or the scheduler would later run a doomed transfer.
+        verify(scheduleRepository, org.mockito.Mockito.never()).save(any(ScheduledTransfer.class));
     }
 }

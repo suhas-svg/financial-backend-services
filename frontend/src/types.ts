@@ -98,6 +98,24 @@ export type TransactionStats = FromApi<TransactionSchemas["TransactionStatsRespo
 
 
 export type ScheduledTransferStatus = NonNullable<TransactionSchemas["ScheduledTransferResponse"]["status"]>;
+
+/**
+ * Runtime mirror of ScheduledTransferStatus for filter dropdowns, which need values and
+ * cannot iterate a type. The `Record<ScheduledTransferStatus, true>` annotation is what
+ * keeps this honest: TypeScript requires a key for every member of the union, so adding a
+ * status to the API spec without adding it here fails the build instead of silently
+ * dropping it from the filter.
+ */
+const scheduledTransferStatusCoverage: Record<ScheduledTransferStatus, true> = {
+  ACTIVE: true,
+  PAUSED: true,
+  CANCELED: true,
+  COMPLETED: true
+};
+
+/** Every status the API supports, in the order declared above. */
+export const allScheduledTransferStatuses = Object.keys(scheduledTransferStatusCoverage) as ScheduledTransferStatus[];
+
 export type ScheduledTransferType = NonNullable<TransactionSchemas["ScheduledTransferResponse"]["scheduleType"]>;
 export type ScheduledTransferFrequency = NonNullable<TransactionSchemas["ScheduledTransferResponse"]["frequency"]>;
 export type ScheduledTransferRunStatus = NonNullable<TransactionSchemas["ScheduledTransferRunResponse"]["status"]>;

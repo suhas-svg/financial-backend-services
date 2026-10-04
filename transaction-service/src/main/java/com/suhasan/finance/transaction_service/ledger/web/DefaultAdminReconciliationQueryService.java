@@ -87,9 +87,19 @@ public class DefaultAdminReconciliationQueryService implements AdminReconciliati
     @Override
     public ReconciliationExceptionResponse updateStatus(
             UUID exceptionId, String status, String note, String actor, long expectedVersion) {
+        // A missing status must be a client error, not an NPE surfacing as a 500.
+        if (status == null || status.isBlank()) {
+            throw new IllegalArgumentException("Exception status is required");
+        }
+        final ReconciliationExceptionStatus requested;
+        try {
+            requested = ReconciliationExceptionStatus.valueOf(status.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Unknown exception status: " + status);
+        }
         ReconciliationException updated = reconciliationService.updateExceptionStatus(
                 exceptionId,
-                ReconciliationExceptionStatus.valueOf(status),
+                requested,
                 note,
                 actor,
                 expectedVersion);

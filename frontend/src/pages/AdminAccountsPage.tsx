@@ -13,11 +13,14 @@ import type { Account } from "../types";
 import { Button, ErrorNotice, Field, Input, PageHeader, Panel, Select } from "../components/ui";
 import { StatusBadge } from "../components/StatusBadge";
 
+const ACCOUNT_PAGE_SIZE = 20;
+
 export function AdminAccountsPage() {
   const queryClient = useQueryClient();
   const [ownerId, setOwnerId] = useState("");
   const [accountType, setAccountType] = useState("");
   const [status, setStatus] = useState("");
+  const [page, setPage] = useState(0);
   const [editing, setEditing] = useState<Account | null>(null);
   const [statusTarget, setStatusTarget] = useState<Account | null>(null);
   const [statusReason, setStatusReason] = useState("");
@@ -26,7 +29,7 @@ export function AdminAccountsPage() {
   const [actionAmount, setActionAmount] = useState("");
   const [actionReason, setActionReason] = useState("");
   const [actionError, setActionError] = useState("");
-  const accounts = useQuery({ queryKey: ["admin-accounts", ownerId, accountType, status], queryFn: () => listAccounts({ ownerId, accountType, status: status as "" | "ACTIVE" | "FROZEN" | "CLOSED" }), refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
+  const accounts = useQuery({ queryKey: ["admin-accounts", ownerId, accountType, status, page], queryFn: () => listAccounts({ ownerId, accountType, status: status as "" | "ACTIVE" | "FROZEN" | "CLOSED", page, size: ACCOUNT_PAGE_SIZE }), refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
   const ledgerAccounts = useQuery({ queryKey: ["ledger", "accounts"], queryFn: listLedgerAccounts, retry: false, refetchInterval: MONEY_STATE_REFRESH_INTERVAL_MS });
   const projections = projectionMap(ledgerAccounts.data);
   const form = useForm<AccountValues>({
@@ -35,6 +38,16 @@ export function AdminAccountsPage() {
   });
   const watchedType = form.watch("accountType");
   const invalidateAccounts = () => invalidateInBackground(queryClient, ["admin-accounts"]);
+  const totalElements = accounts.data?.totalElements ?? 0;
+  const totalPages = accounts.data?.totalPages ?? 0;
+  const firstRow = totalElements === 0 ? 0 : page * ACCOUNT_PAGE_SIZE + 1;
+  const lastRow = Math.min((page + 1) * ACCOUNT_PAGE_SIZE, totalElements);
+
+  // A new filter can match fewer rows than the current page number, which would
+  // leave the operator stranded on an empty page, so start the result set over.
+  const changeOwnerFilter = (value: string) => { setPage(0); setOwnerId(value); };
+  const changeTypeFilter = (value: string) => { setPage(0); setAccountType(value); };
+  const changeStatusFilter = (value: string) => { setPage(0); setStatus(value); };
   const clearAccountAction = () => {
     setAccountAction(null);
     setActionAmount("");
@@ -239,14 +252,14 @@ export function AdminAccountsPage() {
         title="Admin account oversight"
         action={
           <div className="admin-filter-grid grid grid-cols-3 gap-2">
-            <Input placeholder="Owner ID" value={ownerId} onChange={(event) => setOwnerId(event.target.value)} />
-            <Select value={accountType} onChange={(event) => setAccountType(event.target.value)}>
+            <Input placeholder="Owner ID" value={ownerId} onChange={(event) => changeOwnerFilter(event.target.value)} />
+            <Select value={accountType} onChange={(event) => changeTypeFilter(event.target.value)}>
               <option value="">All types</option>
               <option value="CHECKING">Checking</option>
               <option value="SAVINGS">Savings</option>
               <option value="CREDIT">Credit</option>
             </Select>
-            <Select value={status} onChange={(event) => setStatus(event.target.value)}>
+            <Select value={status} onChange={(event) => changeStatusFilter(event.target.value)}>
               <option value="">All status</option>
               <option value="ACTIVE">Active</option>
               <option value="FROZEN">Frozen</option>
@@ -320,6 +333,22 @@ export function AdminAccountsPage() {
             </tbody>
           </table>
         </div>
+        {totalElements > 0 ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+            <p className="text-sm text-muted">
+              Showing {firstRow}-{lastRow} of {totalElements} {totalElements === 1 ? "account" : "accounts"}
+              {totalPages > 1 ? ` (page ${page + 1} of ${totalPages})` : null}
+            </p>
+            <div className="flex gap-2">
+              <Button type="button" variant="secondary" onClick={() => setPage((current) => Math.max(0, current - 1))} disabled={page === 0 || accounts.isFetching} aria-label="Previous page of accounts">
+                Previous
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setPage((current) => current + 1)} disabled={page + 1 >= totalPages || accounts.isFetching} aria-label="Next page of accounts">
+                Next
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </Panel>
       </div>
     </div>

@@ -263,14 +263,37 @@ public class MonitoringController {
                 .sum();
     }
     
+    /**
+     * Sums the heap-scoped gauges registered under {@code name}.
+     *
+     * <p>Micrometer registers one gauge per memory pool under a single metric name
+     * ({@code jvm.memory.used}, {@code jvm.memory.max}), told apart only by the
+     * {@code id}/{@code area} tags. A bare {@code Search.gauge()} lookup returns one
+     * arbitrary member, so reading "used" and "max" that way can pair two unrelated pools and
+     * report a percentage above 100.
+     *
+     * <p>Falls back to every gauge of that name when none carries {@code area=heap}, so a
+     * registry that publishes these meters untagged still reports a sane total instead of 0.
+     */
+    private double sumJvmMemoryGauges(String name) {
+        var heapScoped = Search.in(meterRegistry).name(name).tag("area", "heap").gauges();
+        var gauges = heapScoped.isEmpty() ? Search.in(meterRegistry).name(name).gauges() : heapScoped;
+        return gauges.stream()
+                .mapToDouble(io.micrometer.core.instrument.Gauge::value)
+                .sum();
+    }
+
     private long getJvmMemoryUsed() {
-        return (long) getGaugeValue("jvm.memory.used");
+        // Heap only: non-heap usage is not a consumer of the -Xmx budget an operator sees.
+        return (long) sumJvmMemoryGauges("jvm.memory.used");
     }
-    
+
     private long getJvmMemoryMax() {
-        return (long) getGaugeValue("jvm.memory.max");
+        // A pool max of -1 means "unbounded"; summing it in would shrink the budget below the
+        // bytes actually in use, which is what produced the impossible 1867% figure.
+        return (long) sumJvmMemoryGauges("jvm.memory.max");
     }
-    
+
     private double getJvmMemoryUsagePercent() {
         long used = getJvmMemoryUsed();
         long max = getJvmMemoryMax();

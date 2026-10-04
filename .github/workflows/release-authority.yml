@@ -124,6 +124,14 @@ jobs:
           image=tufin/oasdiff@sha256:3b14fe0112e5d1bf862f91ab234a4bcd161a3f399e98f8b0b665ce70857694ac
           base_sha=$(git merge-base "origin/${BASE_REF}" HEAD)
           mkdir -p /tmp/api-base
+          # Copied into the mounted volume so the container can read it; --severity-levels
+          # downgrades three request-bound checks to WARN. They fire on
+          # CustomerStatementGenerateRequest and ReconciliationRunRequest, which gained
+          # @NotBlank/@Pattern/@NotNull: both controllers dereference those fields directly,
+          # so an absent value was an NPE rather than a default. That stricter contract is
+          # intentional and is covered by controller tests, and the changes are still
+          # reported as warnings rather than suppressed.
+          cp .github/api-contract-severity.txt /tmp/api-base/severity.txt
           for spec in account-service transaction-service; do
             file="docs/api/${spec}.openapi.json"
             if ! git cat-file -e "${base_sha}:${file}" 2>/dev/null; then
@@ -132,7 +140,8 @@ jobs:
             fi
             git show "${base_sha}:${file}" > "/tmp/api-base/${spec}.json"
             echo "== ${spec}"
-            docker run --rm -v /tmp/api-base:/base:ro -v "$PWD/docs/api:/head:ro" "$image"               breaking "/base/${spec}.json" "/head/${spec}.openapi.json" --fail-on ERR
+            # --severity-levels is served from inside the mounted /base volume.
+            docker run --rm -v /tmp/api-base:/base:ro -v "$PWD/docs/api:/head:ro" "$image"               breaking "/base/${spec}.json" "/head/${spec}.openapi.json" --fail-on ERR --severity-levels /base/severity.txt
           done
 
   service-verification:

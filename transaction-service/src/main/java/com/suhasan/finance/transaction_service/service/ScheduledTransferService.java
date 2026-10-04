@@ -416,6 +416,15 @@ public class ScheduledTransferService {
         if (!Objects.equals(source.getOwnerId(), userId)) {
             throw new AccessDeniedException("User does not own source account");
         }
+        // The destination must exist too. Without this a schedule can be created against a
+        // nonexistent account, sit ACTIVE, and then flip to COMPLETED when the scheduler fires
+        // even though its run FAILED - the UI shows success for a transfer that never happened.
+        // Destination ownership is deliberately NOT required: transfers to another customer's
+        // account are legitimate, so this only asserts the account is real.
+        AccountDto destination = accountServiceClient.getAccountInternal(request.getToAccountId());
+        if (destination == null) {
+            throw new IllegalArgumentException("Destination account not found");
+        }
     }
 
     private ScheduledTransfer findOwned(String scheduleId, String userId) {

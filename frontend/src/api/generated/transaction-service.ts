@@ -1972,8 +1972,8 @@ export interface components {
             state?: string;
         };
         CustomerStatementGenerateRequest: {
-            externalAccountId?: string;
-            yearMonth?: string;
+            externalAccountId: string;
+            yearMonth: string;
         };
         CustomerStatementLineResponse: {
             amount?: number;
@@ -2640,7 +2640,7 @@ export interface components {
         };
         ReconciliationRunRequest: {
             /** Format: date */
-            businessDate?: string;
+            businessDate: string;
         };
         ReconciliationRunResponse: {
             /** Format: date */
@@ -3829,13 +3829,6 @@ export interface operations {
                     "*/*": components["schemas"]["ReconciliationExceptionResponse"][];
                 };
             };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description Error, as RFC 9457 Problem Details */
             default: {
                 headers: {
@@ -3866,13 +3859,6 @@ export interface operations {
                 content: {
                     "*/*": components["schemas"]["ReconciliationExceptionResponse"];
                 };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Error, as RFC 9457 Problem Details */
             default: {
@@ -3909,13 +3895,6 @@ export interface operations {
                     "*/*": components["schemas"]["ReconciliationExceptionResponse"];
                 };
             };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description Error, as RFC 9457 Problem Details */
             default: {
                 headers: {
@@ -3950,13 +3929,6 @@ export interface operations {
                 content: {
                     "*/*": components["schemas"]["ReconciliationExceptionResponse"];
                 };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Error, as RFC 9457 Problem Details */
             default: {
@@ -3993,13 +3965,6 @@ export interface operations {
                     "*/*": components["schemas"]["ReconciliationExceptionResponse"];
                 };
             };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description Error, as RFC 9457 Problem Details */
             default: {
                 headers: {
@@ -4028,13 +3993,6 @@ export interface operations {
                 content: {
                     "*/*": components["schemas"]["ReconciliationRunResponse"][];
                 };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Error, as RFC 9457 Problem Details */
             default: {
@@ -4068,13 +4026,6 @@ export interface operations {
                 content: {
                     "*/*": components["schemas"]["ReconciliationRunResponse"];
                 };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Error, as RFC 9457 Problem Details */
             default: {

@@ -7,9 +7,11 @@ import { availableBalance } from "../lib/accountBalances";
 import { compactDate, money } from "../lib/format";
 import { cancelScheduledTransfer, createScheduledTransfer, listBeneficiaries, listOwnedAccounts, listScheduledTransferRuns, listScheduledTransfers, pauseScheduledTransfer, resumeScheduledTransfer } from "../lib/queries";
 import { scheduledTransferSchema, type ScheduledTransferValues } from "../lib/schemas";
-import type { Account, Beneficiary, ScheduledTransfer, ScheduledTransferStatus } from "../types";
+import { allScheduledTransferStatuses, type Account, type Beneficiary, type ScheduledTransfer, type ScheduledTransferStatus } from "../types";
 
-const statuses: Array<ScheduledTransferStatus | ""> = ["ACTIVE", "PAUSED", ""];
+// Derived from ScheduledTransferStatus so the filter cannot drift from the type
+// again; "" is the unfiltered "All statuses" option.
+const statuses: Array<ScheduledTransferStatus | ""> = ["", ...allScheduledTransferStatuses];
 const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
 export function ScheduledTransfersPage() {
