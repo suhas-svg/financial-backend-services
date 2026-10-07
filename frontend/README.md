@@ -1,4 +1,4 @@
-# Financial Console Frontend
+# Vaultiq Frontend
 
 React + Vite frontend for the financial backend services.
 

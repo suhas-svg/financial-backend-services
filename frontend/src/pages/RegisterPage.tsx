@@ -22,12 +22,12 @@ export function RegisterPage() {
   return (
     <main className="auth-shell relative min-h-screen bg-[#050b14] lg:grid lg:grid-cols-[minmax(0,1.08fr)_minmax(28rem,.92fr)]">
       <header className="absolute inset-x-0 top-0 z-30 flex justify-center px-4 py-6 sm:py-8">
-        <Link to="/login" className="flex items-center gap-3 text-white" aria-label="Financial Console login">
+        <Link to="/login" className="flex items-center gap-3 text-white" aria-label="Vaultiq login">
           <span className="grid h-12 w-12 place-items-center rounded-2xl border border-emerald-300/20 bg-emerald-300/10 shadow-lg shadow-black/20 backdrop-blur">
             <Landmark className="h-6 w-6 text-emerald-300" />
           </span>
           <div>
-            <p className="text-xl font-semibold tracking-[-0.025em] sm:text-2xl">Financial Console</p>
+            <p className="text-xl font-semibold tracking-[-0.025em] sm:text-2xl">Vaultiq</p>
             <p className="text-center text-xs text-emerald-100/55">Simple. Secure. In control.</p>
           </div>
         </Link>

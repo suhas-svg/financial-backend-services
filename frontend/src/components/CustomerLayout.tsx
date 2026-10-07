@@ -81,16 +81,16 @@ export function CustomerLayout({ children }: { children: ReactNode }) {
 
   return <div className="customer-console min-h-screen bg-[#f4f7f9] text-ink transition-colors dark:bg-[#07110f] dark:text-slate-100">
     <aside className={clsx("customer-sidebar fixed inset-y-0 left-0 z-30 hidden border-r border-emerald-950/10 bg-[#0b2924] p-3 text-white lg:flex lg:flex-col", collapsed ? "w-20" : "w-64")}>
-      <Link to="/" className={clsx("flex h-16 items-center gap-3 rounded-2xl px-2 font-semibold", collapsed && "justify-center")} aria-label="Financial Console">
+      <Link to="/" className={clsx("flex h-16 items-center gap-3 rounded-2xl px-2 font-semibold", collapsed && "justify-center")} aria-label="Vaultiq">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-300 text-emerald-950 shadow-lg shadow-black/10"><Landmark className="h-5 w-5" /></span>
-        {!collapsed ? <span><span className="block tracking-tight">Financial Console</span><span className="block text-xs font-normal text-emerald-100/60">Personal banking</span></span> : null}
+        {!collapsed ? <span><span className="block tracking-tight">Vaultiq</span><span className="block text-xs font-normal text-emerald-100/60">Personal banking</span></span> : null}
       </Link>
       <nav className="mt-4 grid flex-1 content-start gap-1" aria-label="Customer navigation">{navItems.map((item) => <NavigationLink key={item.to} item={item} collapsed={collapsed} unread={unread} />)}</nav>
       <button type="button" className="customer-nav-link" onClick={() => setCollapsed((value) => !value)} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}>{collapsed ? <ChevronRight className="h-4 w-4" /> : <><ChevronLeft className="h-4 w-4" /><span>Collapse</span></>}</button>
     </aside>
     {drawerOpen ? <button className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden" aria-label="Close navigation" onClick={() => setDrawerOpen(false)} /> : null}
     <aside className={clsx("fixed inset-y-0 left-0 z-50 flex w-[min(88vw,320px)] flex-col bg-[#0b2924] p-4 text-white shadow-2xl transition-transform lg:hidden", drawerOpen ? "translate-x-0" : "-translate-x-full")} aria-label="Mobile customer navigation" aria-hidden={!drawerOpen}>
-      <div className="mb-5 flex items-center justify-between"><Link to="/" className="flex items-center gap-3 font-semibold"><Landmark className="h-5 w-5 text-emerald-300" />Financial Console</Link><button className="rounded-xl p-2 hover:bg-white/10" onClick={() => setDrawerOpen(false)} aria-label="Close menu"><X className="h-5 w-5" /></button></div>
+      <div className="mb-5 flex items-center justify-between"><Link to="/" className="flex items-center gap-3 font-semibold"><Landmark className="h-5 w-5 text-emerald-300" />Vaultiq</Link><button className="rounded-xl p-2 hover:bg-white/10" onClick={() => setDrawerOpen(false)} aria-label="Close menu"><X className="h-5 w-5" /></button></div>
       <nav className="grid gap-1" aria-label="Mobile customer links">{navItems.map((item) => <NavigationLink key={item.to} item={item} unread={unread} onNavigate={() => setDrawerOpen(false)} />)}</nav>
     </aside>
     <div className={clsx("transition-[padding] duration-200", collapsed ? "lg:pl-20" : "lg:pl-64")}>

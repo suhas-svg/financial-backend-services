@@ -12,7 +12,7 @@ export function RouteAccessibility() {
       target.tabIndex = -1;
       target.focus({ preventScroll: true });
     }
-    setAnnouncement(`Loaded ${document.title || "Financial Console"}`);
+    setAnnouncement(`Loaded ${document.title || "Vaultiq"}`);
   }, [location.pathname]);
 
   useEffect(() => {

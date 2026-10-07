@@ -281,7 +281,7 @@ describe("auth screens", () => {
     await user.click(screen.getByRole("link", { name: "Create an account" }));
 
     expect(await screen.findByRole("heading", { name: "Create your account" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Financial Console login" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Vaultiq login" })).toBeInTheDocument();
     expect(screen.getByText("Your financial home starts here.")).toBeInTheDocument();
 
     const password = screen.getByLabelText("Password");
@@ -1124,7 +1124,7 @@ describe("customer shell navigation", () => {
   it("shows the customer shell for authenticated users", async () => {
     mockFetch();
     const { unmount } = renderApp("/", tokenFor({ sub: "customer", roles: ["ROLE_USER"] }));
-    expect(await screen.findByRole("link", { name: "Financial Console" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Vaultiq" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Accounts" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Recipients" })).toBeInTheDocument();
@@ -1139,7 +1139,7 @@ describe("customer shell navigation", () => {
     unmount();
 
     renderApp("/", tokenFor({ sub: "ops", roles: ["ROLE_ADMIN"] }));
-    expect(await screen.findByRole("link", { name: "Financial Console" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Vaultiq" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Accounts" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Recipients" })).toBeInTheDocument();
