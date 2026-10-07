@@ -6,7 +6,7 @@ replicaCount: 3
 image:
   registry: ghcr.io
   repository: ""
-  tag: "0.1.0" # x-release-please-version
+  tag: "0.2.0" # x-release-please-version
   pullPolicy: Always
 
 podDisruptionBudget:

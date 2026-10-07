@@ -14,7 +14,7 @@
 
   <groupId>com.suhasan.finance</groupId>
   <artifactId>account-service</artifactId>
-  <version>0.1.0</version> <!-- x-release-please-version -->
+  <version>0.2.0</version> <!-- x-release-please-version -->
   <name>account-service</name>
   <description>financial service</description>
 
