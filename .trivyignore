@@ -1,0 +1,15 @@
+# Container-scan suppressions for the release-authority workflow
+# (release-authority.yml, "Fail on high or critical container vulnerabilities").
+# Each entry needs: CVE id, why it cannot fire here, and a review trigger.
+# Re-check on every Spring Framework or Boot upgrade.
+
+# CVE-2026-47884 (CRITICAL): Remote Code Execution via XsltView path handling in
+# spring-webmvc 6.2.19, fixed upstream in 7.0.9 only (6.2.x has no backport).
+# Not exploitable in this repo: account-service and transaction-service are pure
+# REST APIs. Neither codebase references XsltView, ViewResolver, ThemeResolver,
+# InternalResourceView, or any view technology (verified by source search), so no
+# XSLT view ever resolves untrusted input. Framework 7 cannot be adopted without
+# a full Spring Boot 4 migration (Framework 7 removed ThemeResolver, which Boot
+# 3.5 autoconfiguration requires; proven by test failure on the upgrade attempt).
+# Review trigger: Spring Boot 4 migration or any introduction of server-side views.
+CVE-2026-47884
