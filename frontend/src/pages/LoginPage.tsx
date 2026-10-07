@@ -96,7 +96,7 @@ export function LoginPage() {
             <Landmark className="h-6 w-6 text-emerald-300" />
           </span>
           <div>
-            <p className="text-xl font-semibold tracking-[-0.025em] sm:text-2xl">Financial Console</p>
+            <p className="text-xl font-semibold tracking-[-0.025em] sm:text-2xl">Vaultiq</p>
             <p className="text-center text-xs text-emerald-100/55">Simple. Secure. In control.</p>
           </div>
         </div>
@@ -191,7 +191,7 @@ export function LoginPage() {
 
             <div className="mt-7 border-t border-slate-800 pt-6 text-center text-sm text-slate-400">
               {portal === "customer" ? (
-                <p>New to Financial Console? <Link className="font-semibold text-emerald-400 transition hover:text-emerald-300" to="/register">Create an account</Link></p>
+                <p>New to Vaultiq? <Link className="font-semibold text-emerald-400 transition hover:text-emerald-300" to="/register">Create an account</Link></p>
               ) : (
                 <p>Operations access is limited to authorized team members.</p>
               )}
