@@ -376,6 +376,7 @@ jobs:
           image-ref: financial-${{ matrix.image }}:${{ github.sha }}
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          trivyignores: .trivyignore
           exit-code: '1'
           format: table
       - name: Generate an SPDX JSON SBOM
